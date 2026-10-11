@@ -426,6 +426,7 @@ def context(s,p,story=None,workspace=None):
         'Use an unused loopback port (8801 or another free port) for previews, even if the brief uses 8800 as an example. If a port is occupied, choose another; do not evict its owner. '
         'Use a fresh disposable data directory and synthetic data, never the live database, credentials or configuration. Set MAC_CONTROL_COLLECTOR_ENABLED=false and MAC_CONTROL_DISPATCHER_ENABLED=false; leave preview alerts and outbound integrations unconfigured. Do not run install-launchagent.sh for a preview. '
         'Track the PID of the preview you create; cleanup may terminate only that verified preview PID. If isolated capture is unavailable, return a blocker instead of disturbing the live service. '
+        'MCD RESULT DELIVERY: Return the complete handoff as your final assistant text in this run. Do not use sessions_yield, messaging, or another session to deliver the report; those internal deliveries may not appear in the CLI JSON result that MCD records. A tool warning alone is not a completed handoff. '
         'Run output is proposed evidence; operator acceptance is required.\n'+json.dumps(payload,ensure_ascii=False))
 
 def claim_context(s,card,run_id=None):

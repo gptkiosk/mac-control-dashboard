@@ -26,10 +26,15 @@ def needs_approval(card, run):
         bool(re.search(r'blocks? writing|not written yet|lift plan mode|approve the plan', text, re.I)))
 
 def incomplete_error(run):
+    text = (run.result_text or '').strip()
+    if re.fullmatch(r'⚠️\s*🛠️\s*`[^`]+` failed', text):
+        return ('The agent returned only a tool-failure warning, without a completed handoff or verification report. '
+                'A normal process exit does not mean the story is complete. Review any saved artifacts, '
+                'then retry this story to return the full report directly to MCD. No handoff was accepted.')
     # Only a direct admission in the opening paragraph, not quoted history or a
     # later description of a recovered blocker. This is an additional completion
     # guard, not proof that every other response satisfies acceptance criteria.
-    opening = (run.result_text or '').strip().split('\n\n', 1)[0][:1500]
+    opening = text.split('\n\n', 1)[0][:1500]
     explicit = re.search(r"\b(?:none|not one) of (?:this|the) story.?s acceptance criteria (?:are|were) met\b|"
                          r"\b(?:story|task) is (?:only )?(?:partly done|not complete|unfinished)\b", opening, re.I)
     blocked_without_work = (re.search(r'\b(?:blocked|blocks?|cannot proceed)\b', opening, re.I) and

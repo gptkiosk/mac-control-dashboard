@@ -160,7 +160,9 @@ def test_story_context_review_acceptance_and_board_protection(app):
     story=[t for t in p['tasks'] if t['role']=='story'];a,b=[t['card_id'] for t in story]
     d=Dispatcher(s,settings);claimed=d._claim(2);assert len(claimed)==1 and claimed[0][0]['id']==a
     with s() as db:
-        assert 'MCD SHARED PROJECT CONTEXT' in db.scalar(select(projects.ProjectMemory).where(projects.ProjectMemory.kind=='context')).text
+        prompt = db.scalar(select(projects.ProjectMemory).where(projects.ProjectMemory.kind=='context')).text
+        assert 'MCD SHARED PROJECT CONTEXT' in prompt
+        assert 'final assistant text' in prompt and 'Do not use sessions_yield' in prompt
     rid=finish(app,a,'Proposed changes and checks.')
     assert c.get(f'/api/cards/{a}').json()['column']=='review'
     assert d._claim(2)==[]
@@ -648,6 +650,7 @@ def test_automatic_handoffs_respect_pause_and_can_be_disabled(app):
     "I couldn't build the release candidate, so none of this story's acceptance criteria are met. Nothing was created.",
     "The docs-qa story is only partly done. The required checks need approval.",
     "I didn't create the repo, and nothing was created, pushed or changed on GitHub. Three things block this story.",
+    '⚠️ 🛠️ `search "outDir|dist|build" in /tmp/check/apps/web/vite.config.ts` failed',
 ])
 def test_explicit_incomplete_process_success_is_failed_and_cannot_release_dependencies(app,result):
     p=active(app,[node('a'),node('b',depends_on=['a'])]);c,s,wd,settings=app
@@ -682,5 +685,11 @@ def test_reconciles_unaccepted_legacy_incomplete_result_once_without_changing_ro
 def test_past_blocker_in_completed_handoff_does_not_change_success(app):
     p=active(app,[node('a')]);c=app[0];cid=next(t['card_id'] for t in p['tasks'] if t['role']=='story')
     finish(app,cid,'Completed the document and all required checks.\n\nEarlier the story is partly done was the old status; it is now finished.')
+    advance(app)
+    assert c.get('/api/projects/1').json()['tasks'][-1]['column']=='review'
+
+def test_recovered_tool_warning_with_report_does_not_change_success(app):
+    p=active(app,[node('a')]);c=app[0];cid=next(t['card_id'] for t in p['tasks'] if t['role']=='story')
+    finish(app,cid,'⚠️ 🛠️ `search build setting` failed\n\nVerification completed. Read the configuration directly; all required checks passed. Report: verified.md')
     advance(app)
     assert c.get('/api/projects/1').json()['tasks'][-1]['column']=='review'
