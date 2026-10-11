@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+apps/web/dist/
+
+# Local runtime and secrets (runtime data lives in ~/.mac-control, never in the repo)
+.env
+.env.*
+!.env.example
+.envrc
+.direnv/
+*.db
+*.db-*
+vault.key
+*.token
+client_secret_*.json
+google-oauth-client*.json
+credentials*.json
+token*.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# OS
+.DS_Store
