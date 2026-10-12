@@ -38,3 +38,9 @@ Once MCD is running, open **Setup wizard** from the header account menu, Setting
 This source release packages MCD for independent reuse under MIT. Installations use your own agent accounts, provider credentials and configuration. The tested environment is documented above; other platforms and external integrations require verification on your own host.
 
 For your own changes, see the [fork development guide](CONTRIBUTING.md). [Development history](docs/development/CHANGELOG.md) and the [historical roadmap](docs/development/ROADMAP.md) describe the implementation and possible work for fork owners, without promising future delivery. Review the [security policy](SECURITY.md) and preserve the [third-party notices](THIRD_PARTY_NOTICES.md). Detailed how-tos live in [the documentation index](docs/README.md).
+
+## Community and agent-managed development
+
+[Contributing](CONTRIBUTING.md) · [Discussions](https://github.com/gptkiosk/mac-control-dashboard/discussions) · [Wiki](https://github.com/gptkiosk/mac-control-dashboard/wiki) · [Agent workflow](docs/development/agent-workflow.md) · [UI preview standard](docs/development/ui-testing.md) · [Support policy](SUPPORT.md)
+
+Public participation does not promise ongoing upstream development or support. RCD is a separate repository: [rbp-control-dashboard](https://github.com/gptkiosk/rbp-control-dashboard), currently license/docs/community staging pending code-release sign-off.
