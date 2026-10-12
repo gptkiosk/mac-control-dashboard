@@ -1,39 +1,23 @@
-# Developing your own fork
+# Contributing to MCD
 
-Mac Control Dashboard is provided as-is for independent personal and commercial use under the [MIT license](LICENSE). Fork the repository to customize it, develop features and maintain your own installation. No ongoing upstream development, support, security updates or pull request review is promised.
+This project welcomes independent forks, documentation improvements, bug reports and proposed changes under the [MIT license](LICENSE). Personal and commercial use are allowed subject to that license. Upstream development, support, response times, security fixes and PR review are not promised. Public collaboration is available; it does not create a maintenance commitment.
 
-Preserve the copyright and license notices and the [third-party notices](THIRD_PARTY_NOTICES.md) when distributing your fork. Clearly identify your fork and its changes so users can distinguish it from this release.
+## Where to participate
 
-## Development environment
+- [Discussions](https://github.com/gptkiosk/mac-control-dashboard/discussions): questions, ideas, usage tips and fork announcements.
+- [Issues](https://github.com/gptkiosk/mac-control-dashboard/issues/new/choose): reproducible bugs and concrete feature requests.
+- [Pull requests](https://github.com/gptkiosk/mac-control-dashboard/pulls): focused improvements with evidence and documentation.
+- [Wiki](https://github.com/gptkiosk/mac-control-dashboard/wiki): navigation and operator guidance; versioned docs in this repository are authoritative.
+- [Private security reports](https://github.com/gptkiosk/mac-control-dashboard/security/advisories/new): vulnerabilities only. Never disclose sensitive details in public issues, logs or PRs.
 
-- Python 3.12 (`python3.12 -m venv apps/api/.venv`)
-- Node v22+ (`npm ci` in `apps/web/`)
+## Changes and review
 
-## Check commands
+Fork this repository, create a topic branch, and submit a focused pull request describing the problem, resulting behavior and verification. Check for an existing issue/PR first. Preserve attribution and third-party notices. Use synthetic examples and your own credentials; no private databases, native agent configs, OAuth files, VM identities or tokens belong in commits.
 
-From the repository root, run these checks before distributing your changes:
+Read [AGENTS.md](AGENTS.md) for human and agent contribution rules and [agent workflow](docs/development/agent-workflow.md) for model assignments, scope and handoffs. A test passing or an agent saying “done” is proposed evidence; it does not replace the requested review.
 
-```bash
-# API checks
-(cd apps/api && .venv/bin/python -m pytest -q)
+For documentation-only changes run `python3 scripts/check-docs.py`. Where application sources are present, use Python 3.12 in an isolated venv with `apps/api/requirements.lock.txt`, then run API tests; use Node 22 and `npm ci`, `npm run type-check`, `npm test`, and `npm run build` in `apps/web`. Additional runtime-specific suites and limits are documented in the app source. Never run tests against production state or a live dispatching dashboard.
 
-# Web checks
-(cd apps/web && npm run type-check && npm test && npm run build)
-```
+Any UI change must include a reachable isolated preview URL, how to start/stop it, the source revision and test data/limitations. See [UI testing](docs/development/ui-testing.md). Actual Pi hardware and live-provider tests require explicit environment access and spending authorization; VM or fixture results must be labelled.
 
-See [Getting started](docs/getting-started.md) for dependency installation and local operation.
-
-## Secret scanning
-
-- Do not commit `.env`, `.key`, `.pem`, tokens, database files or vault files.
-- `.gitignore` covers `.env*` (except `.env.example`), `*.db`, `vault.key`, `*.token` and `client_secret_*.json`.
-- A `.gitleaks.toml` allowlist exists for synthetic test fixtures (fake `ghp_*` tokens, placeholder `client_secret`).
-- A `.pre-commit-config.yaml` runs `gitleaks` automatically.
-
-## Maintaining a fork
-
-- Keep changes focused and document altered behavior and prerequisites.
-- Use your own credentials and configuration; exclude local runtime data from releases.
-- Review access and credential handling when adding external integrations.
-- Establish your own support and security reporting policy if you distribute a maintained fork.
-- Do not rely on an upstream pull request being reviewed or merged.
+PRs remain open for maintainer review after checks pass. CI does not merge, publish releases, dispatch agents, use provider keys or deploy. Questions and proposals may receive community replies, but users who need dependable maintenance should maintain their own fork.
