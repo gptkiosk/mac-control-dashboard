@@ -126,6 +126,17 @@ def apply(request: Request, body: VersionIn):
         raise HTTPException(409, {"message": "Drain first. Nothing was stopped.", "blockers": blockers})
     if ue.read_receipt(cfg, body.version_id) is None:
         raise HTTPException(409, "That version is not completely staged.")
+    if body.version_id == ue._link_target(cfg, "current"):  # noqa: SLF001 - same package
+        raise HTTPException(409, "That version is already running.")
+    try:  # the helper refuses this too; saying so here means the page can show why instead of waiting
+        schema = ue.database_revision(cfg.db_path)
+        if not ue.schema_compatible(schema, ue.known_revisions(cfg.versions / body.version_id)):
+            raise HTTPException(409, {"message": f"The database is on schema {schema}, which that version does not know, so the code "
+                                                 "cannot go back to it. Restore a data snapshot taken before that schema change "
+                                                 "on the host first, or install a version that knows this schema.",
+                                      "problems": []})
+    except ue.UpdateError as exc:
+        raise HTTPException(409, {"message": "The database could not be checked.", "problems": exc.problems}) from None
     return _spawn(cfg, ["apply", body.version_id])
 
 

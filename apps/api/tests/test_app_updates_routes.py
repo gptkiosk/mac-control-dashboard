@@ -286,3 +286,51 @@ def test_notes_never_follow_a_symlinked_changelog(tmp_path, cfg):
     (version_dir / "CHANGELOG.md").symlink_to(secret)
     assert ue.release_notes(cfg, vid, "1.2.0") is None
     assert ue.release_notes(cfg, "../x", "1.2.0") is None
+
+
+# --- install / roll back refusals the page can explain -----------------------------------------
+
+
+def _schema(cfg, revision):
+    import sqlite3
+    con = sqlite3.connect(cfg.db_path)
+    con.execute("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)")
+    con.execute("DELETE FROM alembic_version")
+    con.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+    con.commit()
+    con.close()
+
+
+def stage_with_migrations(cfg, tmp_path, version, revisions):
+    files = {f"apps/api/migrations/versions/{rev}_x.py": (f'revision = "{rev}"\n'.encode(), 0o644) for rev in revisions}
+    release = make_release(tmp_path, version=version, name=f"pkg-{version}", extra_files=files)
+    for path in (release.manifest_path, release.artifact_path):
+        shutil.copyfile(path, cfg.inbox / path.name)
+    return ue.stage(cfg, release.base, hashlib.sha256(release.manifest_bytes).hexdigest(), builder=fake_builder)["id"]
+
+
+def test_a_rollback_to_a_version_that_does_not_know_the_database_schema_is_refused_with_the_reason(managed, tmp_path):
+    cfg = managed.cfg
+    old = stage_with_migrations(cfg, tmp_path, "1.1.0", ["0016"])
+    ue.activate_initial(cfg, old)
+    newer = stage_with_migrations(cfg, tmp_path, "1.2.0", ["0016", "0017"])
+    _schema(cfg, "0017")                       # the newer schema is in the database
+    ue._point(cfg, "current", newer)           # noqa: SLF001 - the newer version is the one running
+    with managed:
+        response = managed.post("/api/app-updates/apply", json={"version_id": old})
+    assert response.status_code == 409
+    assert "schema 0017" in response.text and "snapshot" in response.text
+    assert managed.spawned == []
+
+
+def test_applying_the_running_version_is_refused_and_a_compatible_one_is_started(managed, tmp_path):
+    cfg = managed.cfg
+    old = stage_with_migrations(cfg, tmp_path, "1.1.0", ["0016"])
+    ue.activate_initial(cfg, old)
+    newer = stage_with_migrations(cfg, tmp_path, "1.2.0", ["0016", "0017"])
+    _schema(cfg, "0016")
+    with managed:
+        same = managed.post("/api/app-updates/apply", json={"version_id": old})
+        ok = managed.post("/api/app-updates/apply", json={"version_id": newer})
+    assert same.status_code == 409 and "already running" in same.text
+    assert ok.status_code == 202 and managed.spawned == [["apply", newer]]
