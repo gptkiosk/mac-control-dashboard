@@ -20,6 +20,34 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 - MCD works with any mix of agents installed. Setup readiness needs any one subscription CLI and any one of
   Hermes or OpenClaw instead of all of them, a new project story starts on an agent that is installed, and the
   story agent picker marks agents that are not installed. A test runs every one of the 32 combinations.
+## [0.2.8] - 2026-10-13
+
+### Added
+- Settings, Updates can now look for a newer release on GitHub. **Check for updates** reads the public
+  release list and shows the release notes as plain text; it downloads nothing and changes nothing.
+  **Download and verify** fetches the release into the private inbox once you paste its manifest SHA-256
+  from the release page and confirm. **Install** asks for a second confirmation that shows what changed in
+  that version, and **Roll back** returns to the previous version. The changelog of a staged version stays
+  visible in Settings until you install it.
+- A macOS package, `mcd-<version>-darwin-arm64.tar.gz`, and `scripts/install/bootstrap-mcd.sh` to install it
+  for the first time under launchd. The script checks the package against a digest you pin before it
+  touches anything and refuses to replace a running dashboard, a listening port, an existing install or a
+  data folder that already holds a database.
+- A draft release workflow for macOS arm64 that builds the package from a tag and drafts the release with
+  the notes from this changelog. It cannot sign a release until a signing key is added to the repository,
+  and it fails before publishing anything until then. `scripts/release/publish-release.sh --package`
+  creates only the tag for it and refuses without the key.
+
+### Changed
+- When a new version fails its health check, the rollback now starts the previous version even if launchd
+  had disabled the service or answered a bootstrap with a transient error after the failed version
+  crash-looped.
+- An installed package reports the commit it was built from instead of "unknown".
+
+### Fixed
+- The price catalog was missing from the release package, so an installed build could not start. A test now
+  fails if any data file under `apps/api` is missing from the package list.
+- The release content scan no longer reads a binary-like run in a minified web bundle as an e-mail address.
 
 ## [0.2.7] - 2026-10-13
 
@@ -197,7 +225,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Optional Discord planning connection and profile preferences with encrypted write-only credential storage.
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.7...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.8...HEAD
+[0.2.8]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.8
 [0.2.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.7
 [0.2.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.6
 [0.2.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.5
