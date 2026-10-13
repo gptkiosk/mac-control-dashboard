@@ -8,6 +8,13 @@
 - Output lines can be large (Claude stream-json carries tool results), so the reader limit is 16 MB.
 - On startup and shutdown, runs still marked running are recorded as "interrupted" and their
   cards moved to Failed; queued cards stay queued and resume. Nothing is lost silently.
+- The runner's pid is committed right after spawn. Runners outlive a crashed server (own session),
+  so recovery first stops a surviving runner it can positively identify; a failed card is never
+  left with live work behind it that a retry would duplicate.
+- Cancellation is durable. The request is committed to the run's checkpoint before any signal,
+  so a restart that finds it stops the runner and records the run as cancelled, never
+  interrupted or requeued. A result that arrives after the request is recorded as cancelled too.
+  A cancelled run's partial output is quarantined: kept for review, never published or deleted.
 """
 
 from __future__ import annotations
@@ -25,13 +32,20 @@ from types import SimpleNamespace
 from pathlib import Path
 from typing import Any
 
+import psutil
 from sqlalchemy import and_, exists, or_, select, text
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import sessionmaker
 
 from agents import REGISTRY, AgentSpec, redact
+import agent_git
+import approval
+from dispatch_gate import (DispatchDenied, admit as admit_dispatch,
+                           snapshot as dispatch_snapshot, reviewed_route_class as _reviewed_route_class)
 import projects
+from idempotency import refuse_timeout_retry
 from models import Card, CardDependency, ChatMessage, ChatThread, Run, RunEvent
+from operator_boundary import runner_env
 
 logger = logging.getLogger("mac_control.dispatcher")
 
@@ -40,6 +54,14 @@ MAX_CHAT_TURNS = 2  # chat turns run beside board cards so a long card never blo
 CHAT_TIMEOUT_S = 900
 KILL_GRACE_S = 5.0
 EXTRA_PATH = ("/opt/homebrew/bin", "/usr/local/bin", str(Path.home() / ".local" / "bin"))
+CANCEL_ERROR = "cancelled by operator"
+LATE_CANCEL_ERROR = ("cancelled by operator; the runner returned a result after the cancel was "
+                     "recorded, so it was quarantined rather than accepted")
+
+# Deliberately narrow: only clear transport/provider-transient failures get automatic retries.
+# Everything else remains an operator decision, even if a task has spare attempts.
+TRANSIENT_ERROR = re.compile(r"(?:rate.?limit|too many requests|quota|temporar(?:y|ily)|"
+                             r"service unavailable|connection (?:reset|timed out)|gateway timeout)", re.I)
 
 
 @dataclass
@@ -50,6 +72,41 @@ class _Handle:
 
 def _now() -> int:
     return int(time.time())
+
+
+def _checkpoint(run: Run) -> dict[str, Any]:
+    return json.loads(run.checkpoint or "{}")
+
+
+
+def _stop_orphan(run: Run) -> str | None:
+    """Stop a runner left alive by a crashed server. Returns a note, or None if nothing ran.
+
+    The process must still lead its own group, run the recorded executable and have started
+    after the run did; a reused pid fails those checks and is left alone.
+    """
+    if not run.pid:
+        return None
+    try:
+        expected = json.loads(run.command or "[]")[0]
+        proc = psutil.Process(run.pid)
+        cmdline = proc.cmdline()
+        if (not cmdline or cmdline[0] != expected or os.getpgid(run.pid) != run.pid
+                or proc.create_time() < run.started_at - 2):
+            return None
+    except (IndexError, TypeError, ValueError, OSError, psutil.Error):
+        return None
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(run.pid, sig)
+        except ProcessLookupError:
+            break
+        deadline = time.monotonic() + KILL_GRACE_S
+        while time.monotonic() < deadline and proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE:
+            time.sleep(0.05)
+        if not proc.is_running() or proc.status() == psutil.STATUS_ZOMBIE:
+            break
+    return f"stopped orphaned runner pid {run.pid} left by the previous service"
 
 
 def remove_run_logs(log_paths) -> None:
@@ -96,21 +153,30 @@ class Dispatcher:
         self.recover("service stopped while the run was in progress")
 
     def recover(self, note: str) -> int:
-        """Mark runs left in 'running' as interrupted and fail their cards."""
+        """Mark runs left in 'running' as interrupted (cancelled if the operator asked) and fail
+        their cards."""
         now = _now()
         with self.sessions.begin() as s:
             stuck = s.execute(select(Run).where(Run.stage == "running")).scalars().all()
             for run in stuck:
-                run.stage = "interrupted"
+                orphan = _stop_orphan(run)
+                if orphan:
+                    s.add(RunEvent(run_id=run.id, ts=now, kind="note", text=orphan))
+                cancelled = bool(_checkpoint(run).get("cancel_requested"))
+                run.stage = "cancelled" if cancelled else "interrupted"
                 run.ended_at = now
                 run.duration_s = float(now - run.started_at)
-                run.error = note
-                s.add(RunEvent(run_id=run.id, ts=now, kind="stage", text=f"interrupted: {note}"))
+                run.error = f"{CANCEL_ERROR}; {note}" if cancelled else note
+                s.add(RunEvent(run_id=run.id, ts=now, kind="stage", text=f"{run.stage}: {note}"))
+                if cancelled:
+                    self._quarantine(s, run, now)
                 if run.card_id is not None:
                     card = s.get(Card, run.card_id)
                     if card and card.column == "running":
                         card.column = "failed"
                         card.updated_at = now
+                        if card.needs_approval and not projects.binding(s, card.id):
+                            approval.issue_challenge(card)
             for msg in s.execute(select(ChatMessage).where(ChatMessage.status == "running")).scalars():
                 msg.status = "failed"
                 s.add(ChatMessage(thread_id=msg.thread_id, role="assistant", status="failed",
@@ -147,6 +213,7 @@ class Dispatcher:
             cards = s.execute(
                 select(Card)
                 .where(Card.column == "queued")
+                .where(or_(Card.retry_after.is_(None), Card.retry_after <= now))
                 .where(Card.assignee_type == "agent")
                 .where(~unfinished_dependency)
                 .where(or_(Card.needs_approval.is_(False), Card.approved_at.is_not(None)))
@@ -154,7 +221,15 @@ class Dispatcher:
             ).scalars().all()
             for card in cards:
                 if len(claimed) >= limit: break
+                if refuse_timeout_retry(s, card, now):
+                    continue
                 link = projects.binding(s, card.id)
+                # Second line of defence for standalone cards: only an unused, unexpired grant
+                # for this exact route pin may start a run. Anything else needs a new approval.
+                problem = approval.grant_problem(card, now) if card.needs_approval and not link else None
+                if problem:
+                    approval.revoke(card, now, problem)
+                    continue
                 if any((link or (r.card_id and projects.binding(s, r.card_id))) and projects.overlap(card.working_dir, r.working_dir) for r in active_runs):
                     continue
                 # A named OpenClaw target has its own configured gateway workspace.
@@ -169,14 +244,25 @@ class Dispatcher:
                     card.column, card.updated_at = "failed", now
                     continue
                 model_requested = card.model or spec.default_model()
-                card.subscription_billing=bool(link) and projects.subscription(s,card.agent)
-                args=(card,prompt,card.model,card.budget_usd or self.settings.default_budget_usd,spec.binary(self.settings))
+                # Branch-scoped git access is an operator grant per approved project, never plan output.
+                grant = agent_git.grant_for(self.settings, link.project_id, card) if link and link.role == 'story' else None
+                card.agent_git_grant = grant
+                if grant:
+                    prompt = agent_git.apply_context(prompt, grant, card.id, card.agent, model_requested)
+                card.subscription_billing=_reviewed_route_class(s, self.settings, card, model_requested) == "subscription"
+                args=(card,prompt,model_requested,card.budget_usd if card.budget_usd is not None else self.settings.default_budget_usd,spec.binary(self.settings))
                 resume=getattr(card,'resume_session',None)
                 argv=spec.build(*args, session_id=str(uuid.uuid5(uuid.NAMESPACE_URL,f'mcd:story:{card.id}'))) if link and spec.preassigned_session else spec.build(*args,session_id=resume) if resume else spec.build(*args)
                 run = Run(
                     card_id=card.id, agent=card.agent, model_requested=model_requested,
                     stage="running", started_at=now, working_dir=card.working_dir,
                     command=json.dumps(redact(argv, prompt)), log_path="",
+                    attempt=card.retry_attempts + 1,
+                    checkpoint=json.dumps({"dispatch_policy": dispatch_snapshot(
+                        card, args[3], _reviewed_route_class(
+                            s, self.settings, card, model_requested)),
+                        **({"agent_git": [{"dir": c.dir, "repo": c.repo, "branch": c.branch} for c in grant.clones]}
+                           if grant else {})}),
                 )
                 s.add(run)
                 s.flush()
@@ -186,7 +272,10 @@ class Dispatcher:
                     projects.memory(s, projects.get(s, link.project_id), "context", prompt, "mcd", card.id, run.id)
                 run.log_path = str(self.runs_dir / f"run-{run.id}.log")
                 s.add(RunEvent(run_id=run.id, ts=now, kind="stage", text="running"))
+                if card.needs_approval and not link:
+                    s.add(RunEvent(run_id=run.id, ts=now, kind="note", text=approval.consume(card, run.id, now)))
                 card.column, card.updated_at = "running", now
+                card.retry_attempts = run.attempt
                 claimed.append(({"id": card.id, "agent": card.agent, "working_dir": card.working_dir,
                                  "timeout_s": card.timeout_s, "argv": argv}, run.id))
         return claimed
@@ -211,10 +300,30 @@ class Dispatcher:
 
     @staticmethod
     def _env() -> dict[str, str]:
-        env = dict(os.environ)
+        # No MAC_CONTROL_* settings: operator credentials and paths never reach an agent.
+        env = runner_env()
         env["PATH"] = ":".join((*EXTRA_PATH, env.get("PATH", "/usr/bin:/bin")))
         env.setdefault("HOME", str(Path.home()))
         return env
+
+    def _dispatch_admission(self, run_id, argv):
+        with self.sessions.begin() as db:
+            row = db.get(Run, run_id)
+            if row is None:
+                raise DispatchDenied("PRICE_UNKNOWN: run missing")
+            try:
+                source = db.get(Card, row.card_id) if row.card_id else db.get(ChatThread, row.thread_id)
+                current_class = _reviewed_route_class(db, self.settings, source, row.model_requested) if source else None
+                evidence = admit_dispatch(self.settings, row, argv, default_free_only=False, current_price_class=current_class)
+            except DispatchDenied as exc:
+                db.add(RunEvent(run_id=run_id, ts=_now(), kind="note", text=f"dispatch denied: {exc}"))
+                problem = str(exc)
+            else:
+                db.add(RunEvent(run_id=run_id, ts=_now(), kind="note",
+                                text="dispatch admitted: " + json.dumps(evidence, sort_keys=True)))
+                problem = None
+        if problem:
+            raise DispatchDenied(problem)
 
     async def _run_process(self, run_id: int, agent: str, argv: list[str], cwd: str,
                            timeout_s: int) -> tuple[str, int | None, str | None, Any, float]:
@@ -248,13 +357,23 @@ class Dispatcher:
                     raw.write(("! " if is_stderr else "") + line + "\n")
                     if is_stderr:
                         parser.feed_stderr(line)
-                        quota_reported |= bool(re.search(r"usage limit|rate.?limit|quota exceeded|quota exhausted|too many requests|limit reached|HTTP.?429",line,re.I))
+                        quota_reported |= bool(re.search(r"usage limit|session limit|rate.?limit|quota exceeded|quota exhausted|too many requests|limit reached|HTTP.?429",line,re.I))
                         if line.strip():
                             write(f"! {line}")
                     else:
                         for out in parser.feed(line):
                             write(out)
 
+            # A cancel committed between the claim and this point must not launch a runner.
+            if handle.cancel_requested or await asyncio.to_thread(self._cancel_recorded, run_id):
+                handle.cancel_requested = True
+                write(f"{CANCEL_ERROR} before the runner started")
+                return "cancelled", None, CANCEL_ERROR, parser.meta, 0.0
+            try:
+                await asyncio.to_thread(self._dispatch_admission, run_id, argv)
+            except DispatchDenied as exc:
+                write(f"dispatch denied: {exc}")
+                return "failed", None, str(exc), parser.meta, 0.0
             try:
                 if agent == 'hermes':
                     from hermes_runtime import command
@@ -271,6 +390,9 @@ class Dispatcher:
 
             if proc is not None:
                 handle.proc = proc
+                await asyncio.to_thread(self._record_pid, run_id, proc.pid)
+                if handle.cancel_requested:  # the cancel arrived while the runner was starting
+                    await self._kill(handle)
                 assert proc.stdout is not None and proc.stderr is not None
                 readers = asyncio.gather(pump(proc.stdout, False), pump(proc.stderr, True))
                 try:
@@ -284,7 +406,7 @@ class Dispatcher:
                         parser.meta.error = 'Agent reported a different model than the MCD assignment. Review this run; no automatic reassignment was authorized.'
                         parser.meta.timed_out = False
                     if handle.cancel_requested:
-                        stage, error = "cancelled", "cancelled by operator"
+                        stage, error = "cancelled", CANCEL_ERROR
                     elif exit_code == 0 and parser.meta.error is None:
                         stage = "succeeded"
                     else:
@@ -302,6 +424,62 @@ class Dispatcher:
                     raise
 
         return stage, exit_code, error, parser.meta, time.monotonic() - started
+
+    def _record_pid(self, run_id: int, pid: int) -> None:
+        with self.sessions.begin() as s:
+            run = s.get(Run, run_id)
+            if run is not None and run.stage == "running":
+                run.pid = pid
+
+    def _record_cancel(self, run_id: int) -> bool:
+        """Commit the operator's cancel before any signal. False if the run is not running."""
+        with self.sessions.begin() as s:
+            run = s.get(Run, run_id)
+            if run is None or run.stage != "running":
+                return False
+            cp = _checkpoint(run)
+            if not cp.get("cancel_requested"):
+                run.checkpoint = json.dumps({**cp, "cancel_requested": True, "cancel_requested_at": _now()})
+                s.add(RunEvent(run_id=run_id, ts=_now(), kind="note", text="operator cancellation requested"))
+            return True
+
+    def _cancel_recorded(self, run_id: int) -> bool:
+        with self.sessions() as s:
+            run = s.get(Run, run_id)
+            return bool(run and _checkpoint(run).get("cancel_requested"))
+
+    def _quarantine(self, s, run: Run, now: int) -> None:
+        """Keep a cancelled run's partial output as reviewable evidence.
+
+        The record lists the run's own log files; the workspace is left exactly as the runner
+        left it. Nothing here is published, accepted or deleted.
+        """
+        root = self.runs_dir / "quarantine"
+        root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path = root / f"run-{run.id}.json"
+        evidence = []
+        if run.log_path:
+            for log in (Path(run.log_path), Path(run.log_path).with_suffix(".raw.log")):
+                if log.is_file():
+                    evidence.append({"path": str(log), "bytes": log.stat().st_size})
+        payload = {"run_id": run.id, "card_id": run.card_id, "stage": run.stage, "reason": run.error,
+                   "workspace": run.working_dir, "evidence": evidence, "quarantined_at": now,
+                   "publishable": False}
+        tmp = path.with_suffix(".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as out:
+            out.write(json.dumps(payload, sort_keys=True))
+        os.replace(tmp, path)
+        run.checkpoint = json.dumps({**_checkpoint(run), "quarantine": str(path), "publishable": False})
+        s.add(RunEvent(run_id=run.id, ts=now, kind="note",
+                       text="partial output quarantined for review; not publishable"))
+
+    def _settle_cancel(self, s, run_id: int, stage: str, error: str | None) -> tuple[str, str | None]:
+        """A result that arrives after a committed cancel is recorded as cancelled, not accepted."""
+        run = s.get(Run, run_id)
+        if run is not None and stage != "cancelled" and _checkpoint(run).get("cancel_requested"):
+            return "cancelled", LATE_CANCEL_ERROR
+        return stage, error
 
     async def _execute(self, card: dict[str, Any], run_id: int) -> None:
         stage, exit_code, error, meta, seconds = await self._run_process(
@@ -324,13 +502,40 @@ class Dispatcher:
     def _finish(self, run_id, card_id, stage, exit_code, error, meta, duration) -> None:
         now = _now()
         with self.sessions.begin() as s:
-            if self._record_run(s, run_id, stage, exit_code, error, meta, duration, now) is None:
+            stage, error = self._settle_cancel(s, run_id, stage, error)
+            run = self._record_run(s, run_id, stage, exit_code, error, meta, duration, now)
+            if run is None:
                 return
+            if stage == "cancelled":
+                self._quarantine(s, run, now)
             card = s.get(Card, card_id)
             if card and card.column == "running":
-                card.column = "done" if stage == "succeeded" else "failed"
+                retrying = self._retryable(stage, error) and run.attempt < card.max_attempts
+                if retrying:
+                    delay = card.retry_backoff_s * (2 ** max(0, run.attempt - 1))
+                    card.column, card.retry_after = "queued", now + delay
+                    s.add(RunEvent(run_id=run.id, ts=now, kind="note",
+                                   text=f"retry scheduled: attempt {run.attempt + 1} of {card.max_attempts} after {delay}s"))
+                else:
+                    card.column, card.retry_after = ("done" if stage == "succeeded" else "failed"), None
+                    if stage != "succeeded" and self._retryable(stage, error):
+                        reason = f"retry budget exhausted after {run.attempt} of {card.max_attempts} attempts"
+                        run.error = f"{reason}: {error or 'transient failure'}"
+                        s.add(RunEvent(run_id=run.id, ts=now, kind="note", text=reason))
                 card.updated_at = now
-                projects.on_finish(s, card, s.get(Run, run_id), stage)
+                if not retrying and card.needs_approval and not projects.binding(s, card.id):
+                    approval.issue_challenge(card)  # the used grant is retired; a rerun needs a new one
+                if not retrying:
+                    projects.on_finish(s, card, run, stage)
+
+    @staticmethod
+    def _retryable(stage: str, message: str | None) -> bool:
+        """Only identifiable transport/provider failures retry; a timeout needs review.
+
+        A wall-clock timeout cannot prove the remote action stopped, so the existing
+        idempotency guard deliberately keeps it out of automatic retry.
+        """
+        return stage == "failed" and bool(TRANSIENT_ERROR.search(message or ""))
 
     # ------------------------------------------------------------------ chat turns
 
@@ -354,14 +559,19 @@ class Dispatcher:
             active = list(s.scalars(select(Run).where(Run.stage == "running")))
             if any(r.card_id and projects.binding(s, r.card_id) and (projects.overlap(thread.working_dir, r.working_dir) or (thread.agent==r.agent=="openclaw" and (s.get(Card,r.card_id).agent_target or "mm-main")==(thread.agent_target or "mm-main"))) for r in active):
                 return None
+            model_requested = thread.model or spec.default_model()
             ctx = SimpleNamespace(mode=thread.mode, working_dir=thread.working_dir,
-                                  agent_target=thread.agent_target, timeout_s=CHAT_TIMEOUT_S)
-            argv = spec.build(ctx, msg.text, thread.model, self.settings.default_budget_usd,
+                                  agent_target=thread.agent_target, timeout_s=CHAT_TIMEOUT_S,
+                                  subscription_billing=_reviewed_route_class(s, self.settings, thread, model_requested) == "subscription")
+            argv = spec.build(ctx, msg.text, model_requested, self.settings.default_budget_usd,
                               spec.binary(self.settings), session_id=thread.session_id)
             run = Run(thread_id=thread.id, agent=thread.agent,
-                      model_requested=thread.model or spec.default_model(), stage="running",
+                      model_requested=model_requested, stage="running",
                       started_at=now, working_dir=thread.working_dir,
-                      command=json.dumps(redact(argv, msg.text)), log_path="")
+                      command=json.dumps(redact(argv, msg.text)), log_path="",
+                      checkpoint=json.dumps({"dispatch_policy": dispatch_snapshot(
+                          thread, self.settings.default_budget_usd, _reviewed_route_class(
+                              s, self.settings, thread, model_requested))}))
             s.add(run)
             s.flush()
             run.log_path = str(self.runs_dir / f"run-{run.id}.log")
@@ -396,7 +606,10 @@ class Dispatcher:
     def _finish_turn(self, run_id, turn, stage, exit_code, error, meta, duration) -> None:
         now = _now()
         with self.sessions.begin() as s:
-            self._record_run(s, run_id, stage, exit_code, error, meta, duration, now)
+            stage, error = self._settle_cancel(s, run_id, stage, error)
+            run = self._record_run(s, run_id, stage, exit_code, error, meta, duration, now)
+            if run is not None and stage == "cancelled":
+                self._quarantine(s, run, now)
             msg = s.get(ChatMessage, turn["message_id"])
             thread = s.get(ChatThread, turn["thread_id"])
             if msg is None or thread is None:
@@ -435,9 +648,13 @@ class Dispatcher:
             await proc.wait()
 
     async def cancel(self, run_id: int) -> bool:
+        if not await asyncio.to_thread(self._record_cancel, run_id):
+            return False
         handle = self._handles.get(run_id)
         if handle is None:
-            return False
+            # Not yet started here: the pre-spawn check, or restart recovery, acts on the
+            # committed request.
+            return True
         handle.cancel_requested = True
         await self._kill(handle)
         return True

@@ -12,9 +12,16 @@ the second line of defence.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
+import logging
 import re
+import secrets
 import subprocess
 from pathlib import Path
+
+logger = logging.getLogger("mac_control.approval")
 
 OUTWARD_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("pushes or merges code", re.compile(r"\b(git\s+push|push\s+(to|the|this|it)|merge\s+(to|into|the|this|pr)|force[- ]push)\b", re.I)),
@@ -68,3 +75,133 @@ def reasons_for(prompt: str, mode: str, branch: str | None) -> list[str]:
         if pattern.search(text):
             reasons.append(f"prompt {label}")
     return reasons
+
+
+# ----------------------------------------------------------------------------- approval grants
+#
+# A standalone card's approval is a single-use grant, kept as JSON in `card.approval_grant`:
+#   pending   {"challenge": <nonce>}                 issued when the card needs approval
+#   approved  {"nonce", "card_id", "pin", "approved_at", "expires_at", "run_id": None}
+#   used      run_id set when the dispatcher claims it; it never authorizes another execution
+# The operator's approve request must echo the challenge and the route pin it was shown, so a
+# replayed request, or one made against a card whose route or content has since changed, is
+# refused. The dispatcher checks the grant again at claim time. Refusals are kept on the card.
+# Project stories are authorized by their approved, revision-bound project manifest instead.
+
+AUDIT_KEEP = 20
+PIN_FIELDS = ("assignee_type", "agent", "agent_target", "model", "mode", "working_dir", "body")
+
+
+def route_pin(card) -> str:
+    """Hash of the card identity and everything its approval covers."""
+    fields = {"card_id": card.id, **{k: getattr(card, k) or None for k in PIN_FIELDS}}
+    return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
+
+
+def load_grant(card) -> dict:
+    try:
+        grant = json.loads(card.approval_grant or "{}")
+    except ValueError:
+        return {}
+    return grant if isinstance(grant, dict) else {}
+
+
+def _store(card, grant: dict) -> None:
+    grant["audit"] = grant.get("audit", [])[-AUDIT_KEEP:]
+    card.approval_grant = json.dumps(grant, sort_keys=True)
+
+
+def audit(card, now: int, event: str, reason: str) -> None:
+    grant = load_grant(card)
+    grant.setdefault("audit", []).append({"ts": now, "event": event, "reason": reason})
+    _store(card, grant)
+    logger.warning("card %s approval %s: %s", card.id, event, reason)
+
+
+def issue_challenge(card) -> str:
+    """Start a fresh approval: any earlier grant is retired; the audit trail is kept."""
+    old = load_grant(card)
+    grant = {"challenge": secrets.token_urlsafe(18), "audit": old.get("audit", [])}
+    if old.get("nonce"):
+        grant["last"] = {k: old.get(k) for k in ("nonce", "pin", "run_id", "approved_at")}
+    _store(card, grant)
+    card.approved_at = None
+    return grant["challenge"]
+
+
+def challenge(card) -> str | None:
+    return load_grant(card).get("challenge") if card.needs_approval and card.approved_at is None else None
+
+
+class ApprovalRefused(Exception):
+    def __init__(self, detail: str):
+        super().__init__(detail)
+        self.detail = detail
+
+
+def grant(card, shown_challenge: str | None, shown_pin: str | None, now: int, ttl_s: int) -> None:
+    """Record the operator's approval of exactly the card version they were shown.
+
+    Raises ApprovalRefused (already audited on the card) for a stale, replayed or swapped request.
+    """
+    current = load_grant(card)
+    if card.approved_at is None and not current.get("challenge"):
+        # A card from before approval grants: issue its first challenge; the next view shows it.
+        audit(card, now, "refused", "no approval challenge had been issued")
+        issue_challenge(card)
+        raise ApprovalRefused("This task needs a fresh review before approval. Refresh the task and review it again.")
+    if not shown_challenge or not current.get("challenge") or not hmac.compare_digest(
+            str(shown_challenge), str(current["challenge"])):
+        audit(card, now, "refused", "stale or replayed approval request")
+        raise ApprovalRefused("This approval request is stale or was already used. Refresh the task and review it again.")
+    if not shown_pin or not hmac.compare_digest(str(shown_pin), route_pin(card)):
+        audit(card, now, "refused", "route or content changed since it was shown")
+        raise ApprovalRefused("The task's route or content changed since you reviewed it. Refresh and review it again.")
+    approved = {"nonce": current["challenge"], "card_id": card.id, "pin": route_pin(card),
+                "approved_at": now, "expires_at": now + ttl_s, "run_id": None,
+                "audit": current.get("audit", [])}
+    approved["audit"].append({"ts": now, "event": "approved", "reason": f"pin {approved['pin'][:12]}"})
+    _store(card, approved)
+    card.approved_at = now
+
+
+def grant_problem(card, now: int, execution_key: str | None = None) -> str | None:
+    """Why the card's approval cannot authorize a dispatch now, or None when it can.
+
+    `execution_key` lets an interrupted or automatically retried attempt of the SAME execution
+    reuse its grant (RCD); a new execution always needs a new approval.
+    """
+    g = load_grant(card)
+    if card.approved_at is None or not g.get("nonce"):
+        return "no current approval grant"
+    if g.get("card_id") != card.id:
+        return "approval belongs to another task"
+    if g.get("run_id") is not None and not (execution_key and g.get("execution_key") == execution_key):
+        return f"approval was already used by run #{g['run_id']}"
+    if not hmac.compare_digest(str(g.get("pin") or ""), route_pin(card)):
+        return "route or content changed since approval"
+    if g.get("run_id") is None and now >= int(g.get("expires_at") or 0):
+        return "approval expired before dispatch"
+    return None
+
+
+def consume(card, run_id: int, now: int, execution_key: str | None = None) -> str:
+    """Bind the grant to the run that uses it. Returns a short note for the run's events."""
+    g = load_grant(card)
+    first = g.get("run_id") is None
+    if first:
+        g["run_id"], g["used_at"] = run_id, now
+        if execution_key:
+            g["execution_key"] = execution_key
+        g.setdefault("audit", []).append({"ts": now, "event": "used", "reason": f"run #{run_id}"})
+        _store(card, g)
+    return (f"operator approval {g['nonce'][:8]} (route pin {g['pin'][:12]}) "
+            + ("bound to this run" if first else f"of run #{g['run_id']} reused for the same execution"))
+
+
+def revoke(card, now: int, reason: str) -> None:
+    """Refuse a dispatch: audit it, send the card back to Review and require a new approval."""
+    audit(card, now, "dispatch_refused", reason)
+    issue_challenge(card)
+    card.column = "review"
+    card.updated_at = now

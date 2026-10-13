@@ -10,7 +10,7 @@ Timestamps are UTC epoch seconds (int) for cheap range queries.
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base
@@ -138,10 +138,17 @@ class Card(Base):
     column: Mapped[str] = mapped_column(String(20), default="backlog", index=True)
     position: Mapped[float] = mapped_column(Float, default=0.0)
     timeout_s: Mapped[int] = mapped_column(Integer)
+    # Retry policy is always finite. retry_attempts is the durable current execution budget;
+    # it is reset only when the operator explicitly queues a completed card again.
+    max_attempts: Mapped[int] = mapped_column(Integer, default=1)
+    retry_backoff_s: Mapped[int] = mapped_column(Integer, default=0)
+    retry_after: Mapped[int | None] = mapped_column(Integer, index=True)
+    retry_attempts: Mapped[int] = mapped_column(Integer, default=0)
     budget_usd: Mapped[float | None] = mapped_column(Float)
     needs_approval: Mapped[bool] = mapped_column(Boolean, default=False)
     approval_reasons: Mapped[str | None] = mapped_column(Text)  # JSON list
     approved_at: Mapped[int | None] = mapped_column(Integer)
+    approval_grant: Mapped[str | None] = mapped_column(Text)  # JSON single-use grant; see approval.py
     created_by: Mapped[str] = mapped_column(String(20), default="operator")  # operator | hermes
     created_at: Mapped[int] = mapped_column(Integer)
     updated_at: Mapped[int] = mapped_column(Integer)
@@ -154,6 +161,19 @@ class CardDependency(Base):
 
     card_id: Mapped[int] = mapped_column(ForeignKey("card.id", ondelete="CASCADE"), primary_key=True)
     depends_on_id: Mapped[int] = mapped_column(ForeignKey("card.id", ondelete="CASCADE"), primary_key=True, index=True)
+
+
+class FindingDraftLink(Base):
+    """Durable, unique provenance from one Ops report finding to its draft task."""
+
+    __tablename__ = "finding_draft_link"
+    __table_args__ = (UniqueConstraint("finding_id", name="uq_finding_draft_finding"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    report_id: Mapped[str] = mapped_column(String(64), index=True)
+    finding_id: Mapped[str] = mapped_column(String(40))
+    card_id: Mapped[int] = mapped_column(ForeignKey("card.id", ondelete="CASCADE"), unique=True)
+    created_at: Mapped[int] = mapped_column(Integer)
 
 
 class Run(Base):
@@ -185,6 +205,9 @@ class Run(Base):
     log_path: Mapped[str] = mapped_column(String(500))
     result_text: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)
+    pid: Mapped[int | None] = mapped_column(Integer)  # runner = its own process group leader
+    checkpoint: Mapped[str | None] = mapped_column(Text)  # JSON: cancel_requested, quarantine
+    attempt: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
 
 class RunEvent(Base):

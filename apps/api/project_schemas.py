@@ -59,6 +59,12 @@ class Action(Strict):
 class Retry(Action):
     route: Route | None = None
 
+class GoFree(Strict):
+    revision: int = Field(ge=1)
+    run_id: int = Field(ge=1)
+    model: str = Field(min_length=1, max_length=120)
+    agent_target: str = Field(min_length=1, max_length=80)
+
 class ContinueOutput(Strict):
     revision: int = Field(ge=1)
     run_id: int = Field(ge=1)
@@ -81,3 +87,15 @@ class HandoffPolicy(Strict):
     manifest_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
     mode: Literal['manual', 'batch', 'automatic']
     approve: bool = False
+
+
+class Retier(Strict):
+    revision: int = Field(ge=1)
+    claude_model: Literal['claude-haiku-5-5', 'claude-sonnet-5-5'] = 'claude-haiku-5-5'
+    codex_model: Literal['gpt-6-luna', 'gpt-5.6-terra'] = 'gpt-6-luna'
+    acknowledge: bool = False
+
+
+class RepairExecution(Strict):
+    revision: int = Field(ge=1)
+    acknowledge: bool = False

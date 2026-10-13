@@ -31,15 +31,37 @@ def incomplete_error(run):
         return ('The agent returned only a tool-failure warning, without a completed handoff or verification report. '
                 'A normal process exit does not mean the story is complete. Review any saved artifacts, '
                 'then retry this story to return the full report directly to MCD. No handoff was accepted.')
-    # Only a direct admission in the opening paragraph, not quoted history or a
-    # later description of a recovered blocker. This is an additional completion
-    # guard, not proof that every other response satisfies acceptance criteria.
-    opening = text.split('\n\n', 1)[0][:1500]
+    # Only a direct admission at the start, not quoted history or a later
+    # description of a recovered blocker. Agents commonly put a Markdown handoff
+    # heading before a separate Status paragraph, so include one block after a
+    # heading; otherwise inspect only the opening block.
+    blocks = text.split('\n\n', 2)
+    opening = '\n\n'.join(blocks[:2] if blocks and blocks[0].lstrip().startswith('#') else blocks[:1])[:3000]
     explicit = re.search(r"\b(?:none|not one) of (?:this|the) story.?s acceptance criteria (?:are|were) met\b|"
-                         r"\b(?:story|task) is (?:only )?(?:partly done|not complete|unfinished)\b", opening, re.I)
+                         r"\b(?:story|task) is (?:[*_`~]+)?(?:only )?(?:partly done|not complete|unfinished|incomplete)\b|"
+                         r"\bstatus\s*:\s*(?:not done|not complete)\b|"
+                         r"\bverification (?:is|remains) incomplete\b|"
+                         r"\b(?:not verified|not executed)\b|"
+                         r"\b(?:acceptance criteria|definition of done) (?:remain|remains|is|are) unmet\b|"
+                         r"\bnot release-ready\b|"
+                         r"\bdo not mark (?:this )?(?:story|task) (?:as )?done\b", opening, re.I)
+    # An unambiguous current-status declaration is safe to recognize anywhere in
+    # a report. This catches agents that put their final status after long findings
+    # while avoiding ordinary discussion of a past blocker.
+    explicit = explicit or re.search(r"\bthis (?:story|task) is (?:[*_`~]+)?(?:not done|not complete|unfinished|incomplete)\b|"
+                                     r"\bnot fully verified\b|"
+                                     r"\bthis handoff does not claim complete verification\b|"
+                                     r"\bincomplete verification\b|"
+                                     r"\b(?:checks?|verification)\b[^\n]{0,120}\b(?:incomplete|did not run successfully)\b|"
+                                     r"\bkeep (?:this )?(?:story|task) incomplete\b|"
+                                     r"\bnone of (?:the )?required checks (?:ran|were run|were executed)\b|"
+                                     r"\bI did not (?:run|execute) (?:the )?(?:tests?|checks?|build|preview)\b", text, re.I)
     blocked_without_work = (re.search(r'\b(?:blocked|blocks?|cannot proceed)\b', opening, re.I) and
-                            re.search(r'\bnothing (?:was|has been) (?:created|changed|pushed)\b', opening, re.I))
-    if explicit or blocked_without_work:
+                            re.search(r'\bnothing (?:(?:was|has been) )?(?:created|changed|pushed|implemented|uploaded|published|executed|verified|tested|run)\b', opening, re.I))
+    blocked_without_receipts = (re.search(r'\bis blocked\b', opening, re.I) and
+                                re.search(r'\b(?:no|without)\b[^.\n]{0,120}\breceipts?\b', opening, re.I))
+    unrun_live_checks = re.search(r'\b(?:benchmark|conformance)\b[^\n]*\bnot run\b[^\n]*\bno live results\b', opening, re.I)
+    if explicit or blocked_without_work or blocked_without_receipts or unrun_live_checks:
         return ('The agent explicitly reported unfinished work or unmet story acceptance criteria. '
                 'A normal process exit does not mean the story is complete. Open the task result, '
                 'resolve the reported permissions or missing operator decisions, then retry this story. '

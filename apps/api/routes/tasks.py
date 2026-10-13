@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 import approval
 import cards as card_rules
 import projects
+import run_liveness
 from agents import REGISTRY
 from deps import get_session
 from dispatcher import remove_run_logs
@@ -39,6 +40,8 @@ class CardIn(BaseModel):
     model: str | None = None
     agent_target: str | None = None
     timeout_s: int | None = Field(default=None, ge=30, le=6 * 3600)
+    max_attempts: int | None = Field(default=None, ge=1, le=10)
+    retry_backoff_s: int | None = Field(default=None, ge=0, le=3600)
     budget_usd: float | None = Field(default=None, ge=0.01, le=50.0)
 
 
@@ -57,6 +60,8 @@ class CardPatch(BaseModel):
     model: str | None = None
     agent_target: str | None = None
     timeout_s: int | None = Field(default=None, ge=30, le=6 * 3600)
+    max_attempts: int | None = Field(default=None, ge=1, le=10)
+    retry_backoff_s: int | None = Field(default=None, ge=0, le=3600)
     budget_usd: float | None = Field(default=None, ge=0.01, le=50.0)
     column: str | None = None
     position: float | None = None
@@ -71,6 +76,8 @@ def _run_dict(r: Run) -> dict:
         "output_tokens": r.output_tokens, "cost_usd": r.cost_usd, "session_id": r.session_id,
         "working_dir": r.working_dir, "command": json.loads(r.command), "error": r.error,
         "result_text": r.result_text,
+        "cancel_requested": bool(json.loads(r.checkpoint or "{}").get("cancel_requested")),
+        "quarantined": bool(json.loads(r.checkpoint or "{}").get("quarantine")),
     }
 
 
@@ -109,10 +116,16 @@ def _card_dict(c: Card, last_run: Run | None = None, deps: tuple[dict, dict, dic
         "dependents": sorted(dependents.get(c.id, [])),
         "agent_target": c.agent_target, "model": c.model, "mode": c.mode,
         "working_dir": c.working_dir, "column": c.column, "position": c.position,
-        "timeout_s": c.timeout_s, "budget_usd": c.budget_usd,
+        "timeout_s": c.timeout_s, "max_attempts": c.max_attempts,
+        "retry_backoff_s": c.retry_backoff_s, "retry_after": c.retry_after,
+        "retry_attempts": c.retry_attempts, "budget_usd": c.budget_usd,
         "needs_approval": c.needs_approval,
         "approval_reasons": json.loads(c.approval_reasons) if c.approval_reasons else [],
         "approved_at": c.approved_at, "created_by": c.created_by,
+        # Echoed back by the approve request so it applies only to this exact version, once.
+        "approval_challenge": approval.challenge(c),
+        "approval_pin": approval.route_pin(c) if c.needs_approval else None,
+        "approval_audit": approval.load_grant(c).get("audit", [])[-5:],
         "created_at": c.created_at, "updated_at": c.updated_at,
         "last_run": _run_dict(last_run) if last_run else None,
     }
@@ -151,12 +164,18 @@ def list_agents(request: Request, s: Session = Depends(get_session)):
         day = [r for r in runs if r.started_at >= now - 86400]
         running = [r for r in runs if r.stage == "running"]
         current = []
+        unresponsive = []
         for r in running:
+            live = run_liveness.check(r, settings.run_quiet_after_s, now)
+            if not live.running:  # the row says running but the runner is gone: never show it as running
+                unresponsive.append({"run_id": r.id, "card_id": r.card_id, "thread_id": r.thread_id,
+                                     "since_s": now - r.started_at, "liveness": live.as_dict()})
+                continue
             card = s.get(Card, r.card_id) if r.card_id else None
             thread = s.get(ChatThread, r.thread_id) if r.thread_id else None
             current.append({"run_id": r.id, "card_id": r.card_id, "title": card.title if card else thread.title if thread else None, "thread_id": r.thread_id,
                             "model": r.model_reported or r.model_requested,
-                            "running_s": now - r.started_at})
+                            "running_s": now - r.started_at, "liveness": live.as_dict()})
         last = s.scalar(select(Run).where(Run.agent == spec.id).order_by(Run.id.desc()).limit(1))
 
         def total(attr: str, rows=day):
@@ -170,6 +189,7 @@ def list_agents(request: Request, s: Session = Depends(get_session)):
             "suggested_models": list(dict.fromkeys([*spec.suggested_models, *native.get(spec.id, {}).get('models', [])])),
             "enforces_mode": spec.enforces_mode, "notes": spec.notes,
             "current": current,
+            "unresponsive": unresponsive,
             "last_run": _run_dict(last) if last else None,
             "runs_24h": len(day),
             "failed_24h": sum(1 for r in day if r.stage in ("failed", "timeout", "interrupted")),
@@ -179,7 +199,7 @@ def list_agents(request: Request, s: Session = Depends(get_session)):
             "busy_s_24h": total("duration_s"),
             "subagents": sub.get(spec.id),
         })
-    return {"agents": out, "subagents_checked_at": sub.get("checked_at")}
+    return {"agents": out, "subagents_checked_at": sub.get("checked_at"), "checked_at": now}
 
 
 @router.get("/workdirs")
@@ -276,11 +296,22 @@ def patch_card(card_id: int, body: CardPatch, s: Session = Depends(get_session))
     return _one(s, card)
 
 
+class ApproveIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    challenge: str | None = Field(default=None, max_length=64)
+    pin: str | None = Field(default=None, max_length=64)
+
+
 @router.post("/cards/{card_id}/approve")
-def approve_card(card_id: int, s: Session = Depends(get_session)):
+def approve_card(card_id: int, body: ApproveIn | None = None, s: Session = Depends(get_session)):
     card = _get_card(s, card_id)
     projects.protect(s, card)
-    card = card_rules.approve(card)
+    body = body or ApproveIn()
+    try:
+        card = card_rules.approve(card, body.challenge, body.pin, get_settings().approval_ttl_s)
+    except approval.ApprovalRefused as exc:
+        s.commit()  # keep the audit entry for the refused request
+        raise HTTPException(status_code=409, detail=exc.detail) from None
     s.commit()
     return _one(s, card)
 

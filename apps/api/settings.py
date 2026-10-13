@@ -60,7 +60,21 @@ class Settings(BaseSettings):
     dispatcher_enabled: bool = Field(default=True, description="Off in tests.")
     max_concurrent_runs: int = Field(default=2, ge=1, le=8)
     default_timeout_s: int = Field(default=1800, ge=30, le=6 * 3600)
-    default_budget_usd: float = Field(default=1.0, ge=0.01, le=50.0)
+    run_quiet_after_s: int = Field(default=600, ge=30, le=6 * 3600,
+                                   description="A live runner silent this long is shown as quiet, not as working.")
+    default_budget_usd: float = Field(default=1.0, ge=0.0, le=50.0)
+    dispatch_free_only: bool = Field(default=False)
+    dispatch_max_budget_usd: float = Field(default=1.0, ge=0.0, le=50.0)
+    agent_git_grants_file: Path = Field(
+        default=DEFAULT_DATA_DIR / "agent-git" / "grants.json",
+        description="Operator-owned branch-scoped git grants for project stories (see agent_git.py).",
+    )
+    dispatch_route_classes: dict[str, str] = Field(
+        default_factory=dict,
+        description="Reviewed exact agent|target|model routes: free, subscription or paid. Unknown denies.",
+    )
+    approval_ttl_s: int = Field(default=24 * 3600, ge=60, le=7 * 86400,
+                                description="An unused task approval expires after this many seconds.")
     workdir_roots: tuple[Path, ...] = Field(
         default=(Path.home() / "Projects", DEFAULT_DATA_DIR / "workspaces"),
         description="A card's working directory must be inside one of these.",
@@ -71,6 +85,11 @@ class Settings(BaseSettings):
     openclaw_path: str = Field(default="/opt/homebrew/bin/openclaw")
     hermes_config_path: Path | None = None
     openclaw_config_path: Path | None = None
+    agent_executables: tuple[str, ...] = Field(
+        default=("claude", "codex", "hermes", "openclaw"),
+        description="Processes started from these executables (and their children) are agents: "
+                    "operator APIs refuse them, as they refuse every dispatched runner.",
+    )
     run_retention_days: int = Field(default=90, ge=1)
     allowed_hosts_extra: tuple[str, ...] = Field(
         default=(), description="Extra Host values the request guard accepts (tests only)."
@@ -85,9 +104,20 @@ class Settings(BaseSettings):
         return self.alerts_config_path or self.data_dir / "alerts.toml"
 
     # --- Phase 6: read-only operations panels ----------------------------
+    github_writes_enabled: bool = False
     gh_path: str = "/opt/homebrew/bin/gh"
-    ops_reports_dir: Path = Field(default=DEFAULT_DATA_DIR / "reports")
+    ops_reports_dir: Path | None = None
     hermes_reports_dir: Path | None = None
+    reports_allowed_roots: tuple[Path, ...] = Field(default=(), description="Host-approved local report folders.")
+    ops_collectors_enabled: bool = Field(default=False, description="Scheduled Ops collectors; off until the operator enables them.")
+    ops_collector_commands: tuple[str, ...] = Field(default=(), description="Absolute executables a collector command source may run.")
+
+    # --- Packaged updates: off unless a helper-managed update root is set up -------
+    update_root: Path | None = Field(default=None, description="Install root with helper/helper.json; see packaging/README.md.")
+
+    @property
+    def reports_path(self) -> Path:
+        return self.ops_reports_dir or self.data_dir / "reports"
 
     # --- Phase 4: opt-in Google sign-in. Enabling requires complete local configuration.
     auth_enabled: bool = False

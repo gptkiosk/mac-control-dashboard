@@ -9,6 +9,7 @@ Later phases add the task board (Phase 3) and Google sign-in (Phase 4).
 from __future__ import annotations
 
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, HTTPException
@@ -19,12 +20,17 @@ from urllib.parse import urlencode
 from auth import AuthService, PUBLIC
 from routes import authentication, operations, projects as project_routes
 from github_read import GithubReader
+from github_config import GithubConfigStore
+from github_actions import GithubActionGuard
+from routes import github_actions as github_action_routes
 from alerts import AlertMonitor, HermesSender
 from agent_access import AgentAccessService
+from operator_boundary import OperatorBoundary
 from routes import agent_tools
 from routes import profiles as profile_routes, project_bridge
 from project_delivery import ProjectMessenger
-from reports import ReportsReader
+from report_storage import ReportStorage
+from ops_collectors import OpsCollectors
 
 import guard
 from collector import Collector
@@ -32,6 +38,7 @@ from dispatcher import Dispatcher
 from db import make_engine, make_session_factory
 from migrate import upgrade_to_head
 from routes import billing as billing_routes, chat, health, mcp as mcp_routes, metrics, release, services, system, tasks
+from routes import updates
 from settings import get_settings
 from spa import mount_spa
 from version import __version__
@@ -56,6 +63,13 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        github_stop = asyncio.Event()
+        github_task = None
+        # A missing, disabled, or incomplete configuration starts no gh process and no poller.
+        if app.state.github.config() is not None:
+            github_task = asyncio.create_task(app.state.github.poll(github_stop))
+        app.state.github_poll_stop = github_stop
+        app.state.github_poll_task = github_task
         collector = None
         if settings.collector_enabled:
             collector = Collector(
@@ -80,9 +94,19 @@ def create_app() -> FastAPI:
         if settings.dispatcher_enabled:
             app.state.project_messenger.start()
         app.state.alerts.start()
+        ops_stop = asyncio.Event()
+        ops_task = None
+        if settings.ops_collectors_enabled:
+            ops_task = asyncio.create_task(app.state.ops_collectors.loop(ops_stop))
         try:
             yield
         finally:
+            ops_stop.set()
+            if ops_task:
+                await ops_task
+            app.state.github_poll_stop.set()
+            if app.state.github_poll_task:
+                await app.state.github_poll_task
             await app.state.project_messenger.stop()
             await app.state.alerts.stop()
             if dispatcher:
@@ -94,12 +118,25 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="mac-control", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan
     )
-    app.state.alerts = AlertMonitor(sessions, settings.alerts_path, HermesSender(settings.hermes_path))
+    alert_origin=next((o for o in settings.auth_origins if o.startswith('https:')),settings.auth_origins[0])
+    app.state.alerts = AlertMonitor(sessions, settings.alerts_path, HermesSender(settings.hermes_path),origin=alert_origin)
     app.state.project_messenger = ProjectMessenger(sessions, settings)
-    app.state.github = GithubReader(settings.gh_path)
-    app.state.reports = ReportsReader(settings.ops_reports_dir, settings.hermes_reports_dir)
+    app.state.github_config = GithubConfigStore(settings.data_dir)
+    app.state.github = GithubReader(settings.gh_path, app.state.github_config)
+    app.state.github_actions = GithubActionGuard(settings.data_dir, app.state.github, enabled=settings.github_writes_enabled)
+    app.state.github_poll_stop = None
+    app.state.github_poll_task = None
+    app.state.reports = ReportStorage(settings)
+    def _ops_root():
+        reader = app.state.reports.reader()
+        return reader.roots.get("ops") if reader else None
+    def _hermes_root():
+        reader = app.state.reports.reader()
+        return reader.roots.get("hermes") if reader else None
+    app.state.ops_collectors = OpsCollectors(settings, sessions, _ops_root, hermes_root_provider=_hermes_root)
     app.state.auth = AuthService(settings, sessions)
     app.state.agent_access = AgentAccessService(settings, sessions)
+    app.state.operator_boundary = OperatorBoundary(settings, sessions)
     app.state.engine = engine
     app.state.sessions = sessions
     app.state.collector = None
@@ -115,6 +152,10 @@ def create_app() -> FastAPI:
             reason = guard.check(request, guard_ports, settings.auth_origins if settings.auth_enabled else ())
         if reason:
             return guard.refusal(reason)
+        # Before any credential: an agent process is refused whatever cookie or token it holds.
+        refused = await asyncio.to_thread(app.state.operator_boundary.refusal, request)
+        if refused:
+            return refused
         if request.url.path == '/api/hermes-projects':
             try:
                 project_bridge.authorize(request)
@@ -162,6 +203,7 @@ def create_app() -> FastAPI:
     app.include_router(agent_tools.router)
     app.include_router(health.router)
     app.include_router(release.router)
+    app.include_router(updates.router)
     app.include_router(metrics.router)
     app.include_router(services.router)
     app.include_router(system.router)
@@ -170,6 +212,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(mcp_routes.router)
     app.include_router(operations.router)
+    app.include_router(github_action_routes.router)
     app.include_router(project_routes.router)
     app.include_router(profile_routes.router)
     app.include_router(project_bridge.router)

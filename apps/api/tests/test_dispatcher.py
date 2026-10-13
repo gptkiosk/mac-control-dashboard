@@ -11,8 +11,9 @@ from types import SimpleNamespace
 from sqlalchemy import select, update
 
 import agents
+import approval
 from dispatcher import Dispatcher
-from models import Card, Run
+from models import Card, Run, RunEvent
 
 
 class FakeParser(agents.Parser):
@@ -29,23 +30,28 @@ class FakeParser(agents.Parser):
 
 def _build(card, prompt, model, budget, binary):
     # The prompt is a tiny Python program; tests only.
-    return [sys.executable, "-c", prompt]
+    return [sys.executable, "-c", prompt] + (["--model", model] if card.agent == "openclaw" else [])
 
 
 def _registry():
-    spec = agents.AgentSpec("fake", "Fake", "worker", "claude_path", _build, FakeParser)
+    spec = agents.AgentSpec("fake", "Fake", "worker", "claude_path", _build, FakeParser, default_model=lambda: "m1")
     return {"fake": spec}
 
 
 def _settings(tmp_path, **kw):
     base = dict(runs_dir=tmp_path / "runs", max_concurrent_runs=2, default_budget_usd=1.0,
-                claude_path=sys.executable, run_retention_days=90)
+                claude_path=sys.executable, run_retention_days=90,
+                dispatch_free_only=True, dispatch_max_budget_usd=1.0,
+                dispatch_route_classes={f"{agent}||{model}": "free"
+                    for agent in ("fake", "openclaw")
+                    for model in ("m1", "assigned", "swapped-model", "pinned-model", "assigned-model", "openrouter/model:free", "openrouter/assigned:free")})
     base.update(kw)
     return SimpleNamespace(**base)
 
 
 def _card(sessions, tmp_path, body, column="queued", timeout_s=30, **kw):
     now = int(time.time())
+    kw.setdefault("model", "m1")
     with sessions.begin() as s:
         card = Card(title="t", body=body, agent="fake", mode="read", working_dir=str(tmp_path),
                     column=column, position=1.0, timeout_s=timeout_s, needs_approval=False,
@@ -100,6 +106,33 @@ def test_failure_exit_code(sessions, tmp_path):
     run, card = _run_for(sessions, cid)
     assert run.stage == "failed" and run.exit_code == 3 and card.column == "failed"
     assert "! boom" in open(run.log_path).read()
+
+
+def test_transient_retry_is_finite_and_survives_restart(sessions, tmp_path):
+    """The queued retry and its attempt counter live in SQLite, not Dispatcher memory."""
+    cid = _card(sessions, tmp_path,
+                "import sys;print('provider rate limit', file=sys.stderr);sys.exit(1)",
+                timeout_s=30,
+                max_attempts=2, retry_backoff_s=0)
+    first = Dispatcher(sessions, _settings(tmp_path), registry=_registry())
+    asyncio.run(_drain(first))
+    with sessions() as s:
+        card = s.get(Card, cid)
+        runs = s.execute(select(Run).where(Run.card_id == cid)).scalars().all()
+        assert (card.column, card.retry_attempts, len(runs)) == ("queued", 1, 1)
+        assert runs[0].stage == "failed" and card.retry_after is not None
+
+    # A new process sees the committed retry budget and consumes its final attempt.
+    second = Dispatcher(sessions, _settings(tmp_path), registry=_registry())
+    asyncio.run(_drain(second))
+    with sessions() as s:
+        card = s.get(Card, cid)
+        runs = s.execute(select(Run).where(Run.card_id == cid).order_by(Run.id)).scalars().all()
+        assert [run.attempt for run in runs] == [1, 2]
+        assert card.column == "failed" and card.retry_after is None
+        assert "retry budget exhausted after 2 of 2 attempts" in runs[-1].error
+        notes = s.execute(select(RunEvent).where(RunEvent.run_id == runs[-1].id)).scalars().all()
+        assert any("retry budget exhausted" in event.text for event in notes)
 
 
 def test_openclaw_zero_exit_provider_timeout_is_not_success_or_quota_handoff(sessions, tmp_path):
@@ -197,8 +230,18 @@ def test_unapproved_card_never_runs_even_if_queued(sessions, tmp_path):
     with sessions.begin() as s:
         s.execute(update(Card).where(Card.id == cid).values(needs_approval=True, approved_at=None))
     assert asyncio.run(d.tick()) == 0
+    # A bare approved_at without a grant is not an approval: refused, audited, back to Review.
     with sessions.begin() as s:
         s.execute(update(Card).where(Card.id == cid).values(approved_at=int(time.time())))
+    assert asyncio.run(d.tick()) == 0
+    with sessions() as s:
+        card = s.get(Card, cid)
+        assert (card.column, card.approved_at) == ("review", None)
+        assert approval.load_grant(card)["audit"][-1]["event"] == "dispatch_refused"
+    with sessions.begin() as s:
+        card = s.get(Card, cid)
+        approval.grant(card, approval.challenge(card), approval.route_pin(card), int(time.time()), 3600)
+        card.column = "queued"
     asyncio.run(_drain(d))
     run, _ = _run_for(sessions, cid)
     assert run.stage == "succeeded"
