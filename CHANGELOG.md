@@ -10,6 +10,15 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-13
+
+### Added
+- Failure mining: Hermes can answer "what has been failing and why?" in Discord. It reads failed runs
+  classified by cause (subscription limit, price gate, permission, gateway, incomplete handoff, test
+  failure and more), counts by agent, model and project, the errors that repeat, the cards still Failed,
+  and a single run's error, handoff excerpt and log tail. Read only, with credentials, addresses and
+  e-mail removed and every field bounded, and behind its own switch in Profile.
+
 ## [0.2.2] - 2026-10-13
 
 ### Fixed
@@ -125,7 +134,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Optional Discord planning connection and profile preferences with encrypted write-only credential storage.
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.3
 [0.2.2]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.2
 [0.2.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.1
 [0.2.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.0
