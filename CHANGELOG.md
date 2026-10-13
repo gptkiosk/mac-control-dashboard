@@ -10,6 +10,16 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-10-13
+
+### Added
+- Close project: ends a project that will not be finished, with a reason kept in its ledger. It is shown
+  as Closed, never Complete, no new story starts, and its failed tasks (and those of completed
+  projects) can be removed from the board while the ledger keeps their record.
+
+### Changed
+- Publishing a release scans the commits being released with gitleaks and refuses on any finding.
+
 ## [0.2.3] - 2026-10-13
 
 ### Added
@@ -134,7 +144,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Optional Discord planning connection and profile preferences with encrypted write-only credential storage.
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.4
 [0.2.3]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.3
 [0.2.2]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.2
 [0.2.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.1
