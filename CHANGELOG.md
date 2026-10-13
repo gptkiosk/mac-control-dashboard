@@ -10,10 +10,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-10-13
+
 ### Added
 - Tasks list has a Model column. It shows a condensed model name (for example `inkling · free`), the
   model that actually ran when there is a run and the requested one otherwise; hover for the full id.
-
 - Price catalog (`apps/api/pricing_catalog.json`): the recent models of each platform (OpenAI/Codex,
   Anthropic/Claude, Google, OpenRouter free routes) with their published standard prices, long-context
   tiers and dated changes. `scripts/pricing/check.py` compares it with the providers' pages, reports
@@ -163,7 +164,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Optional Discord planning connection and profile preferences with encrypted write-only credential storage.
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.5
 [0.2.4]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.4
 [0.2.3]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.3
 [0.2.2]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.2
