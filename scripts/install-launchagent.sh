@@ -5,7 +5,7 @@ set -euo pipefail
 
 LABEL="${MAC_CONTROL_LAUNCHD_LABEL:-com.operator.mac-control}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-DATA="${HOME}/.mac-control"
+DATA="${MAC_CONTROL_DATA_DIR:-${HOME}/.mac-control}"
 DEST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
 DOMAIN="gui/$(id -u)"
 PYTHON_PATH="${MAC_CONTROL_PYTHON_PATH:-${REPO}/apps/api/.venv/bin/python}"
@@ -29,6 +29,24 @@ sed -e "s#__LABEL__#${LABEL}#g" -e "s#__PYTHON_PATH__#${PYTHON_PATH}#g" \
   -e "s#__THROTTLE_INTERVAL__#${THROTTLE_INTERVAL}#g" -e "s#__STDOUT_PATH__#${STDOUT_PATH}#g" \
   -e "s#__STDERR_PATH__#${STDERR_PATH}#g" \
   "${REPO}/ops/launchd/com.operator.mac-control.plist.template" > "${DEST}.tmp"
+# Persist only host installation/report settings; no credential values are copied.
+# plistlib escapes local folder names correctly, including spaces and XML characters.
+"${PYTHON_PATH}" - "${DEST}.tmp" "${DATA}" <<'PYCONFIG'
+import os
+import plistlib
+import sys
+path, data = sys.argv[1:]
+with open(path, "rb") as file:
+    config = plistlib.load(file)
+values = config["EnvironmentVariables"]
+values["MAC_CONTROL_DATA_DIR"] = data
+for name in ("MAC_CONTROL_OPS_REPORTS_DIR", "MAC_CONTROL_HERMES_REPORTS_DIR",
+             "MAC_CONTROL_REPORTS_ALLOWED_ROOTS"):
+    if name in os.environ:
+        values[name] = os.environ[name]
+with open(path, "wb") as file:
+    plistlib.dump(config, file)
+PYCONFIG
 plutil -lint "${DEST}.tmp" >/dev/null
 mv "${DEST}.tmp" "${DEST}"
 
