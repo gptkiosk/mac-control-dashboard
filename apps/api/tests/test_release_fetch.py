@@ -210,6 +210,15 @@ def test_asset_selection_refuses_a_bad_asset_list(server, inbox, published, muta
     assert expect in refused(rf.query_release, config(server, inbox))
 
 
+def test_a_notes_only_release_is_explained_once_not_as_three_missing_assets(server, inbox, published):
+    release, obj = published
+    obj["assets"] = []
+    publish(server, [obj])
+    message = refused(rf.query_release, config(server, inbox))
+    assert message == ("release v1.2.0 has no mcd package for darwin-arm64 attached "
+                       "(releases made before packages existed carry notes only), so it cannot be installed from here")
+
+
 def test_extra_unlisted_assets_are_ignored_not_downloaded(server, inbox, published):
     release, obj = published
     obj["assets"].append({"name": "evil.sh", "size": 5, "state": "uploaded", "browser_download_url": server.base + "/dl/evil.sh"})

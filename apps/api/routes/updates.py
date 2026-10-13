@@ -91,6 +91,8 @@ def check(request: Request, channel: str = "stable"):
     if channel not in rf.CHANNELS:
         raise HTTPException(422, "channel must be stable or prerelease")
     cfg = _managed()
+    if channel == "prerelease" and not cfg.allow_prerelease:
+        raise HTTPException(409, "The prerelease channel is off in the helper configuration.")
     try:
         found = rf.check(cfg, channel)
     except rf.FetchError as exc:

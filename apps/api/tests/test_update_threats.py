@@ -200,7 +200,7 @@ def test_only_other_platform_and_product_assets_are_refused(server, inbox, tmp_p
     for asset in obj["assets"]:
         asset["name"] = asset["name"].replace(f"{PRODUCT}-", "rcd-").replace(PLATFORM, "linux-arm64")
     publish(server, [obj])
-    assert "needs exactly one asset" in refused(rf.query_release, config(server, inbox))
+    assert "has no mcd package for darwin-arm64" in refused(rf.query_release, config(server, inbox))
 
 
 # --- wrong repo / product / arch / OS --------------------------------------------------

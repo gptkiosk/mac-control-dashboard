@@ -1010,6 +1010,7 @@ def apply(cfg: HelperConfig, vid: str, service: ServiceControl | None = None,
 
         tx_id = secrets.token_hex(8)
         state["tx"] = {"id": tx_id, "kind": "switch", "phase": "prepared", "target": vid, "from": current,
+                       "prev": _link_target(cfg, "previous"),  # what `previous` pointed at, so a rollback can put it back
                        "backup": None, "backup_meta": None, "started_at": int(time.time())}
         save_state(cfg, state)
         try:
@@ -1065,6 +1066,17 @@ def _commit(cfg: HelperConfig, state: dict, detail: str) -> dict:
     return {"current": tx["target"], "previous": tx["from"], "detail": detail}
 
 
+def _restore_previous(cfg: HelperConfig, tx: dict) -> None:
+    """Put the `previous` link back where it was before the switch. Without this a rolled-back update left
+    `previous` pointing at the version that is running, and the next Roll back offered the current version."""
+    if "prev" not in tx:
+        return  # a journal written before this field existed
+    prev = tx.get("prev")
+    if prev is not None and not (cfg.versions / prev).is_dir():
+        prev = None
+    _point(cfg, "previous", prev)
+
+
 def _restore_on_rollback(cfg: HelperConfig, tx: dict) -> tuple[bool, str]:
     """Restore the pre-update snapshot only when the schema is still the snapshot's and the older
     version knows it. Otherwise the database is left alone and the receipt says what to do."""
@@ -1088,6 +1100,7 @@ def _rollback(cfg: HelperConfig, state: dict, service: ServiceControl, readiness
     save_state(cfg, state)
     service.stop()
     _point(cfg, "current", tx["from"])
+    _restore_previous(cfg, tx)
     restored, note = _restore_on_rollback(cfg, tx)
     started = time.time()
     service.start()
@@ -1105,6 +1118,7 @@ def _recover_switch(cfg: HelperConfig, state: dict, service: ServiceControl, rea
     if phase == "prepared" or (phase == "switching" and current == previous):
         # Nothing the new version could have touched: put the old version back on.
         _point(cfg, "current", previous)
+        _restore_previous(cfg, tx)
         service.start()
         _finish(cfg, state, "aborted", f"interrupted before the switch; {previous} restarted")
         return "aborted"

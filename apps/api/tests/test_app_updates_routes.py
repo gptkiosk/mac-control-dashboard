@@ -96,7 +96,7 @@ def test_check_with_nothing_newer_says_so(managed, monkeypatch):
     monkeypatch.setattr(rf, "check", lambda c, channel: None)
     monkeypatch.setattr(rf, "installed_version", lambda c: "1.2.0")
     with managed:
-        body = managed.get("/api/app-updates/check?channel=prerelease").json()
+        body = managed.get("/api/app-updates/check?channel=stable").json()
     assert body == {"available": False, "candidate": None, "installed": "1.2.0"}
 
 
@@ -108,6 +108,14 @@ def test_check_failures_from_github_are_a_502_with_the_reasons(managed, monkeypa
         response = managed.get("/api/app-updates/check")
     assert response.status_code == 502
     assert response.json()["detail"]["problems"] == ["GitHub rate limit reached; resets at epoch 1", "second reason"]
+
+
+def test_check_on_the_prerelease_channel_needs_the_helper_opt_in_and_asks_github_nothing(managed, monkeypatch):
+    asked = []
+    monkeypatch.setattr(rf, "check", lambda c, channel: asked.append(channel))
+    with managed:
+        response = managed.get("/api/app-updates/check?channel=prerelease")
+    assert response.status_code == 409 and "prerelease" in response.text and asked == []
 
 
 @pytest.mark.parametrize("query", ["channel=nightly", "channel=", "channel=stable%0a"])

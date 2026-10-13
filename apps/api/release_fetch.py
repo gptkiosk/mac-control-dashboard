@@ -373,6 +373,10 @@ def _select_assets(cfg: FetchConfig, repo: str, tag: str, version: str, release:
     for item in listed:
         if isinstance(item, dict) and isinstance(item.get("name"), str):
             by_name.setdefault(item["name"], []).append(item)
+    if not any(name.startswith(f"{cfg.product}-{version}-") for name in by_name):
+        # Every release made before the package existed is notes only. Say so once instead of three "missing asset" lines.
+        raise FetchError(f"release {tag} has no {cfg.product} package for {cfg.platform} attached "
+                         "(releases made before packages existed carry notes only), so it cannot be installed from here")
     selected, problems = [], []
     for kind, name in names.items():
         matches = by_name.get(name, [])

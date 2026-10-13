@@ -345,6 +345,10 @@ printf '%s' "$STAGED" | grep -q '"ok": true' || { echo "$STAGED" >&2; die "stagi
 "${HELPER[@]}" activate-initial "$VID" >/dev/null \
   || die "activate-initial failed; $ROOT/current was not created"
 
+# The inbox copies were only needed for staging. Left there they would make the in-app updater refuse to
+# fetch the same version again ("already in the inbox") and hold the disk for nothing.
+rm -f "$ROOT/inbox/${BASE}.tar.gz" "$ROOT/inbox/${BASE}.manifest.json"
+
 # Plists come from the activated version, so they match the code they start.
 TEMPLATES="$ROOT/current/ops/launchd"
 mkdir -p "$DATA/logs"; chmod 700 "$DATA/logs"
