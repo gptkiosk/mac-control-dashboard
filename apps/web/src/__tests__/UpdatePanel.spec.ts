@@ -6,8 +6,9 @@ import { stubFetch, calls, headerOf } from './helpers'
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers() })
 
+const REPO = 'gptkiosk/mac-control-dashboard'
 const names: Record<string, string> = { v0: '0.9', v1: '1.0', v2: '1.1', v3: '1.2', v4: '1.3', v5: '1.4' }
-const version = (id: string, over: Record<string, unknown> = {}) => ({ id, complete: true, version: names[id], channel: 'stable', change: 'upgrade', repository: 'example-owner/example-app', authenticity: 'ssh-signature', staged_at: 1700000000, ...over })
+const version = (id: string, over: Record<string, unknown> = {}) => ({ id, complete: true, version: names[id], channel: 'stable', change: 'upgrade', repository: REPO, authenticity: 'ssh-signature', staged_at: 1700000000, ...over })
 const managed = (over: Record<string, unknown> = {}, install: Record<string, unknown> = {}) => ({
   kind: 'release', detail: 'packaged version 1.0', configured: true, problems: [], manual_instructions: [], blockers: [],
   install: {
@@ -17,31 +18,135 @@ const managed = (over: Record<string, unknown> = {}, install: Record<string, unk
   },
   ...over,
 })
+const candidate = (over: Record<string, unknown> = {}) => ({
+  product: 'mcd', platform: 'darwin-arm64', repository: REPO, channel: 'stable', tag: 'v1.1', version: '1.1',
+  change: 'upgrade', prerelease: false, notes: 'Fixes <b>things</b>', html_url: `https://github.com/${REPO}/releases/tag/v1.1`,
+  published_at: '2026-10-01T00:00:00Z', manifest_sha256: 'a'.repeat(64), archive_sha256: 'b'.repeat(64),
+  assets: [{ kind: 'manifest', name: 'mcd-1.1-darwin-arm64.manifest.json', size: 900 }], authenticity: 'unverified until downloaded and checked against the configured trust root',
+  ...over,
+})
 const tick = async (ms = 0) => { await vi.advanceTimersByTimeAsync(ms); await nextTick() }
 const button = (w: ReturnType<typeof mount>, text: string) => w.findAll('button').find(b => b.text() === text)!
 
-it('says what is available on an unmanaged host and offers no install, rollback or network check', async () => {
+it('says what is available on an unmanaged host and offers no GitHub check, download, install or rollback', async () => {
   const f = stubFetch(url => url === '/api/app-updates' ? { body: { kind: 'dev', detail: 'this is a source checkout', configured: false, problems: [], manual_instructions: ['Automatic updates are off for this install.'] } } : undefined)
   const w = mount(UpdatePanel); await flushPromises()
   expect(w.text()).toContain('Managed updates are off: this is a source checkout.')
   expect(w.text()).toContain('Automatic updates are off for this install.')
-  expect(w.findAll('button').map(b => b.text())).toEqual(['Check for updates'])
+  expect(w.findAll('button').map(b => b.text())).toEqual([])
   expect(w.find('a').exists()).toBe(false)
-  expect(calls(f, 'POST', '/api/app-updates')).toHaveLength(0)
+  expect(f.mock.calls.map(([url]) => url)).toEqual(['/api/app-updates'])
   w.unmount()
 })
 
-it('checks only this host: one GET to the local status route, no other request', async () => {
+it('does not contact GitHub on mount: only the local status is read', async () => {
   const f = stubFetch(url => url === '/api/app-updates' ? { body: managed() } : undefined)
   const w = mount(UpdatePanel); await flushPromises()
-  await button(w, 'Check for updates').trigger('click'); await flushPromises()
-  expect(f.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${url}`)).toEqual(['GET /api/app-updates', 'GET /api/app-updates'])
-  expect(w.text()).toContain('Checked')
+  expect(f.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${url}`)).toEqual(['GET /api/app-updates'])
+  expect(w.text()).not.toContain('Checked GitHub')
   w.unmount()
 })
 
-it('offers only complete stable or prerelease packages and never a link, archive or docs download', async () => {
-  stubFetch(url => url === '/api/app-updates' ? { body: managed({}, { versions: [version('v1', { change: 'install' }), version('v2'), version('v3', { channel: 'dev' }), version('v4', { complete: false }), version('v5', { channel: 'docs' })] }) } : undefined)
+it('checks the MCD repository only when the operator asks, on the chosen channel, and downloads nothing', async () => {
+  const f = stubFetch(url => {
+    if (url === '/api/app-updates') return { body: managed() }
+    if (url.startsWith('/api/app-updates/check')) return { body: { available: true, candidate: candidate(), installed: '1.0' } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  await button(w, 'Check for updates').trigger('click'); await flushPromises()
+  expect(calls(f, 'GET', '/api/app-updates/check')[0]![0]).toBe('/api/app-updates/check?channel=stable')
+  expect(calls(f, 'POST', '/api/app-updates')).toHaveLength(0)
+  expect(w.text()).toContain('Update available: 1.1')
+  expect(w.text()).toContain(REPO)
+  expect(w.text()).toContain('a'.repeat(64))
+  expect(w.text()).toContain('unverified until downloaded')
+  expect(w.text()).toContain('Fixes <b>things</b>')
+  expect(w.find('pre.notes').text()).toBe('Fixes <b>things</b>')
+  expect(w.find('b').exists()).toBe(false)
+  expect(w.find('a[href^="https://github.com/gptkiosk/mac-control-dashboard/"]').exists()).toBe(true)
+  w.unmount()
+})
+
+it('sends the prerelease channel the operator selected', async () => {
+  const f = stubFetch(url => {
+    if (url === '/api/app-updates') return { body: managed() }
+    if (url.startsWith('/api/app-updates/check')) return { body: { available: false, candidate: null, installed: '1.0' } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  await w.get('[role="combobox"][aria-label="Update channel"]').trigger('click'); await flushPromises()
+  await w.findAll('[role="option"]')[1]!.trigger('click'); await flushPromises()
+  await button(w, 'Check for updates').trigger('click'); await flushPromises()
+  expect(calls(f, 'GET', '/api/app-updates/check')[0]![0]).toBe('/api/app-updates/check?channel=prerelease')
+  expect(w.text()).toContain('No newer prerelease release than the installed version.')
+  w.unmount()
+})
+
+it('refuses a release that is not mcd from this repository and offers no download button', async () => {
+  stubFetch(url => {
+    if (url === '/api/app-updates') return { body: managed({}, { versions: [version('v1', { change: 'install' })] }) }
+    if (url.startsWith('/api/app-updates/check')) return { body: { available: true, candidate: candidate({ product: 'rcd', repository: 'gptkiosk/rbp-control-dashboard' }), installed: '1.0' } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  await button(w, 'Check for updates').trigger('click'); await flushPromises()
+  expect(w.get('[role="alert"]').text()).toContain('This release is not mcd from gptkiosk/mac-control-dashboard, so it cannot be installed here.')
+  expect(w.findAll('button').map(b => b.text())).not.toContain('Download and verify 1.1')
+  w.unmount()
+})
+
+it('requires an explicit confirmation and an independently entered digest before downloading', async () => {
+  let staged = false
+  const f = stubFetch((url, init) => {
+    if (url === '/api/app-updates') return { body: managed({}, staged ? { versions: [version('v1', { change: 'install' }), version('v2', { version: '1.1', repository: REPO })] } : {}) }
+    if (url.startsWith('/api/app-updates/check')) return { body: { available: true, candidate: candidate(), installed: '1.0' } }
+    if (url === '/api/app-updates/fetch' && init?.method === 'POST') { staged = true; return { status: 202, body: { started: 'fetch', poll: '/api/app-updates' } } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  await button(w, 'Check for updates').trigger('click'); await flushPromises()
+  await button(w, 'Download and verify 1.1').trigger('click'); await flushPromises()
+  const go = w.get('.confirm').findAll('button')[0]!
+  expect(go.attributes('disabled')).toBeDefined()
+  expect(calls(f, 'POST', '/api/app-updates/fetch')).toHaveLength(0)
+  await w.get('.confirm input[maxlength="64"]').setValue('c'.repeat(64))
+  await w.get('.confirm input[type="checkbox"]').setValue(true)
+  expect(w.get('.confirm').findAll('button')[0]!.attributes('disabled')).toBeUndefined()
+  vi.useFakeTimers()
+  await w.get('.confirm').findAll('button')[0]!.trigger('click'); await tick(0)
+  const [, init] = calls(f, 'POST', '/api/app-updates/fetch')[0]!
+  expect(JSON.parse(init!.body as string)).toEqual({ version: '1.1', channel: 'stable', confirm: true, manifest_sha256: 'c'.repeat(64) })
+  expect(headerOf(init, 'X-Mac-Control')).toBe('1')
+  await tick(2000)
+  expect(w.text()).toContain('Verified and staged 1.1. It is not installed until you confirm the install below.')
+  expect(button(w, 'Install 1.1').attributes('disabled')).toBeUndefined()
+  w.unmount()
+})
+
+it('reports a download the server refuses, with its problems, and installs nothing', async () => {
+  stubFetch((url, init) => {
+    if (url === '/api/app-updates') return { body: managed({}, { versions: [version('v1', { change: 'install' })] }) }
+    if (url.startsWith('/api/app-updates/check')) return { body: { available: true, candidate: candidate(), installed: '1.0' } }
+    if (url === '/api/app-updates/fetch' && init?.method === 'POST') return { status: 502, body: { detail: { message: 'Could not check for updates.', problems: ['GitHub rate limit reached; resets at epoch 1700000000'] } } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  await button(w, 'Check for updates').trigger('click'); await flushPromises()
+  await button(w, 'Download and verify 1.1').trigger('click'); await flushPromises()
+  await w.get('.confirm input[maxlength="64"]').setValue('d'.repeat(64))
+  await w.get('.confirm input[type="checkbox"]').setValue(true)
+  await w.get('.confirm').findAll('button')[0]!.trigger('click'); await flushPromises()
+  expect(w.get('[role="alert"]').text()).toContain('GitHub rate limit reached')
+  expect(w.findAll('button').map(b => b.text())).not.toContain('Install 1.1')
+  w.unmount()
+})
+
+it('shows a staged-version list only for this repository, and never offers a dev build or partial package', async () => {
+  stubFetch(url => url === '/api/app-updates' ? { body: managed({}, { versions: [
+    version('v1', { change: 'install' }), version('v2'), version('v3', { channel: 'dev' }), version('v4', { complete: false }),
+    version('v5', { channel: 'docs' }), version('v0', { repository: 'gptkiosk/rbp-control-dashboard' }),
+  ] }) } : undefined)
   const w = mount(UpdatePanel); await flushPromises()
   expect(w.text()).toContain('Running 1.0. 1 staged update is ready on this host.')
   expect(w.findAll('button').map(b => b.text())).toContain('Install 1.1')
@@ -50,9 +155,8 @@ it('offers only complete stable or prerelease packages and never a link, archive
   expect(w.text()).toContain('A development build. It is never offered as an update.')
   expect(w.text()).toContain('only partly staged')
   expect(w.text()).toContain('Channel “docs” is not an application release')
-  expect(w.text()).toContain('Release notes: not included in this package.')
-  expect(w.find('a').exists()).toBe(false)
-  expect(w.text()).not.toMatch(/\.zip|\.tar|archive|\bdownload\b/i)
+  expect(w.text()).toContain('It was built from gptkiosk/rbp-control-dashboard, not gptkiosk/mac-control-dashboard')
+  expect(w.text()).toContain('This package carries no changelog section for 1.1.')
   w.unmount()
 })
 
@@ -115,5 +219,27 @@ it('follows progress through a service restart and reports the health result', a
   await tick(2000)
   expect(w.text()).toContain('Now running 1.1. Health check: ready')
   expect(w.text()).not.toContain('Reconnecting')
+  w.unmount()
+})
+
+it('shows the changelog of a staged version, as plain text, before and again inside the install confirmation', async () => {
+  const notes = '### Added\n- Settings shows the changelog <script>alert(1)</script>'
+  stubFetch(url => url === '/api/app-updates' ? { body: managed({}, { versions: [version('v1', { change: 'install' }), version('v2', { notes })] }) } : undefined)
+  const w = mount(UpdatePanel); await flushPromises()
+  expect(w.find('details.staged-notes summary').text()).toContain('What changed in 1.1')
+  expect(w.find('details.staged-notes pre.notes').text()).toBe(notes)
+  expect(w.find('script').exists()).toBe(false)
+  await button(w, 'Install 1.1').trigger('click'); await flushPromises()
+  expect(w.get('.confirm pre.notes').text()).toBe(notes)
+  expect(w.get('.confirm').text()).toContain('What changed in 1.1')
+  w.unmount()
+})
+
+it('does not show the changelog block in a rollback confirmation', async () => {
+  stubFetch(url => url === '/api/app-updates' ? { body: managed({}, { previous: 'v0', versions: [version('v0', { notes: 'old' }), version('v1', { change: 'install' })] }) } : undefined)
+  const w = mount(UpdatePanel); await flushPromises()
+  await button(w, 'Roll back to 0.9').trigger('click'); await flushPromises()
+  expect(w.get('.confirm').text()).toContain('Code goes back to 0.9')
+  expect(w.find('.confirm pre.notes').exists()).toBe(false)
   w.unmount()
 })

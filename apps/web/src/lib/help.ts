@@ -89,12 +89,12 @@ export const helpGuides: HelpGuide[] = [
     links: [{ label: 'Open available updates', to: '/mac#upd-title' }, { label: 'Open Tailscale peers', to: '/mac#ts-title' }],
   },
   {
-    id: 'app-updates', title: 'Review and install a staged dashboard update', area: 'Settings',
-    summary: 'Check staged releases of this dashboard and install or roll one back, with operator sign-in.',
-    keywords: ['app update', 'dashboard update', 'rollback', 'roll back', 'staged release', 'version'],
-    steps: ['Sign in as the operator. Only the operator can see or change dashboard updates; other sessions get a sign-in message.', 'Open Updates in Settings. The panel reads only this host: it makes no network or provider call and lists each staged version with its channel and authenticity status.', 'Only complete stable or prerelease packages get an install button. Development builds and partly staged packages say why they cannot be installed.', 'Confirm the version in the dialog. The helper stops the service, saves a data snapshot, switches versions and runs a health check; a failed check rolls the version back. Progress is shown until the update finishes or the page reconnects.'],
+    id: 'app-updates', title: 'Check, install or roll back a dashboard update', area: 'Settings',
+    summary: 'Look for a newer release on GitHub, read what changed, then download, install or roll back with operator sign-in.',
+    keywords: ['app update', 'dashboard update', 'check for updates', 'changelog', 'release notes', 'rollback', 'roll back', 'staged release', 'version'],
+    steps: ['Sign in as the operator. Only the operator can see or change dashboard updates; other sessions get a sign-in message.', 'Open Updates in Settings and press Check for updates. This reads the public GitHub release list and nothing else: it downloads nothing and changes nothing. The release notes appear as plain text.', 'To fetch a release, paste its manifest SHA-256 from the release page and confirm. The package is downloaded, verified against that digest and staged. Nothing is stopped yet.', 'Read “What changed” for the staged version, then confirm the install. The helper stops the service, saves a data snapshot, switches versions and runs a health check; a failed check rolls the version back by itself.', 'Roll back to the previous version from the same panel. It returns the code only; data written meanwhile stays.'],
     links: [{ label: 'Open dashboard updates', to: '/profile#updates' }],
-    note: 'Install and rollback stay disabled while an update is in progress or a blocker is listed. If managed updates are not set up, the panel shows the manual steps instead.',
+    note: 'Every step stays disabled while an update is in progress or a blocker is listed. A source checkout or an unmanaged install shows the manual steps instead.',
   },
   {
     id: 'agent-tasks', title: 'Create and run an agent task', area: 'Tasks',
