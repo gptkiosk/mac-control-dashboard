@@ -308,3 +308,13 @@ def test_deleting_card_removes_run_logs(make_client, tmp_path):
     assert not os.path.exists(run.log_path.replace(".log", ".raw.log"))
     with sessions() as s:
         assert s.execute(select(Run).where(Run.card_id == cid)).first() is None
+
+
+def test_runner_identity_tolerates_launcher_rewrites_but_not_other_programs():
+    from dispatcher import _runner_matches
+    assert _runner_matches("/venv/bin/python", ["/venv/bin/python", "x"])
+    assert _runner_matches("/venv/bin/python", ["/opt/homebrew/Cellar/python@3.12/Frameworks/Python.app/Contents/MacOS/Python", "x"])   # macOS stub
+    assert _runner_matches("/opt/homebrew/bin/claude", ["node", "/opt/homebrew/bin/claude", "-p"])                                     # script runs as node
+    assert _runner_matches("/usr/bin/true", ["/bin/true"]) is True                                                                        # same program, other path
+    assert not _runner_matches("/opt/homebrew/bin/claude", ["/usr/bin/sleep", "60"])
+    assert not _runner_matches("/opt/homebrew/bin/claude", ["node", "/other/script.js"])

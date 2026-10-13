@@ -80,6 +80,21 @@ def _checkpoint(run: Run) -> dict[str, Any]:
 
 
 
+def _runner_matches(expected: str, cmdline: list[str]) -> bool:
+    """Does this process look like the executable recorded for the run? Launchers rewrite the first word:
+    a symlink resolves, a macOS virtualenv Python re-launches as Python.app, and a script runs as
+    `node <script>`. The group-leader and start-time checks in the caller keep this safe."""
+    first = cmdline[0]
+    if first == expected or expected in cmdline[1:3]:
+        return True
+    try:
+        if os.path.realpath(first) == os.path.realpath(expected):
+            return True
+    except OSError:
+        pass
+    return os.path.basename(first).lower() == os.path.basename(expected).lower()
+
+
 def _stop_orphan(run: Run) -> str | None:
     """Stop a runner left alive by a crashed server. Returns a note, or None if nothing ran.
 
@@ -92,7 +107,7 @@ def _stop_orphan(run: Run) -> str | None:
         expected = json.loads(run.command or "[]")[0]
         proc = psutil.Process(run.pid)
         cmdline = proc.cmdline()
-        if (not cmdline or cmdline[0] != expected or os.getpgid(run.pid) != run.pid
+        if (not cmdline or not _runner_matches(expected, cmdline) or os.getpgid(run.pid) != run.pid
                 or proc.create_time() < run.started_at - 2):
             return None
     except (IndexError, TypeError, ValueError, OSError, psutil.Error):
