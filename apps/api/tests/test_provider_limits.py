@@ -186,7 +186,8 @@ def test_without_the_operator_choice_the_story_keeps_its_route(app):
     assert len(Dispatcher(s, settings)._claim(1)) == 1
     with s() as d:
         assert d.get(Card, cid).agent == "claude"
-        assert "rerouted_from" not in json.loads(d.scalar(select(Run).where(Run.card_id == cid)).checkpoint)
+        checkpoint = json.loads(d.scalar(select(Run).where(Run.card_id == cid)).checkpoint)
+        assert "rerouted_from" not in checkpoint and checkpoint["context_bytes"] > 1000        # the prompt size is recorded
 
 
 def test_a_story_with_no_approved_alternate_stays_put(app):

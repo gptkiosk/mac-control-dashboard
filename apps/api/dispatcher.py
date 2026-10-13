@@ -276,7 +276,8 @@ class Dispatcher:
                             s, self.settings, card, model_requested)),
                         **({"agent_git": [{"dir": c.dir, "repo": c.repo, "branch": c.branch} for c in grant.clones]}
                            if grant else {}),
-                        **({"rerouted_from": rerouted_from} if rerouted_from else {})}),
+                        **({"rerouted_from": rerouted_from} if rerouted_from else {}),
+                        "context_bytes": len(prompt.encode())}),
                 )
                 s.add(run)
                 s.flush()
