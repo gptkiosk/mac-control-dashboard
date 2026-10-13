@@ -158,6 +158,7 @@ echo "$@" >> "{calls}"
 case "$1 $2" in
   "api repos/owner/product/commits/"*) [ -f "{state}/not-pushed" ] && exit 1; echo "${{3##*/}}"; exit 0;;
   "api repos/owner/product/git/ref/tags/"*) [ -f "{state}/tag-exists" ] && exit 0; exit 1;;
+  "secret list") [ -f "{state}/has-secret" ] && printf 'RELEASE_SSH_PRIVATE_KEY\\t2026-10-13\\n'; exit 0;;
   "release view") exit 1;;
   "release create") echo "created"; exit 0;;
 esac
@@ -192,6 +193,36 @@ def test_publishes_the_tag_on_the_commit_with_notes_and_marks_it_latest(release_
     assert "published: https://github.com/owner/product/releases/tag/v1.2.0" in r.stdout
     pre = release_repo.run("--version", "1.2.0", "--target", sha, "--prerelease")
     assert "--prerelease" in [l for l in release_repo.calls.read_text().splitlines() if l.startswith("release create")][-1]
+
+
+def calls_of(release_repo):
+    return release_repo.calls.read_text().splitlines() if release_repo.calls.exists() else []
+
+
+def test_package_mode_creates_only_the_tag_so_the_workflow_can_draft_the_release(release_repo):
+    (release_repo.state / "has-secret").write_text("")
+    sha = release_repo.head()
+    r = release_repo.run("--version", "1.2.0", "--target", sha, "--package")
+    assert r.returncode == 0, r.stderr
+    calls = calls_of(release_repo)
+    tag_call = next(c for c in calls if c.startswith("api -X POST repos/owner/product/git/refs"))
+    assert "ref=refs/tags/v1.2.0" in tag_call and f"sha={sha}" in tag_call
+    assert not any(c.startswith("release create") for c in calls)      # the workflow creates the draft, not this script
+    assert "tagged: v1.2.0" in r.stdout and "review it and publish it" in r.stdout
+
+
+def test_package_mode_refuses_without_the_signing_secret_and_creates_nothing(release_repo):
+    r = release_repo.run("--version", "1.2.0", "--target", release_repo.head(), "--package")
+    assert r.returncode != 0 and "RELEASE_SSH_PRIVATE_KEY" in r.stderr and "no tag was created" in r.stderr
+    calls = calls_of(release_repo)
+    assert not any(c.startswith("release create") or "git/refs" in c and "POST" in c for c in calls)
+
+
+def test_package_dry_run_says_what_it_would_do_and_publishes_nothing(release_repo):
+    (release_repo.state / "has-secret").write_text("")
+    r = release_repo.run("--version", "1.2.0", "--target", release_repo.head(), "--package", "--dry-run")
+    assert r.returncode == 0 and "tag only" in r.stdout and "nothing published" in r.stdout
+    assert not any("POST" in c or c.startswith("release create") for c in calls_of(release_repo))
 
 
 @pytest.mark.parametrize("setup,args,message", [
