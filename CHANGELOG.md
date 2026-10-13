@@ -12,6 +12,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [0.2.1] - 2026-10-13
 
+### Changed
+- GitHub settings: tick repositories from a checklist loaded from the account instead of typing
+  names. Saved repositories are pre-ticked, the list can be searched, and a repository from another owner
+  can still be added by name.
+
 ### Fixed
 - A failed coordination, plan or dispatch card that another card already carries can be deleted, not
   only duplicate stories, so a leftover duplicate no longer sits in Failed forever.
