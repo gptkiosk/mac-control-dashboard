@@ -18,6 +18,7 @@ import approval
 import billing
 import cards
 import project_workspaces as workspaces
+import provider_limits
 from agents import REGISTRY
 import native_routes
 import project_outputs
@@ -799,6 +800,7 @@ def on_finish(s,card,run,stage):
                 if alternative:
                     card.agent=alternative['agent']; card.model=alternative['model'] or None
                     card.agent_target=None;card.column='queued'
+                    provider_limits.note_handoff(s,run.agent,now())
                     memory(s,p,'decision',f'Pre-approved quota handoff to {alternative} for the same story #{card.id}; only reviewed routes are eligible.', 'mcd',card.id,run.id)
                     return
             memory(s,p,'incident',f'{stage}: story #{card.id} stopped; explicit retry required.',run.agent,card.id,run.id)

@@ -40,6 +40,7 @@ from sqlalchemy.orm import sessionmaker
 from agents import REGISTRY, AgentSpec, redact
 import agent_git
 import approval
+import provider_limits
 from dispatch_gate import (DispatchDenied, admit as admit_dispatch,
                            snapshot as dispatch_snapshot, reviewed_route_class as _reviewed_route_class)
 import projects
@@ -239,6 +240,18 @@ class Dispatcher:
                     ((s.get(Card,r.card_id) if r.card_id else s.get(ChatThread,r.thread_id)).agent_target or 'mm-main')==(card.agent_target or 'mm-main') for r in active_runs): continue
                 prompt = projects.claim_context(s, card)
                 if prompt is None: continue
+                # While a subscription limit lasts and the operator chose to reroute, a story that
+                # has not started goes straight to an approved alternate route of the same grade.
+                rerouted_from = None
+                if link and link.role == 'story' and card.agent in provider_limits.PROVIDERS and not getattr(card, 'output_only', False):
+                    limit_row = provider_limits.rerouting_row(s, card.agent, now)
+                    if limit_row:
+                        alt = provider_limits.alternate(projects.approved_story_routes(projects.get(s, link.project_id), link),
+                                                        card.agent, card.model, provider_limits.limited_providers(s, now))
+                        if alt:
+                            rerouted_from = {'agent': card.agent, 'model': card.model, 'limit_id': limit_row.id}
+                            card.agent, card.model, card.agent_target = alt['agent'], alt['model'] or None, None
+                            limit_row.rerouted += 1
                 spec = self.registry.get(card.agent)
                 if spec is None:
                     card.column, card.updated_at = "failed", now
@@ -262,7 +275,8 @@ class Dispatcher:
                         card, args[3], _reviewed_route_class(
                             s, self.settings, card, model_requested)),
                         **({"agent_git": [{"dir": c.dir, "repo": c.repo, "branch": c.branch} for c in grant.clones]}
-                           if grant else {})}),
+                           if grant else {}),
+                        **({"rerouted_from": rerouted_from} if rerouted_from else {})}),
                 )
                 s.add(run)
                 s.flush()
@@ -497,6 +511,7 @@ class Dispatcher:
                   "cost_usd", "cached_input_tokens", "cache_write_tokens", "result_text"):
             setattr(run, f, getattr(meta, f))
         s.add(RunEvent(run_id=run_id, ts=now, kind="stage", text=stage))
+        provider_limits.observe(s, run, now)
         return run
 
     def _finish(self, run_id, card_id, stage, exit_code, error, meta, duration) -> None:
