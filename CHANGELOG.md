@@ -13,7 +13,9 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 ## [0.2.0] - 2026-10-13
 
 ### Added
-- A release flow: release notes generated from this changelog, a script that publishes the GitHub release for a committed version, and a one-command upgrade of the running app to a tag with backup, exact-commit health check and automatic rollback.
+- A release flow: release notes generated from this changelog, a script that publishes the GitHub
+  release for a committed version, and a one-command upgrade of the running app to a tag with a backup,
+  an exact-commit health check and automatic rollback.
 - Branch-scoped git access for project agents: operator grants, commit and push gating hooks, and a
   credential helper limited to the MCD and RCD repositories.
 - Subscription limits: when a Claude Code or Codex limit lifts is read from the CLI's own message and
