@@ -276,6 +276,19 @@ This is the pre-dispatch spending guard, not a fault. A :free model name, a bill
 
 [Open Billing & rates](http://127.0.0.1:8800/agents?action=billing) · [Open Tasks](http://127.0.0.1:8800/tasks) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=price-unknown)
 
+## A Claude or Codex limit was reached
+
+MCD notes when a subscription limit lifts, moves stories to an approved alternate on its own, and lets you send the rest across in one click.
+
+1. When a run stops on a limit, a notice appears at the top of every page with the time it lifts in your time zone. It appears once per limit; use the × to hide it.
+2. Each story that meets the limit already moves to its approved alternate route by itself. The notice counts these rather than announcing every one.
+3. To avoid wasted attempts, select Send the waiting stories to the other subscription. Stories that have not started then go to the approved alternate of the same grade (Haiku to Luna, Sonnet to Terra, Opus to Sol) until the limit lifts, and return to their own route afterwards. Turn it off in the same notice.
+4. If the other subscription is limited too, or a story has no approved alternate, it waits. You can also ask Hermes in Discord for the status; changing the routing from Discord needs Allow my Discord requests to change how work is routed in your profile.
+
+Only routes the approved plan already lists are ever used, and nothing is approved, dispatched or spent beyond that. A limit with no reported lift time expires after a few hours or at the first later success.
+
+[Open Projects](http://127.0.0.1:8800/projects) · [Open your profile](http://127.0.0.1:8800/profile) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=subscription-limits)
+
 ## Price an unrecognized model
 
 Add explicit token rates when a model’s usage is captured but its API equivalent is unpriced.
