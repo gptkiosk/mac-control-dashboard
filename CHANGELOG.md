@@ -10,19 +10,13 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-13
+
 ### Added
 - Grok Build is a supported agent, next to Claude Code, Codex, Hermes and OpenClaw: tasks, chat, project story
   agent and approved fallback, on a SuperGrok subscription only (the CLI has no dollar cap, so an API route is
   refused). Runs are confined: telemetry and trace upload off, a filesystem sandbox, git push and merge denied.
   xAI prices are in the price catalog and the price checker reads docs.x.ai. See `docs/configuration/grok.md`.
-
-### Changed
-- MCD works with any mix of agents installed. Setup readiness needs any one subscription CLI and any one of
-  Hermes or OpenClaw instead of all of them, a new project story starts on an agent that is installed, and the
-  story agent picker marks agents that are not installed. A test runs every one of the 32 combinations.
-## [0.2.8] - 2026-10-13
-
-### Added
 - Settings, Updates can now look for a newer release on GitHub. **Check for updates** reads the public
   release list and shows the release notes as plain text; it downloads nothing and changes nothing.
   **Download and verify** fetches the release into the private inbox once you paste its manifest SHA-256
@@ -39,12 +33,16 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
   creates only the tag for it and refuses without the key.
 
 ### Changed
+- MCD works with any mix of agents installed. Setup readiness needs any one subscription CLI and any one of
+  Hermes or OpenClaw instead of all of them, a new project story starts on an agent that is installed, and the
+  story agent picker marks agents that are not installed. A test runs every one of the 32 combinations.
 - When a new version fails its health check, the rollback now starts the previous version even if launchd
   had disabled the service or answered a bootstrap with a transient error after the failed version
   crash-looped.
 - An installed package reports the commit it was built from instead of "unknown".
 
 ### Fixed
+- Rollback restores the previous release link. Install and rollback refuse incompatible database schemas and show the reason. Notes-only releases explain that no installable package is available.
 - The price catalog was missing from the release package, so an installed build could not start. A test now
   fails if any data file under `apps/api` is missing from the package list.
 - The release content scan no longer reads a binary-like run in a minified web bundle as an e-mail address.
@@ -225,8 +223,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Optional Discord planning connection and profile preferences with encrypted write-only credential storage.
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.8...HEAD
-[0.2.8]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.8
+[0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.3.0...HEAD
 [0.2.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.7
 [0.2.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.6
 [0.2.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.5

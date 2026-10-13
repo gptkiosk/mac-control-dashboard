@@ -135,16 +135,17 @@ Check updates and peer connectivity without changing the machine.
 
 [Open available updates](http://127.0.0.1:8800/mac#upd-title) · [Open Tailscale peers](http://127.0.0.1:8800/mac#ts-title) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=updates)
 
-## Review and install a staged dashboard update
+## Check, install or roll back a dashboard update
 
-Check staged releases of this dashboard and install or roll one back, with operator sign-in.
+Look for a newer release on GitHub, read what changed, then download, install or roll back with operator sign-in.
 
 1. Sign in as the operator. Only the operator can see or change dashboard updates; other sessions get a sign-in message.
-2. Open Updates in Settings. The panel reads only this host: it makes no network or provider call and lists each staged version with its channel and authenticity status.
-3. Only complete stable or prerelease packages get an install button. Development builds and partly staged packages say why they cannot be installed.
-4. Confirm the version in the dialog. The helper stops the service, saves a data snapshot, switches versions and runs a health check; a failed check rolls the version back. Progress is shown until the update finishes or the page reconnects.
+2. Open Updates in Settings and press Check for updates. This reads the public GitHub release list and nothing else: it downloads nothing and changes nothing. The release notes appear as plain text.
+3. To fetch a release, paste its manifest SHA-256 from the release page and confirm. The package is downloaded, verified against that digest and staged. Nothing is stopped yet.
+4. Read “What changed” for the staged version, then confirm the install. The helper stops the service, saves a data snapshot, switches versions and runs a health check; a failed check rolls the version back by itself.
+5. Roll back to the previous version from the same panel. It returns the code only; data written meanwhile stays.
 
-Install and rollback stay disabled while an update is in progress or a blocker is listed. If managed updates are not set up, the panel shows the manual steps instead.
+Every step stays disabled while an update is in progress or a blocker is listed. A source checkout or an unmanaged install shows the manual steps instead.
 
 [Open dashboard updates](http://127.0.0.1:8800/profile#updates) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=app-updates)
 
