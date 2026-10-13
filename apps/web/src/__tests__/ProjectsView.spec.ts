@@ -17,6 +17,8 @@ async function setup(state='draft', tasks: import('@/lib/projects').ProjectTask[
   if(url==='/api/projects') return {body:{projects:[{id:1,title:doc.title,state,revision:1,updated_at:1}]}}
   if(url==='/api/projects/1' && init?.method==='PATCH') { const body=JSON.parse(String(init.body)); p={...p,document:body.document,revision:2}; return {body:p} }
   if(url==='/api/projects/1/handoff-policy') { const body=JSON.parse(String(init?.body));p={...p,handoff_approval:{...p.handoff_approval,mode:body.mode==='automatic'?'automatic':'manual'}};return {body:p} }
+  if(url==='/api/projects/1/retier') { p={...p,document:{...p.document,planning_bias:50},tasks:p.tasks.map(t=>({...t,model:t.agent==='claude'?'claude-haiku-5-5':t.agent==='codex'?'gpt-6-luna':t.model}))};return {body:p} }
+  if(url==='/api/projects/1/stories/5/repair-execution') { p={...p,tasks:p.tasks.map(t=>t.card_id===5?{...t,column:'queued',agent:'codex',model:'gpt-6-luna',mode:'edit',incomplete_reason:null}:t)};return {body:p} }
   if(url==='/api/projects/1') return {body:p}
   if(url==='/api/projects/1/stories/5/artifact') return {body:{files:[],diff:'',head:null,output:proposedOutput}}
   if(url==='/api/projects/1/stories/5/accept') { p={...p,tasks:tasks.map(t=>({...t,column:'done'}))};return {body:p} }
@@ -82,6 +84,31 @@ it('locks an approved map but retains the pause and context controls',async()=>{
  expect(w.findAll('button').find(b=>b.text()==='+ Story')?.attributes('disabled')).toBeDefined()
  expect(w.get('input[type=range]').attributes('disabled')).toBeDefined()
  expect(w.text()).toContain('Pause dispatch');expect(w.text()).toContain('Export context');w.unmount()
+})
+
+it('retieres only a paused project after showing the exact lower-cost routes',async()=>{
+ const tasks=[{card_id:5,node_key:'a',role:'story',revision:1,column:'queued',title:'Queued implementation',agent:'codex',model:'gpt-6.1-sol',run_id:null,run_stage:null}]
+ const {w,f}=await setup('paused',tasks)
+ await w.findAll('button').find(b=>b.text()==='Use lower-cost models…')!.trigger('click');await flushPromises()
+ const {DOMWrapper}=await import('@vue/test-utils');const modal=new DOMWrapper(document.querySelector('[role=dialog]')!)
+ expect(modal.text()).toContain('Claude Haiku 5.5');expect(modal.text()).toContain('Codex GPT-6 Luna')
+ expect(modal.findAll('button').find(b=>b.text()==='Apply model change')!.attributes('disabled')).toBeDefined()
+ await modal.get('input[type=checkbox]').setValue(true);await modal.get('form').trigger('submit');await flushPromises()
+ const write=f.mock.calls.find(([url])=>url==='/api/projects/1/retier')!
+ expect(JSON.parse(String(write[1]?.body))).toEqual({revision:1,claude_model:'claude-haiku-5-5',codex_model:'gpt-6-luna',acknowledge:true})
+ expect(w.text()).toContain('Resume dispatch');w.unmount()
+})
+
+it('repairs an explicitly unfinished read-only assignment only after review',async()=>{
+ const tasks=[{card_id:5,node_key:'a',role:'story',revision:1,column:'review',title:'Fault matrix',agent:'claude',model:'claude-sonnet-5-5',mode:'read' as const,incomplete_reason:'The agent explicitly reported unfinished work.',run_id:156,run_stage:'succeeded'}]
+ const {w,f}=await setup('paused',tasks)
+ await w.findAll('button').find(b=>b.text()==='Repair first assignment…')!.trigger('click');await flushPromises()
+ const {DOMWrapper}=await import('@vue/test-utils');const modal=new DOMWrapper(document.querySelector('[role=dialog]')!)
+ expect(modal.text()).toContain('Fault matrix');expect(modal.text()).toContain('Edit workspace')
+ await modal.get('input[type=checkbox]').setValue(true);await modal.get('form').trigger('submit');await flushPromises()
+ const write=f.mock.calls.find(([url])=>url==='/api/projects/1/stories/5/repair-execution')!
+ expect(JSON.parse(String(write[1]?.body))).toEqual({revision:1,acknowledge:true})
+ expect(w.text()).not.toContain('read-only story reports unfinished execution');w.unmount()
 })
 
 it('saves a new project preference without starting models',async()=>{
@@ -223,6 +250,18 @@ it('shows the bulk scope and requires acknowledgment before enabling automatic h
  const write=f.mock.calls.find(([url])=>url==='/api/projects/1/handoff-policy')!
  expect(JSON.parse(String(write[1]?.body))).toEqual({revision:1,manifest_hash:'b'.repeat(64),mode:'automatic',approve:true})
  expect(w.text()).toContain('Automatic agent handoffs enabled');w.unmount()
+})
+
+it('does not prompt for a routine review while automatic handoffs are enabled',async()=>{
+ const task={card_id:5,node_key:'a',role:'story' as const,revision:1,column:'review',title:'Routine document',agent:'codex',model:'gpt-6.1-sol',run_id:7,run_stage:'succeeded'}
+ const {w}=await setup('active',[task])
+ await w.findAll('button').find(b=>b.text()==='Approve all except human-required tasks…')!.trigger('click');await flushPromises()
+ const {DOMWrapper}=await import('@vue/test-utils');const modal=new DOMWrapper(document.querySelector('[role=dialog]')!)
+ await modal.findAll('input[type=checkbox]')[1]!.setValue(true)
+ await modal.get('form').trigger('submit');await flushPromises()
+ await w.findAll('button').find(b=>b.text()==='Stories & runs')!.trigger('click');await flushPromises()
+ expect(w.findAll('button').some(b=>b.text()==='Review handoff')).toBe(false)
+ w.unmount()
 })
 
 it('reruns an unaccepted successful story without accepting its old handoff',async()=>{

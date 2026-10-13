@@ -57,7 +57,7 @@ it('saves a key write-only and clears the input before leaving or recording prog
   w.unmount()
 })
 it('finishes a walkthrough while keeping unmet prerequisites visible and not dispatching jobs',async()=>{
-  const {w,fetch}=await setup(5)
+  const {w,fetch}=await setup(6)
   expect(w.get('.readiness').text()).toContain('Pending · Hermes and OpenClaw')
   expect(w.find('a[href="/help?topic=agent-tasks"]').exists()).toBe(false)
   await w.get('.wizard-footer .primary').trigger('click');await flushPromises()

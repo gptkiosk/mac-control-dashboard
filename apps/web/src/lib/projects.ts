@@ -9,7 +9,7 @@ export interface ProjectDocument {
   title: string; brief: string; constraints: string; working_dir: string
   planner_agent: 'auto' | 'claude' | 'codex' | 'hermes'; planner_model: string; planning_bias: number; dispatch_mode: 'sequential' | 'parallel'; nodes: ProjectNode[]
 }
-export interface ProjectTask { blocked_by?: number[]; working_dir?: string; agent?: string; model?: string; card_id: number; node_key: string; role: string; revision: number; column: string; title: string; run_id: number | null; run_stage: string | null; retry_routes?: ProjectNode['routes']; output_approval?: { run_id: number; path: string; plan: string } | null }
+export interface ProjectTask { blocked_by?: number[]; working_dir?: string; agent?: string; model?: string; mode?: 'read'|'edit'; incomplete_reason?: string | null; card_id: number; node_key: string; role: string; revision: number; column: string; title: string; run_id: number | null; run_stage: string | null; retry_routes?: ProjectNode['routes']; free_retry_routes?: { agent: 'openclaw'; model: string; agent_target: string }[]; output_approval?: { run_id: number; path: string; plan: string } | null }
 export interface Memory { id: number; kind: string; text: string; actor: string; card_id: number | null; run_id: number | null; created_at: number }
 export interface Project {
   id: number; document: ProjectDocument; revision: number; state: string; approved_revision: number | null
@@ -26,7 +26,7 @@ export function emptyProject(working_dir = ''): ProjectDocument {
 }
 export function newNode(kind: 'phase' | 'story', index: number, parent: string | null = null, planningBias = 50, openclawTarget = ''): ProjectNode {
   return { key: crypto.randomUUID(), kind, title: kind === 'phase' ? 'New phase' : 'New story', description: '', acceptance: '', scope: '', parent,
-    depends_on: [], assignee: planningBias < 50 ? 'openclaw' : 'codex', model: '', agent_target: planningBias < 50 ? openclawTarget : '', mode: 'read', rationale: '', x: kind === 'phase' ? 40 : 380,
+    depends_on: [], assignee: planningBias < 50 ? 'openclaw' : 'codex', model: planningBias >= 38 && planningBias < 63 ? 'gpt-6-luna' : '', agent_target: planningBias < 50 ? openclawTarget : '', mode: 'read', rationale: '', x: kind === 'phase' ? 40 : 380,
     y: 50 + index * 150, fallbacks: [], routes: [] }
 }
 /** Stable hierarchy layout; dependency arrows are rendered separately. */
@@ -52,7 +52,7 @@ export function planningBiasLabel(value: number): string {
   return 'Capability · Claude & Codex first'
 }
 export function planningBiasHint(value: number): string {
-  if (value < 38) return 'Favor OpenClaw for bounded tasks. Reserve subscriptions for complex, sensitive or integration work.'
-  if (value < 63) return 'Use OpenClaw for routine slices and subscriptions for difficult or sensitive work.'
+  if (value < 38) return 'Favor OpenClaw for bounded tasks. If a subscription is needed, start with Haiku or Luna.'
+  if (value < 63) return 'Use OpenClaw for routine slices and Haiku/Luna for routine subscription work; step up to Sonnet/Terra only when justified.'
   return 'Favor Claude and Codex for implementation and critical reasoning. Use OpenClaw for smaller supporting tasks.'
 }

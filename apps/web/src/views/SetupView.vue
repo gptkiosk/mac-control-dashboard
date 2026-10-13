@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ReportStoragePanel from '@/components/ReportStoragePanel.vue'
+import GithubSettingsPanel from '@/components/GithubSettingsPanel.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
@@ -9,7 +11,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useHelpStore } from '@/stores/help'
 import { navItems } from '@/router/routes'
 import { directoryName, directoryDetail } from '@/lib/selectLabels'
-const steps = ['Your Mac', 'Google sign-in', 'Hermes & OpenClaw', 'OpenRouter', 'Subscriptions', 'Find your way']
+const steps = ['Your Mac', 'Google sign-in', 'Hermes & OpenClaw', 'OpenRouter', 'Subscriptions', 'GitHub (optional)', 'Find your way']
 const auth = useAuthStore(), help = useHelpStore(), route = useRoute(), router = useRouter()
 const profile = ref<Profile | null>(null), agents = ref<AgentsPayload | null>(null), workdirs = ref<Workdir[]>([])
 const progress = ref<SetupProgress>({ step: 0, status: 'new', confirmed: [] })
@@ -108,6 +110,7 @@ onBeforeUnmount(() => { key.value = '' })
     <p v-if="error" class="notice-warn" role="alert">{{ error }}</p>
     <p v-if="loading" role="status">Checking this installation…</p>
     <p v-if="!loading && !profile" class="card">Sign in with Google to save setup to your profile. <RouterLink to="/login?next=/setup">Open sign-in</RouterLink></p>
+    <ReportStoragePanel />
     <div v-if="profile" class="wizard-layout">
       <nav class="card setup-steps" aria-label="Setup steps"><ol><li v-for="(title,i) in steps" :key="title"><button class="step-button" :class="{ current: progress.step === i }" :aria-current="progress.step === i ? 'step' : undefined" :disabled="busy || loading" @click="move(i)"><span class="step-number">{{ i+1 }}</span>{{ title }}</button></li></ol><p class="small muted">Progress is saved to your profile. You can return from Account → Setup wizard, Settings or Help.</p></nav>
       <div class="card step-content">
@@ -155,6 +158,10 @@ onBeforeUnmount(() => { key.value = '' })
           <label class="check"><input type="checkbox" :checked="confirmed('subscriptions')" :disabled="busy" @change="confirm('subscriptions',$event)" />I have confirmed both host CLIs use subscription sign-in and reviewed their usage limits.</label>
           <RouterLink to="/help?topic=project-models" class="btn">Model and quota how-to</RouterLink>
           <p class="small muted">This is your confirmation, not an automated entitlement check. MCD does not collect subscription tokens. A paid API route needs separate approval.</p>
+        </template>
+        <template v-else-if="progress.step === 5">
+          <p>GitHub is optional. Skip this step with Save &amp; continue if you do not want repository and pull request views; nothing is checked in the background unless you turn it on.</p>
+          <GithubSettingsPanel wizard />
         </template>
         <template v-else>
           <p>On desktop, the main menu is on the left. On a phone, use the header Menu icon. Settings is at the bottom of the menu and in the account icon.</p>

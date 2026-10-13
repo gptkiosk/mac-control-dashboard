@@ -5,6 +5,7 @@ import { computed, reactive, ref } from 'vue'
 import TaskFields, { type TaskFieldValues } from '@/components/TaskFields.vue'
 import TagPill from '@/components/TagPill.vue'
 import TaskApprovalAction from '@/components/TaskApprovalAction.vue'
+import TaskRetryAction from '@/components/TaskRetryAction.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import ChipTag from '@/components/ChipTag.vue'
 import ModalShell from '@/components/ModalShell.vue'
@@ -125,6 +126,8 @@ const pickedRunId = ref<number | null>(null)
 const selectedRun = computed<Run | null>(
   () => runs.value.find((r) => r.id === pickedRunId.value) ?? runs.value[0] ?? null,
 )
+const latestRun = computed(() => runs.value[0] ?? card.value?.last_run ?? null)
+const viewingHistory = computed(() => !!latestRun.value && !!selectedRun.value && latestRun.value.id !== selectedRun.value.id)
 const activeRun = computed<Run | null>(() => {
   const latest = runs.value[0] ?? card.value?.last_run ?? null
   return latest && latest.stage === 'running' ? latest : null
@@ -179,7 +182,11 @@ async function approve(): Promise<void> {
   busy.value = true
   message.value = null
   try {
-    const updated = await postJson<Card>(`/api/cards/${card.value.id}/approve`)
+    // Echo the nonce and route pin of the version shown, so the approval cannot be replayed or reused.
+    const updated = await postJson<Card>(`/api/cards/${card.value.id}/approve`, {
+      challenge: card.value.approval_challenge,
+      pin: card.value.approval_pin,
+    })
     message.value = {
       tone: 'ok',
       text: `Approved. The card is now in ${columnLabel(updated.column)}.`,
@@ -366,6 +373,7 @@ async function save(): Promise<void> {
         </div>
 
         <TaskApprovalAction v-if="card.project" :card="card" @changed="afterChange" />
+        <TaskRetryAction v-if="card.project" :card="card" @changed="afterChange" />
         <div
           v-if="message"
           class="message"
@@ -566,14 +574,14 @@ async function save(): Promise<void> {
         <section class="block" aria-label="Actions">
           <div class="actions wrap">
             <button
-              v-if="!human"
+              v-if="!human && !card.project"
               type="button"
               class="btn primary"
               :disabled="busy || locked || card.column === 'queued'"
               @click="move('queued')"
             >
               <AppIcon name="run" />
-              Run
+              {{ card.column === 'failed' && card.last_run ? 'Rerun task' : 'Run' }}
             </button>
             <button v-if="activeRun" type="button" class="btn danger" :disabled="busy" @click="cancelRun">
               <AppIcon name="stop" />
@@ -621,6 +629,10 @@ async function save(): Promise<void> {
         </section>
 
         <template v-if="selectedRun">
+          <div v-if="viewingHistory && latestRun" class="history-notice" role="status" data-testid="run-history-notice">
+            <p>Viewing older Run #{{ selectedRun.id }}. Latest Run #{{ latestRun.id }}: <strong>{{ stageLabel(latestRun.stage) }}</strong>.</p>
+            <button type="button" class="btn" @click="pickedRunId = null">View latest run #{{ latestRun.id }}</button>
+          </div>
           <section class="block" aria-labelledby="meta-h">
             <h3 id="meta-h" class="sub-title">Run #{{ selectedRun.id }}</h3>
             <dl class="meta" data-testid="run-meta">
@@ -904,6 +916,19 @@ dd {
   flex-direction: column;
   gap: var(--gap-xs);
 }
+
+.history-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--gap-sm);
+  padding: var(--gap-sm);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+.history-notice p { margin: 0; }
 
 .run-btn {
   display: flex;

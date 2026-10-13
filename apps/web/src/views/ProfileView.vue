@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import ReportStoragePanel from '@/components/ReportStoragePanel.vue'
+import GithubSettingsPanel from '@/components/GithubSettingsPanel.vue'
+import UpdatePanel from '@/components/UpdatePanel.vue'
 import { onMounted, ref } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import AppSelect from '@/components/AppSelect.vue'
@@ -66,6 +69,9 @@ async function importPreferences(event: Event) { await action(async () => {
     <p class="muted">Planning defaults, your Discord connection and private provider credentials.</p>
     <RouterLink to="/setup" class="btn">Open setup wizard</RouterLink>
     <p v-if="error" class="notice-warn" role="alert">{{ error }}</p><p v-if="notice" class="card" role="status">{{ notice }}</p>
+    <ReportStoragePanel />
+    <UpdatePanel />
+    <GithubSettingsPanel id="github-settings" />
     <div v-if="profile && preferences" class="profile-grid">
       <form class="card preferences" @submit.prevent="save">
         <h2>Preferences</h2><p class="muted owner">{{ profile.owner }}</p>

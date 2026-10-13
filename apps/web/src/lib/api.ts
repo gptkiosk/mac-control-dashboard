@@ -259,6 +259,24 @@ export interface AgentCurrentRun {
   title: string
   model: string | null
   running_s: number
+  liveness?: RunLiveness
+}
+
+export interface RunLiveness {
+  state: 'live' | 'quiet' | 'dead' | 'unknown'
+  stale: boolean
+  checked_at: number
+  pid_alive: boolean | null
+  last_activity_at: number | null
+  reason: string
+}
+
+export interface UnresponsiveRun {
+  run_id: number
+  card_id: number | null
+  thread_id: number | null
+  since_s: number
+  liveness: RunLiveness
 }
 
 export interface AgentProcess {
@@ -303,6 +321,7 @@ export interface Agent {
   enforces_mode: boolean
   notes: string
   current: AgentCurrentRun[]
+  unresponsive?: UnresponsiveRun[]
   last_run: Run | null
   runs_24h: Num
   failed_24h: Num
@@ -315,6 +334,7 @@ export interface Agent {
 
 export interface AgentsPayload {
   subagents_checked_at?: Num
+  checked_at?: number
   agents: Agent[]
 }
 
@@ -350,6 +370,9 @@ export interface Card {
   needs_approval: boolean
   approval_reasons: string[]
   approved_at: Num
+  /** One-time nonce and route pin the approve request must echo; null when not awaiting approval. */
+  approval_challenge?: string | null
+  approval_pin?: string | null
   created_by: string
   created_at: number
   updated_at: number
