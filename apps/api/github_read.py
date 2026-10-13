@@ -6,6 +6,7 @@ from github_config import GithubConfigStore, SLUG
 REPO_FIELDS = "{name: .full_name, description: .description, private: .private, archived: .archived, updated_at: .updated_at, branch: .default_branch}"
 ITEM_FIELDS = "[.[] | {number: .number, title: .title, user: .user.login, updated_at: .updated_at, draft: (.draft // false), is_pull: (.pull_request != null), labels: [.labels[].name]}]"
 LOGIN = re.compile(r"account ([A-Za-z0-9-]+)")
+OWNER = re.compile(r"[A-Za-z0-9-]{1,39}\Z")
 class GithubUnavailable(Exception): pass
 class GithubNotFound(GithubUnavailable): pass   # HTTP 404: the repository name is wrong or not visible to this login
 class GithubDenied(GithubUnavailable): pass     # HTTP 401/403 or a rate limit
@@ -83,6 +84,16 @@ class GithubReader:
    except GithubNotFound:found.append({"name":name,"hint":self.closest(name,repos)})
    except GithubUnavailable:pass
   return found
+ def account_repos(self,owner):
+  """The repositories of one account or organisation, for the settings checklist: up to 100, newest first.
+  Read only. Private ones are included only for the account that is signed in with gh."""
+  if not OWNER.fullmatch(owner or ""):raise ValueError("owner")
+  mine=self.auth_status();own=bool(mine["available"] and mine["account"].lower()==owner.lower())
+  endpoint="user/repos?per_page=100&sort=updated&affiliation=owner" if own else f"users/{owner}/repos?per_page=100&sort=updated&type=owner"
+  raw=self.query(endpoint,"[.[] | "+REPO_FIELDS+"]")
+  repos=[{**r,"url":"https://github.com/"+r["name"]} for r in raw if isinstance(r,dict) and isinstance(r.get("name"),str)
+         and SLUG.fullmatch(r["name"]) and r["name"].lower().startswith(owner.lower()+"/")]
+  return {"owner":owner,"repos":repos[:100],"limited":len(raw)>=100,"private_included":own}
  def details(self,name,force=False):
   config=self.config()
   if self.config_store and (config is None or name not in config.repos):return None

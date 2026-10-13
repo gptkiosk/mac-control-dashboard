@@ -8,7 +8,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from deps import get_session
 from models import AlertEvent, Card, FindingDraftLink, Run
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 router = APIRouter(prefix="/api")
 
@@ -47,6 +47,22 @@ def _operator(request):
 def github_status(request: Request):
     # Status is local configuration only. It intentionally does not invoke gh.
     return request.app.state.github.status()
+
+@router.get("/github/account-repos")
+def github_account_repos(request: Request, owner: str = Query(default="", max_length=60)):
+    """The checklist behind the GitHub settings: one account's repositories, read only, operator only."""
+    _operator(request)
+    from github_read import GithubDenied, GithubNotFound, GithubUnavailable
+    try:
+        return request.app.state.github.account_repos(owner.strip())
+    except ValueError:
+        raise HTTPException(422, "Enter a GitHub account or organisation name.") from None
+    except GithubNotFound:
+        raise HTTPException(404, f"No GitHub account or organisation named {owner.strip()} is visible to this login.") from None
+    except GithubDenied:
+        raise HTTPException(502, "GitHub refused the request. Check the gh login or the rate limit.") from None
+    except GithubUnavailable:
+        raise HTTPException(502, "GitHub could not be reached right now.") from None
 
 @router.put("/github/config")
 async def github_config(request: Request):
