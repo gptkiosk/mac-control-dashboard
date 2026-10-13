@@ -167,10 +167,13 @@ def summarize(rows, cfg):
             "last_active": max((r["ts"] for r in items), default=None),
         }
 
-    return {
+    result = {
         **sums(rows),
         "models": [{"model": m, **sums(items)} for m, items in sorted(models.items())],
     }
+    # Models that were used and have no recorded price: the signal that the price catalog is behind.
+    result["unpriced_models"] = [m["model"] for m in result["models"] if m["unpriced"]]
+    return result
 
 
 def month_start(now):

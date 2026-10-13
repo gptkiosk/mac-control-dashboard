@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  formatAge, formatBytes, formatModelShort, formatGB, formatKBps, formatPct, formatRate, formatRpm, formatTemp, formatWatts,
+  formatAge, formatBytes, formatModelShort, unpricedModels, formatGB, formatKBps, formatPct, formatRate, formatRpm, formatTemp, formatWatts,
 } from '@/lib/format'
 
 describe('format helpers', () => {
@@ -66,5 +66,12 @@ describe('format helpers', () => {
     expect(formatModelShort('gpt-6.1-sol')).toBe('gpt-6.1-sol')
     expect(formatModelShort(null)).toBe('\u2014')
     expect(formatModelShort('  ')).toBe('\u2014')
+  })
+
+  it('unpricedModels names the first models and counts the rest', () => {
+    expect(unpricedModels(undefined)).toBe('')
+    expect(unpricedModels([])).toBe('')
+    expect(unpricedModels(['a'])).toBe('no price for a')
+    expect(unpricedModels(['a', 'b', 'c', 'd'])).toBe('no price for a, b +2 more')
   })
 })

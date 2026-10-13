@@ -39,6 +39,17 @@ as unchanged. It does not add models: choose which new models MCD will use, add 
 neighbour), run the check, and it confirms the numbers against the page. Review the diff of
 `pricing_catalog.json`, then release it like any change.
 
+When a model is used that the catalog has no price for, the Agents page shows it by name next to the
+unpriced count ("no price for gpt-x"). That is the signal to update the catalog:
+
+```bash
+scripts/pricing/check.py --used          # models used this month with no price, and what the pages say
+scripts/pricing/check.py --used --add    # add the ones the pages list; review the long-context limit, then release
+```
+
+A model the pages do not list is reported too, so you can add a rate by hand (Billing & rates → Model
+rates). Run `--used` with the API's Python (`apps/api/.venv/bin/python`) because it reads the usage database.
+
 Dated changes (for example Gemini 3.x prices rising on 2027-01-01) are in the model's `changes` list
 and apply to usage on or after their date, so history keeps the price in force at the time.
 

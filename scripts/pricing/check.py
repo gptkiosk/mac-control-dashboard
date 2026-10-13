@@ -6,6 +6,8 @@
   scripts/pricing/check.py --source google check one source (openai, anthropic, google, openrouter)
   scripts/pricing/check.py --offline DIR   read saved pages from DIR instead of the network (tests)
   scripts/pricing/check.py --new           also list models on the pages that are not in the catalog
+  scripts/pricing/check.py --used          list models used this month with no catalog price, and what the pages say
+  scripts/pricing/check.py --used --add    add those the pages list to the catalog (the use is the decision)
 
 The check only trusts what it can read unambiguously: the base prices (input, output, cache read, cache
 write), a long-context tier where the page states one, and dated changes. Anything it cannot read is
@@ -264,6 +266,71 @@ def new_on_page(catalog: dict, source: str, page: dict) -> list[str]:
     return sorted(set(names) - known)
 
 
+# ---------------------------------------------------------------------------- models in use
+
+
+PLATFORMS = {"openai": "OpenAI", "anthropic": "Anthropic", "google": "Google"}
+
+
+def used_unpriced(session) -> dict[str, set[str]]:
+    """{model: agents} for models used this month that the catalog has no price for. Free models and
+    models that have a price (whose odd records are a data problem, not a catalog gap) are left out."""
+    sys.path.insert(0, str(ROOT / "apps" / "api"))
+    import billing
+
+    rates = billing.config(session)["rates"]
+    found: dict[str, set[str]] = {}
+    for agent in billing.dashboard(session, "month")["overview"]:
+        for model in agent.get("unpriced_models", []):
+            if model != "not reported" and not billing.is_free(model) and billing.find_rate(model, rates) is None:
+                found.setdefault(model, set()).add(agent["agent"])
+    return found
+
+
+def match_page(model: str, pages: dict) -> tuple[str, str, dict] | None:
+    """(source, page id, prices) when a page lists the model, also behind a gateway or vendor prefix."""
+    parts = model.split("/")
+    for i in range(len(parts)):
+        name = "/".join(parts[i:])
+        for key in (name, re.sub(r"-\d{8}$", "", name)):
+            for source in ("openai", "anthropic", "google"):
+                found = pages.get(source, {}).get(key)
+                if found:
+                    return source, key, found
+    return None
+
+
+def candidate_entry(model: str, source: str, found: dict, agents: set[str], today: str) -> dict:
+    """A catalog entry for a newly used model, from what the page states. Limits the page does not state are
+    set so that a request over them stays unpriced instead of being priced wrongly: review before trusting."""
+    entry = {"platform": PLATFORMS[source], "source": source, "agents": sorted(agents), "status": "current"}
+    for field in ("input", "output", "cached", "write", "write_1h"):
+        if field in found:
+            entry[field] = found[field]
+    entry.setdefault("cached", entry["input"])
+    entry.setdefault("write", entry["input"])
+    entry.setdefault("write_1h", entry["write"])
+    if found.get("long"):
+        entry.update(max_input=None, long_after=found["long"]["after"], long_input_multiplier=found["long"]["input_multiplier"],
+                     long_output_multiplier=found["long"]["output_multiplier"])
+    elif found.get("long_rate"):
+        rate = found["long_rate"]
+        entry.update(max_input=None, long_after=rate["after"], long_input_multiplier=round(rate["input"] / entry["input"], 6),
+                     long_output_multiplier=round(rate["output"] / entry["output"], 6))
+    elif source == "anthropic":
+        version = re.search(r"-(\d+)-(\d+)$", model) or re.search(r"-(\d+)$", model)
+        major, minor = (int(version.group(1)), int(version.group(2) if version.lastindex == 2 else 0)) if version else (0, 0)
+        entry["max_input"] = None if (major, minor) >= (4, 6) else 200_000   # 1M context at standard price from 4.6
+    elif source == "google":
+        entry["max_input"] = None
+    else:
+        entry["max_input"] = 272_000   # the page states only the short-context price
+    if found.get("changes"):
+        entry["changes"] = found["changes"]
+    entry["verified"] = today
+    return entry
+
+
 # ---------------------------------------------------------------------------- run
 
 
@@ -292,12 +359,44 @@ def apply(catalog: dict, reports: list[dict], today: str) -> int:
     return changed
 
 
+def run_used(args, catalog: dict, pages: dict, problems: int) -> int:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    with Session(create_engine(f"sqlite:///{args.db}")) as session:
+        used = used_unpriced(session)
+    if not used:
+        print("every model used this month has a price")
+        return 1 if problems else 0
+    today, added, open_gaps = date.today().isoformat(), 0, 0
+    for model, agents in sorted(used.items()):
+        match = match_page(model, pages)
+        if match is None:
+            open_gaps += 1
+            print(f"  NO PRICE FOUND  {model}  (used by {', '.join(sorted(agents))}): not on the pages checked; add a rate in Billing & rates or the catalog by hand")
+            continue
+        source, key, found = match
+        entry = candidate_entry(model, source, found, agents, today)
+        print(f"  {'ADDED' if args.add else 'CAN ADD'}  {model}  from {source}: input {entry['input']}, output {entry['output']}, cache read {entry['cached']}; "
+              f"review the long-context limit ({entry.get('long_after') or entry.get('max_input') or 'none'})")
+        if args.add:
+            catalog["models"][model] = entry
+            added += 1
+    if args.add and added:
+        Path(args.catalog).write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n")
+        print(f"catalog updated: {added} model(s) added; review the diff and release it")
+    return 1 if open_gaps or problems or (not args.add) else 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--source", choices=sorted(READERS))
     parser.add_argument("--offline", metavar="DIR")
     parser.add_argument("--new", action="store_true")
+    parser.add_argument("--used", action="store_true")
+    parser.add_argument("--add", action="store_true", help="with --used: add the models the pages list")
+    parser.add_argument("--db", default=str(Path.home() / ".mac-control" / "data.db"))
     parser.add_argument("--catalog", default=str(CATALOG))
     args = parser.parse_args(argv)
 
@@ -316,6 +415,9 @@ def main(argv=None) -> int:
         reports.append(compare(catalog, source, pages[source]))
         if source == "openrouter":
             reports.append(compare_free(catalog, pages[source]))
+
+    if args.used:
+        return run_used(args, catalog, pages, problems)
 
     differs = 0
     for report in reports:

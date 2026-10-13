@@ -149,3 +149,28 @@ def test_apply_writes_changed_prices_and_the_date(tmp_path, capsys):
     assert written["models"]["gpt-5.5"]["output"] == 30.0
     assert written["models"]["gpt-5.5"]["verified"] != "2000-01-01"
     assert check.main(["--offline", str(offline), "--catalog", str(file)]) == 0          # and now it matches
+
+
+def test_models_used_without_a_price_are_found_and_can_be_added(sessions, tmp_path):
+    import time
+    from models import Run
+
+    page = OPENAI_PAGE.replace("]]]]]}\"> <x", "]],[1,[[0,&quot;gpt-7-test&quot;],[0,3],[0,0.3],[0,3.75],[0,15]]]]]}\"> <x", 1)
+    assert "gpt-7-test" in check.read_openai(page)
+    with sessions.begin() as s:
+        for model, agent in (("gpt-7-test", "codex"), ("gpt-6-sol", "codex"), ("thinkingmachines/inkling:free", "hermes"), ("mystery-model", "claude")):
+            s.add(Run(agent=agent, stage="succeeded", started_at=int(time.time()), working_dir="/ws", command="[]",
+                      log_path="", model_requested=model, input_tokens=1000, output_tokens=100))
+    with sessions() as s:
+        used = check.used_unpriced(s)
+    # priced, free and unknown-everywhere models: only the two with no catalog price are reported
+    assert used == {"gpt-7-test": {"codex"}, "mystery-model": {"claude"}}
+
+    pages = {"openai": check.read_openai(page)}
+    source, key, found = check.match_page("openrouter/openai/gpt-7-test", pages)
+    assert (source, key) == ("openai", "gpt-7-test") and check.match_page("mystery-model", pages) is None
+    entry = check.candidate_entry("gpt-7-test", source, found, {"codex"}, "2026-10-13")
+    assert (entry["input"], entry["output"], entry["cached"], entry["write"]) == (3.0, 15.0, 0.3, 3.75)
+    assert entry["agents"] == ["codex"] and entry["max_input"] == 272_000   # the page states only the short-context price
+    claude = check.candidate_entry("claude-opus-5-9", "anthropic", {"input": 5, "output": 25, "cached": 0.5, "write": 6.25, "write_1h": 10}, {"claude"}, "x")
+    assert claude["max_input"] is None

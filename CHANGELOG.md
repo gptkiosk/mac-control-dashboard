@@ -17,6 +17,12 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
   and no cost (refused by the price gate, turned away at a usage limit, cut off before the model answered)
   are no longer usage records, so they are neither priced nor counted as unpriced. This replaces the 0.2.6
   rule that priced some of them at 0.
+- A model used without a recorded price is named next to the unpriced count on the Agents page and the
+  Overview ("no price for gpt-x"), as the signal that the price catalog needs updating.
+
+### Added
+- `scripts/pricing/check.py --used` lists the models used this month that the catalog has no price for and
+  what the provider pages say about them; `--used --add` adds the ones the pages list.
 
 ## [0.2.6] - 2026-10-13
 

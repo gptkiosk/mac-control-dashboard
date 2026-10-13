@@ -589,6 +589,7 @@ export interface UsageSummary {
   cache_write_tokens: number
   api_equivalent_usd: number | null
   unpriced: number
+  unpriced_models?: string[]
   sessions: number
   last_active: number | null
   models: (Omit<UsageSummary, 'models'> & { model: string })[]

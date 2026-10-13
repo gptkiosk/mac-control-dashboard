@@ -139,3 +139,12 @@ export function formatModelShort(id: string | null | undefined): string {
   const tag = tags.join(':')
   return tag ? `${name} \u00b7 ${tag}` : name
 }
+
+/** "no price for a, b +2 more" for the models used without a recorded price; empty when none are named. */
+export function unpricedModels(models: string[] | null | undefined, show = 2): string {
+  if (!models?.length) return ''
+  const rest = models.length - show
+  return `no price for ${models.slice(0, show).join(', ')}${rest > 0 ? ` +${rest} more` : ''}`
+}
+
+export const UNPRICED_HINT = 'A model was used that the price catalog has no price for. Update the catalog: scripts/pricing/check.py --used'
