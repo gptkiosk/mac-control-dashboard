@@ -10,6 +10,14 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-10-13
+
+### Changed
+- "Unpriced" now means one thing: a model was used and has no recorded price. Runs that recorded no tokens
+  and no cost (refused by the price gate, turned away at a usage limit, cut off before the model answered)
+  are no longer usage records, so they are neither priced nor counted as unpriced. This replaces the 0.2.6
+  rule that priced some of them at 0.
+
 ## [0.2.6] - 2026-10-13
 
 ### Changed
@@ -172,7 +180,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Optional Discord planning connection and profile preferences with encrypted write-only credential storage.
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.6...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.7...HEAD
+[0.2.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.7
 [0.2.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.6
 [0.2.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.5
 [0.2.4]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.4

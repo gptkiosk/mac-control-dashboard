@@ -8,7 +8,6 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from collections import defaultdict
 from sqlalchemy import select
-import failure_mining
 from models import BillingConfig, UsageRecord, Run, Card, ChatThread
 
 CATALOG_FILE = Path(__file__).with_name("pricing_catalog.json")
@@ -191,15 +190,6 @@ def selection_id(row):
     )
 
 
-# A run that ended on one of these never reached a model, so it used no tokens and costs nothing:
-# the price gate refused it before launch, or the provider turned the request away at its usage limit.
-NO_USAGE_CAUSES = ("price_gate", "subscription_limit")
-
-
-def no_model_usage(run):
-    return run.stage in ("failed", "cancelled") and failure_mining.classify(run) in NO_USAGE_CAUSES
-
-
 def dashboard(s, period="month", agent=None, target=None, now=None):
     now = now or time.time()
     month = month_start(now)
@@ -222,14 +212,15 @@ def dashboard(s, period="month", agent=None, target=None, now=None):
     for run in s.scalars(
         select(Run).where(Run.started_at >= min(start, month), Run.started_at <= now)
     ):
-        # Only model agents have usage to price: scheduled monitor jobs and the like never call a model.
+        # A usage record means a model was used. Monitor jobs never call one, and a run that recorded
+        # no tokens and no cost (refused at the price gate, turned away at a usage limit, cut off before
+        # the model answered) has no usage to price, so it is not a record at all, priced or unpriced.
         if run.agent not in cfg["accounts"] or (run.agent, run.session_id) in native_sessions or run.stage == "running":
+            continue
+        if run.input_tokens is None and run.output_tokens is None and run.cost_usd is None:
             continue
         card = s.get(Card, run.card_id) if run.card_id else None
         thread = s.get(ChatThread, run.thread_id) if run.thread_id else None
-        cost, kind = run.cost_usd, "reported API equivalent"
-        if cost is None and run.input_tokens is None and no_model_usage(run):
-            cost, kind = 0.0, "no model usage"
         rows.append(
             {
                 "id": f"run:{run.id}",
@@ -246,8 +237,8 @@ def dashboard(s, period="month", agent=None, target=None, now=None):
                 "output_tokens": run.output_tokens,
                 "cached_input_tokens": run.cached_input_tokens,
                 "cache_write_tokens": run.cache_write_tokens,
-                "reported_cost_usd": cost,
-                "cost_kind": kind,
+                "reported_cost_usd": run.cost_usd,
+                "cost_kind": "reported API equivalent",
                 "scope": "response",
                 "source": "MCD",
                 "stage": run.stage,

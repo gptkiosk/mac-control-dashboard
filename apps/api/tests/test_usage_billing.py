@@ -345,27 +345,14 @@ def test_same_subagent_nickname_keeps_distinct_sessions(sessions):
         assert all(r["name"] == "explorer" for r in d["sessions"])
 
 
-def test_mcd_missing_tokens_stay_missing(sessions):
+def test_run_with_no_usage_is_not_a_usage_record(sessions):
     with sessions.begin() as s:
-        s.add(
-            Run(
-                agent="codex",
-                stage="failed",
-                started_at=int(NOW),
-                working_dir="/ws",
-                command="[]",
-                log_path="",
-            )
-        )
+        s.add(Run(agent="codex", stage="failed", started_at=int(NOW), working_dir="/ws", command="[]", log_path=""))
     with sessions() as s:
         d = dashboard(s, agent="codex", now=NOW + 1)
-        assert (
-            d["summary"]["input_tokens"] is None
-            and d["summary"]["output_tokens"] is None
-        )
-        assert (
-            d["summary"]["api_equivalent_usd"] is None and d["summary"]["unpriced"] == 1
-        )
+        # Nothing recorded means no model usage to price: not shown as unpriced either.
+        assert d["summary"]["responses"] == 0 and d["summary"]["unpriced"] == 0
+        assert d["summary"]["input_tokens"] == 0 and d["summary"]["api_equivalent_usd"] is None
 
 
 def test_published_rates_for_models_seen_in_use(sessions):
@@ -421,20 +408,20 @@ def test_published_rates_for_older_models_in_history(sessions):
         assert price({"model": "gpt-5.5", "input_tokens": 55_058, "output_tokens": 26, "cached_input_tokens": 54_144}, cfg)[0] is not None
 
 
-def test_runs_refused_before_any_model_call_cost_nothing(sessions):
+def test_only_used_models_without_a_price_are_unpriced(sessions):
     def run(**kw):
-        return Run(agent="codex", started_at=int(NOW), working_dir="/ws", command="[]", log_path="", model_requested="gpt-6-sol", **kw)
+        return Run(agent="codex", started_at=int(NOW), working_dir="/ws", command="[]", log_path="", **kw)
 
     with sessions.begin() as s:
-        s.add(run(stage="failed", error="PRICE_UNKNOWN: route has no reviewed pricing class"))
-        s.add(run(stage="failed", error='{"message": "You\\u2019ve hit your usage limit. Try again at 10:03 PM."}'))
-        s.add(run(stage="interrupted", error="service stopped while the run was in progress"))
-        s.add(run(stage="failed", error="exit 1: something else broke"))
+        s.add(run(stage="failed", error="PRICE_UNKNOWN: route has no reviewed pricing class", model_requested="gpt-6-sol"))
+        s.add(run(stage="failed", error='{"message": "You\\u2019ve hit your usage limit."}', model_requested="gpt-6-sol"))
+        s.add(run(stage="interrupted", error="service stopped while the run was in progress", model_requested="gpt-6-sol"))
+        s.add(run(stage="succeeded", model_requested="gpt-6-sol", input_tokens=1000, output_tokens=100))
+        s.add(run(stage="succeeded", model_requested="brand-new-model", input_tokens=1000, output_tokens=100))
     with sessions() as s:
         d = dashboard(s, agent="codex", now=NOW + 1)
-        # Refusals are priced at 0; a cut-off run or an unexplained failure may have used tokens, so it stays unknown.
-        assert d["summary"]["responses"] == 4 and d["summary"]["unpriced"] == 2
-        assert d["summary"]["api_equivalent_usd"] == 0
+        assert d["summary"]["responses"] == 2 and d["summary"]["unpriced"] == 1   # only the model with no recorded price
+        assert [m["model"] for m in d["summary"]["models"] if m["unpriced"]] == ["brand-new-model"]
 
 
 def test_jobs_that_call_no_model_are_not_usage_records(sessions):
