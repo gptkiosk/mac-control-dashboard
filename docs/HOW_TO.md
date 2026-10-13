@@ -135,6 +135,19 @@ Check updates and peer connectivity without changing the machine.
 
 [Open available updates](http://127.0.0.1:8800/mac#upd-title) · [Open Tailscale peers](http://127.0.0.1:8800/mac#ts-title) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=updates)
 
+## Review and install a staged dashboard update
+
+Check staged releases of this dashboard and install or roll one back, with operator sign-in.
+
+1. Sign in as the operator. Only the operator can see or change dashboard updates; other sessions get a sign-in message.
+2. Open Updates in Settings. The panel reads only this host: it makes no network or provider call and lists each staged version with its channel and authenticity status.
+3. Only complete stable or prerelease packages get an install button. Development builds and partly staged packages say why they cannot be installed.
+4. Confirm the version in the dialog. The helper stops the service, saves a data snapshot, switches versions and runs a health check; a failed check rolls the version back. Progress is shown until the update finishes or the page reconnects.
+
+Install and rollback stay disabled while an update is in progress or a blocker is listed. If managed updates are not set up, the panel shows the manual steps instead.
+
+[Open dashboard updates](http://127.0.0.1:8800/profile#updates) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=app-updates)
+
 ## Create and run an agent task
 
 Start with a Backlog draft, give it a clear outcome, then review and run it.
@@ -197,7 +210,7 @@ Task details show run history, output, exit status and captured usage.
 
 1. Open the task, then inspect the last run and its output/history.
 2. Read Stage and Error before Exit code. OpenClaw can exit with code 0 while its agent result reports a provider timeout. Timed out means the agent did not finish; it does not authorize a model switch.
-3. Review partial output and changed files against the task’s definition of done. Correct the task or timeout setting when necessary, review any new approval requirement, then use Run again. Cancel run is available for an active run. Failed, timed-out or interrupted runs can generate alerts; cancellation does not.
+3. Review partial output and changed files against the task’s definition of done. Correct the task or timeout setting when necessary, then use Rerun task or an approved alternative on the failed task screen. After a subscription limit, Go Free! lets you select a configured OpenClaw target and OpenRouter :free model for that story only; it excludes paid-model and Google BYOK fallback. Cancel run is available for an active run. Failed, timed-out or interrupted runs can generate alerts; cancellation does not.
 
 [Open task run history](http://127.0.0.1:8800/tasks) · [Open alert history](http://127.0.0.1:8800/#alerts-title) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=runs)
 
@@ -241,13 +254,27 @@ Read/Edit restrictions depend on the agent. Check the explanatory note in New ch
 
 Compare captured API-equivalent usage against each agent’s full monthly subscription.
 
-1. Open Agents → Billing & rates. For Claude Code or Codex, choose Subscription and enter your USD per month, such as 20.
-2. Save. Select This month in Agents and read the agent’s subscription and savings summary.
-3. Savings compare captured API-equivalent usage for this calendar month against the full monthly subscription, counted once across that agent’s sub-agents.
+1. Claude Code and Codex use the standard Subscription / $20 monthly defaults on a new installation. Open Agents → Billing & rates only when you need to change those defaults.
+2. Select Save billing after changing a billing mode, monthly amount or custom model rate. An unchanged save is not required for task dispatch.
+3. Select This month in Agents and read the agent’s subscription and savings summary.
+4. Savings compare captured API-equivalent usage for this calendar month against the full monthly subscription, counted once across that agent’s sub-agents.
 
 These are captured-usage estimates, not provider invoices. Partial coverage or missing prices limits the comparison; a negative result means captured API-equivalent usage is below the subscription fee.
 
 [Open Billing & rates](http://127.0.0.1:8800/agents?agent=codex&action=billing) · [Open cost summary](http://127.0.0.1:8800/agents?agent=codex#usage-summary) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=subscriptions)
+
+## A task fails with PRICE_UNKNOWN
+
+Dispatch refuses any route that has no reviewed pricing class. The run fails in under a second and never starts an agent.
+
+1. Claude Code or Codex: the effective Billing & rates configuration is authoritative. Standard membership defaults are Subscription; save only if you intentionally changed a mode or amount.
+2. OpenClaw: an approved project story automatically reviews its exact pinned :free model and target. Go Free records its exact route separately. Standalone tasks need an exact free entry in MAC_CONTROL_DISPATCH_ROUTE_CLASSES (for example openclaw|mm-developer|<exact model id>). Restart MCD after changing a host setting.
+3. Hermes: project coordination pins the configured native free model. Other Hermes tasks need an explicit configured free route.
+4. Rerun the task. Each rerun takes a fresh claim, so a fix applies to new runs only; failed runs keep the class they froze.
+
+This is the pre-dispatch spending guard, not a fault. A :free model name, a billing estimate or a past successful run does not classify a route. Paid OpenClaw and Hermes routes are always refused.
+
+[Open Billing & rates](http://127.0.0.1:8800/agents?action=billing) · [Open Tasks](http://127.0.0.1:8800/tasks) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=price-unknown)
 
 ## Price an unrecognized model
 
@@ -301,9 +328,10 @@ Draft access cannot queue/start runs, approve/complete/delete tasks, change inte
 
 Inspect accessible repositories and their current open work using the existing GitHub login.
 
-1. Open GitHub and search the repository list.
-2. Select a repository to load its open pull requests and issues. Select an item’s link to open it on GitHub.
-3. Use Refresh to check again. Notice partial, stale or capped results; this panel does not merge PRs, edit issues or broaden your token’s scopes.
+1. GitHub is optional. If it is not set up, open Settings > GitHub (optional), choose the account already signed in with gh, list the repositories to show, and save. Your profile’s public contribution graph is a separate GitHub setting: Profile > Contribution settings > Private contributions.
+2. Open GitHub and search the repository list.
+3. Select a repository to load its open pull requests and issues. Select an item’s link to open it on GitHub.
+4. Use Refresh to check again. Notice partial, stale or capped results; this panel does not merge PRs, edit issues or broaden your token’s scopes.
 
 [Open GitHub projects](http://127.0.0.1:8800/github#github-title) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=github)
 
@@ -314,6 +342,7 @@ Read actual Markdown/text reports with their source and timestamp.
 1. Open Ops reports. The newest modified report is selected first; choose another from the list.
 2. Check the source, timestamp and historical warning before interpreting its findings.
 3. Use Refresh to rescan. Hermes cron archives show the actual Response, omitting archived Prompt instructions. Viewing does not generate a new report or enable a schedule.
+4. For collector reports, a warning or critical finding can become one Backlog task from the report. The task keeps a link back to the report; choosing the same finding again opens the existing task.
 
 The catalog is capped at 200 files. Oversized/binary files are not previewed. An empty source is different from an unavailable source; old reports do not describe current fleet health.
 
