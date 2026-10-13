@@ -90,6 +90,7 @@ export interface ReleaseEnvelope {
   version: string
   environment: string
   commit_sha?: string | null
+  dirty?: boolean
   has_migrations?: boolean
   owner?: string
   product?: string
@@ -353,6 +354,7 @@ export type Priority = 'urgent' | 'high' | 'normal' | 'low'
 
 export interface Card {
   project?: { id: number; node_key: string; role: string } | null
+  superseded_by?: number | null
   id: number
   title: string
   body: string
