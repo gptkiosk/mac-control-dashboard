@@ -39,6 +39,9 @@ This source release packages MCD for independent reuse under MIT. Installations 
 
 For your own changes, see the [fork development guide](CONTRIBUTING.md). [Development history](docs/development/CHANGELOG.md) and the [historical roadmap](docs/development/ROADMAP.md) describe the implementation and possible work for fork owners, without promising future delivery. Review the [security policy](SECURITY.md) and preserve the [third-party notices](THIRD_PARTY_NOTICES.md). Detailed how-tos live in [the documentation index](docs/README.md).
 
+Host report folders: see [report storage configuration](docs/configuration/report-storage.md).
+Dispatch admission: see [pricing and budget policy](docs/configuration/dispatch-policy.md).
+
 ## Community and agent-managed development
 
 [Contributing](CONTRIBUTING.md) · [Discussions](https://github.com/gptkiosk/mac-control-dashboard/discussions) · [Wiki](https://github.com/gptkiosk/mac-control-dashboard/wiki) · [Agent workflow](docs/development/agent-workflow.md) · [UI preview standard](docs/development/ui-testing.md) · [Support policy](SUPPORT.md)

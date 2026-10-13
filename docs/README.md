@@ -26,6 +26,7 @@ Start with [Getting started](getting-started.md), then open the [Setup wizard](S
 - [Alerts configuration](configuration/alerts-config.md)
 - [LaunchAgent installation](configuration/launchd.md)
 - [Runtime data and backups](configuration/runtime-data.md)
+- [Platform parity with RCD (Raspberry Pi OS)](PLATFORM_PARITY.md)
 
 ## Reuse and development
 

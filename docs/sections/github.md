@@ -51,3 +51,7 @@ For the operator: inspect open work across repositories using the existing GitHu
 - [MCP servers](mcp.md) — tool integrations separate from GitHub read-only access.
 - [Ops reports](reports.md) — Hermes reports; independent of repository state.
 - Source references: `docs/OPS_PANELS.md` (GitHub read-only behavior, `gh api --method GET`, no token scope broadening, cached query limits), `docs/HERMES_ACCESS.md` (independent of repository work), `apps/web/src/views/GithubView.vue` (UI structure and data sources).
+
+## External-action backend
+
+The current page remains read-only. The separate [external-action guard](../configuration/github-actions.md) requires an exact operator preview and individual authorization, stores an audit and suppresses duplicates. Host writes default to disabled; task/project approvals do not authorize GitHub sends. No send UI or live-provider verification is claimed.

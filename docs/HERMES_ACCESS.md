@@ -23,6 +23,30 @@ The local admin recovery token and browser session cookie must never be supplied
 These capabilities restrict API access, not what other processes running as the same Mac user
 can read from that user's filesystem.
 
+## Operator authority boundary
+
+Agent processes cannot use operator APIs, even if they read the recovery token or a session
+cookie from disk, or inherit the service's environment:
+
+- **Environment scrub.** Agent runners start without any `MAC_CONTROL_*`, `MCD_*` or `RCD_*`
+  variable, so sign-in secrets, cost keys and data paths are not inherited.
+- **Peer-process check.** For every request from this machine, the server finds the process
+  that owns the client socket. Agent processes are the session and process tree of every
+  runner on an unfinished run, plus processes started from `MAC_CONTROL_AGENT_EXECUTABLES`
+  and their children. They may use only `/healthz`, `/api/agent-tools/*` with a bearer
+  credential and the Hermes project bridge. Everything else is refused with 403, including
+  sign-in recovery, approvals, dispatch, settings and reads. While agent processes are
+  running, a state change whose caller cannot be identified is refused too.
+- **Audit.** Each refusal is recorded in `security-audit.jsonl` in the data folder (mode 600,
+  rotated at 1 MB, no query strings) and as a note on the matched run.
+
+Limits: a process that fully detaches (double fork plus `setsid`) from both the runner's
+session and every configured agent tree is not recognised, and scripting the operator's
+browser is not blocked by this check. Running agents under a separate OS account is the
+stronger boundary. Commands an operator runs from inside an interactive agent CLI (for
+example `curl` from a Claude Code session) are refused by default; remove that CLI from
+`MAC_CONTROL_AGENT_EXECUTABLES` only if you accept that its agent can act as the operator.
+
 The MCD stdio tool server reads its private file before every request. `MCD_TOKEN_FILE` may
 point to another private credential file for isolated testing. It uses an explicit HTTP
 loopback IP/port, ignores inherited proxy settings and refuses redirects. Bearer requests

@@ -67,6 +67,7 @@ The profile UI is separate from the host environment table; it does not expose o
 | `MAC_CONTROL_CODEX_PATH` | `~/.local/bin/codex` | `str` | Path to Codex CLI binary. | No |
 | `MAC_CONTROL_HERMES_PATH` | `~/.local/bin/hermes` | `str` | Path to Hermes CLI binary. | No |
 | `MAC_CONTROL_OPENCLAW_PATH` | `/opt/homebrew/bin/openclaw` | `str` | Path to OpenClaw CLI binary. | No |
+| `MAC_CONTROL_AGENT_EXECUTABLES` | `("claude", "codex", "hermes", "openclaw")` | `tuple[str, ...]` | Executable names treated as agents outside dispatched runs (gateways, interactive CLIs). Their processes and children are refused by operator APIs, as every dispatched runner already is. `[]` limits the check to dispatched runs. See [Hermes access](../HERMES_ACCESS.md#operator-authority-boundary). | No |
 | `MAC_CONTROL_HERMES_CONFIG_PATH` | `None` | `Path \| None` | Optional private Hermes config file. | No |
 | `MAC_CONTROL_OPENCLAW_CONFIG_PATH` | `None` | `Path \| None` | Optional private OpenClaw config file. | No |
 | `MAC_CONTROL_ALLOWED_HOSTS_EXTRA` | `()` | `tuple[str, ...]` | Extra `Host` header values accepted by the request guard. Tests use this; it is not an authentication bypass. | No |

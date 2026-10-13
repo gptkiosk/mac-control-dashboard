@@ -18,7 +18,7 @@ These captures use synthetic preview data. They illustrate the board and creatio
 2. Select **Add task**, choose a human or agent assignee, and provide instructions and a definition of done. For agent work, choose the working directory, model, OpenClaw target where applicable, Read/Edit mode and timeout. Review the assignment before queueing it.
 3. Open the task to inspect the latest run, including requested/reported model, result, error, duration and captured usage. Missing telemetry is shown as missing, not as zero.
 4. Use the action matching the pending approval:
-   - **Approve run** authorizes a standalone task waiting for execution approval.
+   - **Approve run** authorizes a standalone task waiting for execution approval. The approval covers one run of the exact version you reviewed: its agent, model, target, mode, folder and prompt. It expires if unused for 24 hours (`MAC_CONTROL_APPROVAL_TTL_S`). A changed route or prompt, a retry, or a repeated or stale approve request sends the task back to Review for a fresh approval. Refused attempts are recorded on the task.
    - **Approve & continue** lets a supported read-only Claude project story continue, with MCD saving one proposed Markdown output. It does not accept an unfinished artifact or grant shell/file-write tools.
    - **Approve handoff** accepts a completed project result after its definition of done has been reviewed. If workspace files changed, the shortcut opens the project review path so you can inspect and select files.
    - **Record decision** opens the human story's instructions and a required decision field. Record the actual choices and conditions, not just a generic acknowledgment.

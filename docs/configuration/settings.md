@@ -65,3 +65,5 @@ Profile exports may include private workspace paths, hostnames and channel IDs. 
 - [Google sign-in](google-sign-in.md) and [remote access](remote-access.md).
 - [Projects](../sections/projects.md): planning/acceptance.
 - [Runtime data](runtime-data.md): private storage and backup.
+
+Host report folders: see [report storage configuration](report-storage.md).

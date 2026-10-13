@@ -53,7 +53,7 @@ The database uses SQLite WAL mode, `synchronous=NORMAL` and foreign keys. Applic
 
 Tables include `metric_sample`, `metric_minute`, `metric_day`, `service_snapshot`; `card`, `card_dependency`, `run`, `run_event`; `chat_thread`, `chat_message`, `mcp_change`; `usage_record`, `usage_cursor`, `billing_config`; `auth_session`, `alert_event`, `alert_state`, `agent_access`; and `project`, `project_task`, `project_memory`, `project_delivery`, `user_profile`, `user_credential`.
 
-Tracked revisions currently run from `0001_metrics_and_services.py` through `0011_profiles.py`. Consult `apps/api/migrations/versions/` for the exact schema history. Do not manually alter production rows or downgrade a live database to solve an execution error.
+Tracked revisions currently run from `0001_metrics_and_services.py` through `0012_durable_cancel.py`. Consult `apps/api/migrations/versions/` for the exact schema history. Do not manually alter production rows or downgrade a live database to solve an execution error.
 
 ### Backup and restore
 
