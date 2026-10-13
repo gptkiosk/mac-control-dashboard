@@ -33,7 +33,7 @@ products before the minor is raised, and a release note lists what the feature l
 
 | Feature level | Contents |
 |---|---|
-| 0.2 | Branch-scoped agent git access; subscription limits (lift time, one notice, same-grade reroute, Discord status); context digests with a full ledger file and a cache-friendly prompt order; deletable duplicate project cards; the standard footer with a modified marker |
+| 0.2 | Branch-scoped agent git access; subscription limits (lift time, one notice, same-grade reroute, Discord status); context digests with a full ledger file and a cache-friendly prompt order; deletable duplicate project cards; the standard footer with a modified marker; failure mining for Hermes; the release flow scripts. RCD reaches 0.2 when it has all of these. |
 
 ## Am I on the latest?
 
