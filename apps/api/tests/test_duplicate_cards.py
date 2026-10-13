@@ -97,3 +97,32 @@ def test_api_and_web_carry_the_same_version():
     from version import __version__
     web = json.loads((Path(__file__).resolve().parents[2] / "web" / "package.json").read_text())["version"]
     assert web == __version__, "apps/web/package.json and apps/api/version.py must carry the same version"
+
+
+def test_a_failed_duplicate_coordination_card_is_deletable_too(app):
+    """The real case: Hermes created a second 'coordinate' card (no story key) and the first one stayed Failed."""
+    c, s, wd, settings = app
+    p = active(app, [node("a")])
+    with s.begin() as d:
+        link = d.scalar(select(ProjectTask).where(ProjectTask.project_id == p["id"]))
+        orig = d.get(Card, link.card_id)
+        def clone(column):
+            dup = Card(**{c.name: getattr(orig, c.name) for c in Card.__table__.columns if c.name != "id"})
+            d.add(dup); d.flush(); dup.column = column
+            d.add(ProjectTask(card_id=dup.id, project_id=link.project_id, revision=link.revision, node_key="", role="coordinate"))
+            return dup.id
+        failed, done = clone("failed"), clone("done")
+    assert c.get(f"/api/cards/{failed}").json()["superseded_by"] == done
+    assert c.delete(f"/api/cards/{failed}").status_code == 204
+    assert c.get(f"/api/cards/{done}").status_code == 200
+    with s() as d:
+        note = d.scalar(select(ProjectMemory).where(ProjectMemory.text.like("Deleted duplicate failed card%")))
+        assert note and "coordinate" in note.text and f"#{done}" in note.text
+    # a lone failed coordination card with no finished sibling stays protected
+    with s.begin() as d:
+        lone = clone2 = Card(**{c.name: getattr(d.get(Card, done), c.name) for c in Card.__table__.columns if c.name != "id"})
+        d.add(lone); d.flush(); lone.column = "failed"
+        d.add(ProjectTask(card_id=lone.id, project_id=p["id"], revision=1, node_key="", role="plan"))
+        lone_id = lone.id
+    assert c.get(f"/api/cards/{lone_id}").json()["superseded_by"] is None
+    assert c.delete(f"/api/cards/{lone_id}").status_code == 409

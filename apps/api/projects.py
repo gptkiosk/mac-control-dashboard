@@ -578,19 +578,20 @@ def advance(s,settings):
 
 def binding(s,card_id): return s.get(ProjectTask,card_id)
 def superseded_by(s,card,link=None):
-    """The finished sibling card when this failed project story is an unneeded duplicate of it, else None.
-    Another card for the same story of the same revision must already be Done or in Review, so a
-    real, unfinished story is never deletable."""
+    """The finished sibling card when this failed project card is an unneeded duplicate of it, else None.
+    Another card with the same project, revision, role and story key (a story, or a coordinate, plan,
+    return-plan or dispatch step) must already be Done or in Review, so unfinished work is never deletable."""
     link=link or binding(s,card.id)
-    if not link or link.role!='story' or card.column!='failed':return None
+    if not link or card.column!='failed':return None
     return s.scalar(select(ProjectTask.card_id).join(Card,Card.id==ProjectTask.card_id).where(
-        ProjectTask.project_id==link.project_id,ProjectTask.revision==link.revision,ProjectTask.node_key==link.node_key,
-        ProjectTask.role=='story',ProjectTask.card_id!=card.id,Card.column.in_(('done','review'))).limit(1))
+        ProjectTask.project_id==link.project_id,ProjectTask.revision==link.revision,ProjectTask.role==link.role,
+        ProjectTask.node_key==link.node_key,ProjectTask.card_id!=card.id,Card.column.in_(('done','review'))).limit(1))
 
 def forget_duplicate(s,card,sibling):
     """Remove the binding of a superseded duplicate so the card can be deleted; the ledger keeps the record."""
     link=binding(s,card.id)
-    memory(s,get(s,link.project_id),'decision',f'Deleted duplicate failed card #{card.id} ({card.title}); story {link.node_key} is carried by #{sibling}.','operator',card.id)
+    what=link.node_key or link.role
+    memory(s,get(s,link.project_id),'decision',f'Deleted duplicate failed card #{card.id} ({card.title}); {what} is carried by #{sibling}.','operator',card.id)
     s.delete(link);s.flush()
 
 def protect(s,card):
