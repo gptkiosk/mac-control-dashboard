@@ -36,11 +36,12 @@ def _approved(sessions, tmp_path, body, **kw):
 
 
 def _alive(pid):
+    # A killed child that nobody has reaped yet is a zombie: it is gone for every purpose here.
+    import psutil
     try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
+        return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
         return False
-    return True
 
 
 def test_crash_after_decision_before_claim_dispatches_once(sessions, tmp_path):

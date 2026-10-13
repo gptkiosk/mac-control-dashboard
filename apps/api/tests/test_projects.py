@@ -46,6 +46,10 @@ def node(key,**kw):
     'This story is **incomplete**: no release archive was built or receipt produced.',
     ('## Long handoff\n\n' + ('Implemented detail. ' * 250) +
      '\n\nThis story is **incomplete**: no release archive was built.'),
+    '# Evidence handoff\n\n**Status:** INCOMPLETE. The pack lists what exists.',
+    'The docs are updated, but story `s17_docs_rcd` is **incomplete**.',
+    '## Handoff: s16_docs_mcd is incomplete\n\nNothing was executed.',
+    'The evidence pack is incomplete, so nothing should be marked done.',
     '## Handoff — incomplete verification\n\nChanges were written but require host testing.',
 ])
 def test_direct_incomplete_handoff_language_is_not_completion(result):
@@ -441,7 +445,7 @@ def test_quota_reported_only_on_stderr_still_hands_off_without_exposing_stderr(a
     from tests.test_dispatcher import FakeParser,_drain
     p=active(app,[node('a',routes=[{'agent':'claude','model':'claude-sonnet-5-5'}])]);c,s,wd,settings=app
     cid=next(t['card_id'] for t in p['tasks'] if t['role']=='story')
-    def fake_build(*args): return [sys.executable,'-c',f"import sys; print({(initial_error+'; sensitive-debug-value')!r},file=sys.stderr); sys.exit(1)"]
+    def fake_build(card,prompt,model,*a,**k): return [sys.executable,'-c',f"import sys; print({(initial_error+'; sensitive-debug-value')!r},file=sys.stderr); sys.exit(1)",'-m',model]   # pinned model, as the gate requires
     registry={'codex':AgentSpec('codex','Fake subscription','worker','codex_path',fake_build,FakeParser)}
     d=Dispatcher(s,settings,registry=registry);asyncio.run(_drain(d))
     with s() as db:
