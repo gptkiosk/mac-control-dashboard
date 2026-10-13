@@ -297,7 +297,7 @@ Add explicit token rates when a model’s usage is captured but its API equivale
 2. Choose or enter the exact model ID, enable Save custom rates for this model, and fill all five non-negative input/output/cache rates.
 3. Save and review usage again. Source-reported cost takes precedence; custom rates apply uniformly up to their input limit.
 
-Use rates from the model provider. Missing rates remain unpriced; tools, taxes and other surcharges are outside token estimates.
+Use rates from the model provider. Models ending in :free cost 0. Other missing rates remain unpriced; tools, taxes and other surcharges are outside token estimates.
 
 [Open model rate settings](http://127.0.0.1:8800/agents?action=billing) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=model-rates)
 

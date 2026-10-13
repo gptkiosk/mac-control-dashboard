@@ -194,7 +194,7 @@ export const helpGuides: HelpGuide[] = [
     keywords: ['unpriced', 'rates', 'price', 'pricing', 'million', 'cache', 'custom model'],
     steps: ['Open Billing & rates and expand Model rates · USD per million tokens.', 'Choose or enter the exact model ID, enable Save custom rates for this model, and fill all five non-negative input/output/cache rates.', 'Save and review usage again. Source-reported cost takes precedence; custom rates apply uniformly up to their input limit.'],
     links: [{ label: 'Open model rate settings', to: '/agents?action=billing' }],
-    note: 'Use rates from the model provider. Missing rates remain unpriced; tools, taxes and other surcharges are outside token estimates.',
+    note: 'Use rates from the model provider. Models ending in :free cost 0. Other missing rates remain unpriced; tools, taxes and other surcharges are outside token estimates.',
   },
   {
     id: 'openrouter', title: 'Track actual OpenRouter spending', area: 'Costs',

@@ -14,6 +14,21 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 - Tasks list has a Model column. It shows a condensed model name (for example `inkling · free`), the
   model that actually ran when there is a run and the requested one otherwise; hover for the full id.
 
+- Price catalog (`apps/api/pricing_catalog.json`): the recent models of each platform (OpenAI/Codex,
+  Anthropic/Claude, Google, OpenRouter free routes) with their published standard prices, long-context
+  tiers and dated changes. `scripts/pricing/check.py` compares it with the providers' pages, reports
+  differences and new models, and can write the changes back with `--apply`. See
+  `docs/configuration/pricing-catalog.md`.
+
+### Changed
+- API-equivalent prices now cover every model in use, read from the catalog instead of being typed into
+  the code. Newly priced: GPT-5.6 Sol and Luna, GPT-5.5, GPT-5.4, Gemini 2.5 and 3.x, Claude Fable 5 and
+  5.1, Opus 4.5, 4.7 and 4.8 and Sonnet 5; GPT-5.6 Terra now has its published long-context tier instead
+  of a cut-off. Prices were checked against the provider pages on 2026-10-13.
+- OpenRouter models ending in `:free` are priced at 0 (shown as a free model) even when a run reports no
+  token counts, so they no longer count as unpriced. A gateway or vendor prefix on a model id no longer
+  hides its rate.
+
 ## [0.2.4] - 2026-10-13
 
 ### Added
