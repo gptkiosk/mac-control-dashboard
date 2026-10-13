@@ -329,9 +329,12 @@ class Dispatcher:
     # ------------------------------------------------------------------ execution
 
     @staticmethod
-    def _env() -> dict[str, str]:
+    def _env(agent: str | None = None) -> dict[str, str]:
         # No MAC_CONTROL_* settings: operator credentials and paths never reach an agent.
         env = runner_env()
+        spec = REGISTRY.get(agent) if agent else None
+        if spec is not None:
+            env.update(spec.env)   # for example Grok's telemetry and trace upload switches, always off
         env["PATH"] = ":".join((*EXTRA_PATH, env.get("PATH", "/usr/bin:/bin")))
         env.setdefault("HOME", str(Path.home()))
         return env
@@ -409,7 +412,7 @@ class Dispatcher:
                     from hermes_runtime import command
                     argv = command(argv)
                 proc = await asyncio.create_subprocess_exec(
-                    *argv, cwd=cwd, env=self._env(),
+                    *argv, cwd=cwd, env=self._env(agent),
                     stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE, start_new_session=True, limit=LINE_LIMIT,
                 )

@@ -81,12 +81,13 @@ class Settings(BaseSettings):
     )
     claude_path: str = Field(default="/opt/homebrew/bin/claude")
     codex_path: str = Field(default=str(Path.home() / ".local" / "bin" / "codex"))
+    grok_path: str = Field(default=str(Path.home() / ".grok" / "bin" / "grok"))
     hermes_path: str = Field(default=str(Path.home() / ".local" / "bin" / "hermes"))
     openclaw_path: str = Field(default="/opt/homebrew/bin/openclaw")
     hermes_config_path: Path | None = None
     openclaw_config_path: Path | None = None
     agent_executables: tuple[str, ...] = Field(
-        default=("claude", "codex", "hermes", "openclaw"),
+        default=("claude", "codex", "grok", "agent", "hermes", "openclaw"),
         description="Processes started from these executables (and their children) are agents: "
                     "operator APIs refuse them, as they refuse every dispatched runner.",
     )

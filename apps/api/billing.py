@@ -8,6 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from collections import defaultdict
 from sqlalchemy import select
+from agents import BILLED_AGENTS
 from models import BillingConfig, UsageRecord, Run, Card, ChatThread
 
 CATALOG_FILE = Path(__file__).with_name("pricing_catalog.json")
@@ -35,7 +36,9 @@ DEFAULT_ACCOUNTS = {
         "mode": "subscription" if a in ("claude", "codex") else "api",
         "monthly_usd": 20.0 if a in ("claude", "codex") else 0.0,
     }
-    for a in ("openclaw", "hermes", "claude", "codex")
+    # Grok starts as an API account: it is refused until the operator saves a subscription for it
+    # (Billing & rates), which is also the moment they accept that it sends work to xAI.
+    for a in BILLED_AGENTS
 }
 
 
