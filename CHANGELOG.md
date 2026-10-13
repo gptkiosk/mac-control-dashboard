@@ -10,6 +10,16 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-13
+
+### Fixed
+- The Mac and Overview pages show the macOS software-update panels again. A newer route had taken over
+  `/api/updates`, so those panels received the wrong data. The application updater now lives at
+  `/api/app-updates`, and a test fails if two routes ever share a method and path.
+- After a crash or restart, MCD stops a leftover agent process more reliably. It now recognises the
+  process even when a launcher rewrites its name (a symlinked or script-run CLI, or Python on macOS), so
+  an agent is not left running and started a second time.
+
 ## [0.2.1] - 2026-10-13
 
 ### Changed
@@ -113,6 +123,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Optional Discord planning connection and profile preferences with encrypted write-only credential storage.
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.2
 [0.2.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.1
 [0.2.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.0
