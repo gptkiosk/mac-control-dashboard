@@ -14,6 +14,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+import release_fetch as rf
 import update_engine as ue
 from routes.agent_tools import operator
 from settings import REPO_ROOT, get_settings
@@ -24,6 +25,14 @@ router = APIRouter(prefix="/api/app-updates")
 class StageIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(pattern=ue.INBOX_NAME.pattern)
+    manifest_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class FetchIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: str = Field(pattern=r"^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$")  # exactly what the operator was shown
+    channel: str = Field(default="stable", pattern=r"^(stable|prerelease)$")
+    confirm: bool
     manifest_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
@@ -72,6 +81,36 @@ def stage(request: Request, body: StageIn):
     except ue.UpdateError as exc:
         raise HTTPException(422, exc.problems[0]) from None
     args = ["stage", body.name] + (["--manifest-sha256", body.manifest_sha256] if body.manifest_sha256 else [])
+    return _spawn(cfg, args)
+
+
+@router.get("/check")
+def check(request: Request, channel: str = "stable"):
+    """Read-only look at the public Releases API. Nothing is downloaded or changed."""
+    operator(request)
+    if channel not in rf.CHANNELS:
+        raise HTTPException(422, "channel must be stable or prerelease")
+    cfg = _managed()
+    try:
+        found = rf.check(cfg, channel)
+    except rf.FetchError as exc:
+        raise HTTPException(502, {"message": "Could not check for updates.", "problems": exc.problems}) from None
+    return {"available": found is not None, "candidate": rf.describe(found) if found else None,
+            "installed": rf.installed_version(cfg)}
+
+
+@router.post("/fetch", status_code=202)
+def fetch(request: Request, body: FetchIn):
+    """Download, verify and stage the release the operator confirmed. Never switches versions."""
+    operator(request)
+    if not body.confirm:
+        raise HTTPException(422, "Explicit confirmation is required.")
+    cfg = _managed()
+    if body.channel == "prerelease" and not cfg.allow_prerelease:
+        raise HTTPException(409, "The prerelease channel is off in the helper configuration.")
+    args = ["fetch", body.version, "--channel", body.channel]
+    if body.manifest_sha256:
+        args += ["--manifest-sha256", body.manifest_sha256]
     return _spawn(cfg, args)
 
 

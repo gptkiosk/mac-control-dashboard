@@ -688,6 +688,8 @@ class ServiceControl:
 
 class LaunchdService(ServiceControl):
     LAUNCHCTL = "/bin/launchctl"
+    BOOTSTRAP_ATTEMPTS = 5
+    BOOTSTRAP_PAUSE = 2.0
 
     def __init__(self, label: str, plist: str):
         self.target = f"gui/{os.getuid()}/{label}"
@@ -715,11 +717,36 @@ class LaunchdService(ServiceControl):
                 raise UpdateError("the service did not stop within 60 s")
             time.sleep(0.5)
 
+    def _launchctl(self, *args: str, timeout: int = 60) -> subprocess.CompletedProcess:
+        try:
+            return subprocess.run([self.LAUNCHCTL, *args], capture_output=True, text=True, timeout=timeout,
+                                  env=dict(COMMAND_ENV), stdin=subprocess.DEVNULL)
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise UpdateError(f"launchctl could not run ({type(exc).__name__})") from None
+
     def start(self) -> None:
-        if self.loaded():
-            _run([self.LAUNCHCTL, "kickstart", self.target], 30, what="service start")
-        else:
-            _run([self.LAUNCHCTL, "bootstrap", self.domain, self.plist], 60, what="service start")
+        """Load the job if it is not loaded, then make sure it is running.
+
+        A release that crash-looped leaves a KeepAlive job loaded and throttled, or disabled by the
+        operator earlier; a rollback must still be able to start the previous version. stop() has
+        already unloaded the job on that path, so this bootstraps a clean one. `enable` clears a
+        disabled override, bootstrap is retried because launchd sometimes answers "5: Input/output
+        error" for a moment after a bootout, and a final plain kickstart covers a plist without
+        RunAtLoad (it does nothing when the job is already running).
+        """
+        self._launchctl("enable", self.target, timeout=30)  # harmless when it is not disabled
+        if not self.loaded():
+            problem = ""
+            for attempt in range(self.BOOTSTRAP_ATTEMPTS):
+                result = self._launchctl("bootstrap", self.domain, self.plist)
+                if result.returncode == 0 or self.loaded():
+                    break
+                problem = " | ".join((result.stderr or result.stdout).strip().splitlines()[-3:])[:300]
+                if attempt + 1 < self.BOOTSTRAP_ATTEMPTS:
+                    time.sleep(self.BOOTSTRAP_PAUSE)
+            else:
+                raise UpdateError(f"service start failed: launchctl bootstrap refused {self.BOOTSTRAP_ATTEMPTS} times: {problem}")
+        _run([self.LAUNCHCTL, "kickstart", self.target], 30, dict(COMMAND_ENV), "service start")
 
 
 class SystemdUserService(ServiceControl):
@@ -824,14 +851,51 @@ def manual_instructions(kind: str, product: str) -> list[str]:
     return steps
 
 
+NOTES_MAX_CHARS = 20_000
+CHANGELOG_MAX_BYTES = 1024 * 1024
+
+
+def release_notes(cfg: HelperConfig, vid: str, version: str | None) -> str | None:
+    """The CHANGELOG.md section for `version`, from inside the sealed version directory.
+
+    The file was verified against the manifest when the package was staged and is read-only
+    afterwards, so this is the package's own statement of what changed. It is returned as plain
+    text, capped, and never rendered as HTML. None when the package has no section for it.
+    """
+    if not version or not VERSION_ID.match(vid):
+        return None
+    path = cfg.versions / vid / "CHANGELOG.md"
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        with open(path, "rb") as f:
+            text = f.read(CHANGELOG_MAX_BYTES).decode("utf-8", "replace")
+    except OSError:
+        return None
+    heading = re.compile(r"^## \[" + re.escape(version) + r"\](\s|$)")
+    lines, found = [], False
+    for line in text.splitlines():
+        if found and line.startswith("## "):
+            break
+        if not found and heading.match(line):
+            found = True
+            continue
+        if found:
+            lines.append(line)
+    body = "\n".join(lines).strip()
+    return body[:NOTES_MAX_CHARS] if body else None
+
+
 def status(cfg: HelperConfig) -> dict:
     """State for display. Takes no lock; the journal is replaced atomically."""
     state = load_state(cfg)
     versions = []
+    current = _link_target(cfg, "current")
     if cfg.versions.is_dir():
         for entry in sorted(os.listdir(cfg.versions)):
             receipt = read_receipt(cfg, entry)
             versions.append({"id": entry, "complete": receipt is not None,
+                             "notes": release_notes(cfg, entry, receipt.get("version")) if receipt and entry != current else None,
                              "version": receipt.get("version") if receipt else None,
                              "channel": receipt.get("channel") if receipt else None,
                              "change": receipt.get("change") if receipt else None,
