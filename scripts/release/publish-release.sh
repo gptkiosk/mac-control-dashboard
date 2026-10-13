@@ -10,7 +10,7 @@
 # tag with scripts/upgrade-driver.sh, so the footer shows the commit the release names.
 set -euo pipefail
 version=""; target=""; repo=""; pre=0; dry=0
-here="$(cd "$(dirname "$0")" && pwd)"; root="$(cd "$here/../.." && pwd)"; gh_bin="${MCD_GH:-gh}"
+here="$(cd "$(dirname "$0")" && pwd)"; root="$(cd "$here/../.." && pwd)"; gh_bin="${MCD_GH:-gh}"; leaks_bin="${MCD_GITLEAKS:-gitleaks}"
 while [ $# -gt 0 ]; do case "$1" in
   --version) version="$2"; shift 2;; --target) target="$2"; shift 2;; --repo) repo="$2"; shift 2;;
   --prerelease) pre=1; shift;; --dry-run) dry=1; shift;; -h|--help) sed -n 2,13p "$0"; exit 0;; *) echo "unknown option $1" >&2; exit 2;; esac; done
@@ -27,6 +27,10 @@ notes="$(mktemp)"; trap 'rm -f "$notes"' EXIT
 tmp_cl="$(mktemp)"; at_target CHANGELOG.md > "$tmp_cl"
 python3 -I "$here/changelog.py" notes "$version" --repo "$repo" --changelog "$tmp_cl" > "$notes" || { rm -f "$tmp_cl"; die "the changelog is not ready for $version"; }
 rm -f "$tmp_cl"
+command -v "$leaks_bin" >/dev/null 2>&1 || die "gitleaks is required to publish (brew install gitleaks)"
+prev_tag="$(git -C "$root" describe --tags --abbrev=0 --match 'v[0-9]*' "$sha^" 2>/dev/null || true)"
+if [ -n "$prev_tag" ]; then range="$prev_tag..$sha"; else range="$sha"; fi
+"$leaks_bin" git "$root" --log-opts="$range" --redact --no-banner -l error >/dev/null 2>&1 || die "gitleaks reported a possible secret in $range; review it (a .gitleaksignore entry records a reviewed false positive)"
 "$gh_bin" api "repos/$repo/commits/$sha" --jq .sha >/dev/null 2>&1 || die "commit ${sha:0:7} is not on GitHub yet (push it first)"
 if "$gh_bin" api "repos/$repo/git/ref/tags/$tag" >/dev/null 2>&1 || "$gh_bin" release view "$tag" --repo "$repo" >/dev/null 2>&1; then die "$tag already exists in $repo; releases are never moved or replaced (publish a higher version)"; fi
 echo "release: $repo $tag on ${sha:0:7}$([ "$pre" = 1 ] && echo ' (prerelease)')"; echo "---- notes ----"; cat "$notes"; echo "---------------"

@@ -164,7 +164,9 @@ esac
 exit 0
 ''')
     gh.chmod(0o755); state.mkdir()
-    env = {**os.environ, "MCD_GH": str(gh)}
+    leaks = tmp_path / "gitleaks"                      # stands in for gitleaks so the test needs no install
+    leaks.write_text(f'#!/bin/bash\necho "$@" >> "{tmp_path}/leak-calls"\n[ -f "{state}/leak" ] && exit 1\nexit 0\n'); leaks.chmod(0o755)
+    env = {**os.environ, "MCD_GH": str(gh), "MCD_GITLEAKS": str(leaks)}
     def run(*args):
         return subprocess.run(["bash", str(repo / "scripts/release/publish-release.sh"), *args], capture_output=True, text=True, cwd=repo, env=env)
     return SimpleNamespace(repo=repo, run=run, calls=calls, state=state, head=lambda: git(repo, "rev-parse", "HEAD"))
@@ -210,3 +212,15 @@ def test_refuses_a_version_without_a_dated_changelog_section(release_repo):
     commit_version(release_repo.repo, "1.3.0", changelog=False)
     r = release_repo.run("--version", "1.3.0", "--target", release_repo.head())
     assert r.returncode == 1 and "changelog is not ready" in r.stderr
+
+
+def test_publishing_scans_what_is_released_and_refuses_on_a_finding(release_repo):
+    sha = release_repo.head()
+    ok = release_repo.run("--version", "1.2.0", "--target", sha, "--dry-run")
+    assert ok.returncode == 0
+    scan = (release_repo.calls.parent / "leak-calls").read_text()
+    assert "git" in scan and "--log-opts=" in scan and sha in scan and "--redact" in scan
+    (release_repo.state / "leak").write_text("1")
+    bad = release_repo.run("--version", "1.2.0", "--target", sha)
+    assert bad.returncode == 1 and "possible secret" in bad.stderr
+    assert "release create" not in (release_repo.calls.read_text() if release_repo.calls.exists() else "")

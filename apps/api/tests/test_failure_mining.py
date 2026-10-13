@@ -20,7 +20,7 @@ def run_like(error=None, result=None, stage="failed"):
 
 @pytest.mark.parametrize("secret", [
     "github_pat_" + "A" * 40, "ghp_" + "b" * 36, "sk-or-v1-abcdef1234567890", "AKIA" + "Z" * 16, "Bearer abcdefghijklmnopqrstuvwxyz012345",
-    "token=abc123secretvalue", "api_key: s3cr3tvalue", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijkl",
+    "token=abc123secretvalue", "api_key: s3cr3tvalue", "eyJ" + "hbGciOiJIUzI1NiJ9" + "." + "eyJzdWIiOiIxMjM0NTY3ODkwIn0" + "." + "abcdefghijkl"   # built at run time so no token-shaped text sits in the source,
 ])
 def test_credentials_never_survive(secret):
     out = fm.redact(f"request failed with {secret} while pushing")
