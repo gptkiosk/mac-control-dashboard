@@ -57,6 +57,11 @@ async def github_config(request: Request):
             status = request.app.state.github.auth_status()
             if status["available"] and status["account"] != body.get("account"):
                 raise HTTPException(422, "The selected account is not the active scoped gh login.")
+            gone = request.app.state.github.missing([r for r in body.get("repos", []) if isinstance(r, str)]) if status["available"] else []
+            if gone:
+                first = gone[0]
+                raise HTTPException(422, f"{first['name']} was not found for this GitHub login. Check the spelling."
+                                    + (f" Did you mean {first['hint']}?" if first["hint"] else ""))
         else:
             status = {"available": False, "account": ""}
         result = request.app.state.github_config.save(body)
