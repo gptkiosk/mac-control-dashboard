@@ -17,6 +17,7 @@ async function setup(state='draft', tasks: import('@/lib/projects').ProjectTask[
   if(url==='/api/projects') return {body:{projects:[{id:1,title:doc.title,state,revision:1,updated_at:1}]}}
   if(url==='/api/projects/1' && init?.method==='PATCH') { const body=JSON.parse(String(init.body)); p={...p,document:body.document,revision:2}; return {body:p} }
   if(url==='/api/projects/1/handoff-policy') { const body=JSON.parse(String(init?.body));p={...p,handoff_approval:{...p.handoff_approval,mode:body.mode==='automatic'?'automatic':'manual'}};return {body:p} }
+  if(url==='/api/projects/1/close') { p={...p,state:'closed'};return {body:p} }
   if(url==='/api/projects/1/retier') { p={...p,document:{...p.document,planning_bias:50},tasks:p.tasks.map(t=>({...t,model:t.agent==='claude'?'claude-haiku-5-5':t.agent==='codex'?'gpt-6-luna':t.model}))};return {body:p} }
   if(url==='/api/projects/1/stories/5/repair-execution') { p={...p,tasks:p.tasks.map(t=>t.card_id===5?{...t,column:'queued',agent:'codex',model:'gpt-6-luna',mode:'edit',incomplete_reason:null}:t)};return {body:p} }
   if(url==='/api/projects/1') return {body:p}
@@ -272,4 +273,23 @@ it('reruns an unaccepted successful story without accepting its old handoff',asy
  expect(writes.map(([url])=>url)).toEqual(['/api/projects/1/stories/5/retry'])
  expect(JSON.parse(String(writes[0]![1]?.body))).toEqual({revision:1})
  w.unmount()
+})
+
+it('closes an unfinished project only with a reason and shows it as Closed, never Complete',async()=>{
+ const prompt=vi.spyOn(window,'prompt').mockReturnValueOnce('').mockReturnValueOnce('Superseded by the RCD project')
+ const {w,f}=await setup('active')
+ const closeButton=()=>w.findAll('button').find(b=>b.text()==='Close project…')!
+ await closeButton().trigger('click');await flushPromises()
+ expect(f.mock.calls.some(([url])=>url==='/api/projects/1/close')).toBe(false)
+ await closeButton().trigger('click');await flushPromises()
+ const write=f.mock.calls.find(([url])=>url==='/api/projects/1/close')!
+ expect(JSON.parse(String(write[1]?.body))).toEqual({revision:1,reason:'Superseded by the RCD project'})
+ expect(prompt).toHaveBeenCalledTimes(2);expect(w.text()).toContain('Closed');expect(w.text()).not.toContain('Complete')
+ expect(w.findAll('button').some(b=>b.text()==='Close project…')).toBe(false);w.unmount()
+})
+
+it('offers no close action for a completed or planning project',async()=>{
+ for(const state of ['complete','planning','dispatching']){
+  const {w}=await setup(state);expect(w.findAll('button').some(b=>b.text()==='Close project…')).toBe(false);w.unmount()
+ }
 })

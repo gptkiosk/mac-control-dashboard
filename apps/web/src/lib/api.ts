@@ -355,6 +355,7 @@ export type Priority = 'urgent' | 'high' | 'normal' | 'low'
 export interface Card {
   project?: { id: number; node_key: string; role: string } | null
   superseded_by?: number | null
+  closed_project?: boolean
   id: number
   title: string
   body: string

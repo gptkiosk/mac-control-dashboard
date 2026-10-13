@@ -126,3 +126,32 @@ def test_a_failed_duplicate_coordination_card_is_deletable_too(app):
         lone_id = lone.id
     assert c.get(f"/api/cards/{lone_id}").json()["superseded_by"] is None
     assert c.delete(f"/api/cards/{lone_id}").status_code == 409
+
+
+def test_a_failed_card_of_a_closed_out_project_can_be_deleted_with_a_ledger_note(app):
+    from models import Project
+    c, s, wd, settings = app
+    p = active(app, [node("a")])
+    cid = story(p)
+    set_column(app, cid, "failed")
+    assert c.get(f"/api/cards/{cid}").json()["closed_project"] is False and c.delete(f"/api/cards/{cid}").status_code == 409     # open project: protected
+    with s.begin() as d:
+        d.get(Project, p["id"]).state = "complete"
+    body = c.get(f"/api/cards/{cid}").json()
+    assert body["closed_project"] is True and body["superseded_by"] is None
+    assert {x["id"]: x["closed_project"] for x in c.get("/api/cards").json()["cards"]}[cid] is True
+    assert c.delete(f"/api/cards/{cid}").status_code == 204 and c.get(f"/api/cards/{cid}").status_code == 404
+    with s() as d:
+        note = d.scalar(select(ProjectMemory).where(ProjectMemory.text.like("Deleted failed card%")))
+        assert note and f"project {p['id']} was closed out" in note.text and note.kind == "decision"
+
+
+def test_only_failed_cards_of_a_closed_project_are_deletable(app):
+    from models import Project
+    c, s, wd, settings = app
+    p = active(app, [node("a")])
+    cid = story(p)
+    with s.begin() as d:
+        d.get(Project, p["id"]).state = "complete"
+    set_column(app, cid, "done")
+    assert c.get(f"/api/cards/{cid}").json()["closed_project"] is False and c.delete(f"/api/cards/{cid}").status_code == 409

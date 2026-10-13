@@ -594,6 +594,22 @@ def forget_duplicate(s,card,sibling):
     memory(s,get(s,link.project_id),'decision',f'Deleted duplicate failed card #{card.id} ({card.title}); {what} is carried by #{sibling}.','operator',card.id)
     s.delete(link);s.flush()
 
+def running_stories(s,p):
+    return list(s.scalars(select(ProjectTask.card_id).join(Card,Card.id==ProjectTask.card_id).where(ProjectTask.project_id==p.id,Card.column=='running')))
+
+def closed_project(s,card,link=None):
+    """The project id when this failed card belongs to a project that was closed out (state complete or closed), else None.
+    Nothing more can happen on such a card, and its handoff and incident entries stay in the project ledger."""
+    link=link or binding(s,card.id)
+    if not link or card.column!='failed':return None
+    p=s.get(Project,link.project_id)
+    return p.id if p and p.state in ('complete','closed') else None
+
+def forget_closed(s,card):
+    link=binding(s,card.id)
+    memory(s,get(s,link.project_id),'decision',f'Deleted failed card #{card.id} ({card.title}) after project {link.project_id} was closed out; its handoff and incident entries remain in this ledger.','operator',card.id)
+    s.delete(link);s.flush()
+
 def protect(s,card):
     if binding(s,card.id): fail('This task belongs to an approved project. Use Projects for handoff acceptance/retry; its scope and dependencies cannot be changed on the board.')
 
