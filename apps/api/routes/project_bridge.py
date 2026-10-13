@@ -10,12 +10,12 @@ from models import UserProfile,Project
 from settings import get_settings
 from auth import digest
 from project_schemas import Document,Action
-import profiles,projects,project_delivery,project_diagram
+import profiles,projects,project_delivery,project_diagram,provider_limits
 router=APIRouter(prefix='/api/hermes-projects')
 
 class Bridge(BaseModel):
     model_config=ConfigDict(extra='forbid',hide_input_in_errors=True)
-    action:Literal['pair','intake','list','get','save','plan','diagram']
+    action:Literal['pair','intake','list','get','save','plan','diagram','limits','limits_reroute']
     discord_user_id:str=Field(pattern=r'^[0-9]{16,22}$')
     discord_channel_id:str=Field(pattern=r'^[0-9]{16,22}$')
     source_message_id:str=Field(default='',pattern=r'^([0-9]{16,22})?$')
@@ -29,6 +29,8 @@ class Bridge(BaseModel):
     planning_bias:int|None=Field(default=None,ge=0,le=100,strict=True)
     request_planning:bool=False
     diagram_requested:bool=False
+    provider:Literal['claude','codex']|None=None
+    enabled:bool|None=None
     document:Document|None=None
 
 def authorize(request):
@@ -54,6 +56,13 @@ def command(body:Bridge,request:Request,s:Session=Depends(get_session)):
     profile=s.scalar(select(UserProfile).where(UserProfile.discord_user_id==body.discord_user_id))
     if not profile or profiles.prefs(s,profile.owner).discord_channel_id!=body.discord_channel_id:raise HTTPException(403,'Link this Discord account and channel in your MCD profile.')
     pref=profiles.prefs(s,profile.owner)
+    if body.action=='limits':
+        return {'limits':provider_limits.payload(s,int(time.time())),'instructions':'Report each active limit once: the provider, when it lifts, how many stories moved on their own and how many are waiting. Offer to route the waiting stories to the alternate only when can_reroute is true. Do not repeat a limit the operator has already heard about.'}
+    if body.action=='limits_reroute':
+        if not pref.allow_discord_control:raise HTTPException(403,'Enable Discord control in your MCD profile first.')
+        if body.provider is None or body.enabled is None:raise HTTPException(422,'Choose a provider and whether routing is on or off.')
+        if provider_limits.set_reroute(s,body.provider,body.enabled,int(time.time())) is None:raise HTTPException(404,'No active limit for that provider.')
+        s.commit();return {'limits':provider_limits.payload(s,int(time.time())),'instructions':'Confirm in one line what changed and when the limit lifts.'}
     repeated_intake=False
     if body.action=='list':return {'projects':[{'id':p.id,'title':projects.document(p)['title'],'state':p.state,'revision':p.revision} for p in s.scalars(select(Project).where(Project.created_by==profile.owner).order_by(Project.id.desc()).limit(50))]}
     if body.action=='intake':
