@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import RolesPanel from '@/components/RolesPanel.vue'
 import ReportStoragePanel from '@/components/ReportStoragePanel.vue'
 import GithubSettingsPanel from '@/components/GithubSettingsPanel.vue'
+import AgentToolsPanel from '@/components/AgentToolsPanel.vue'
 import UpdatePanel from '@/components/UpdatePanel.vue'
 import { onMounted, ref } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
@@ -71,6 +73,8 @@ async function importPreferences(event: Event) { await action(async () => {
     <p v-if="error" class="notice-warn" role="alert">{{ error }}</p><p v-if="notice" class="card" role="status">{{ notice }}</p>
     <ReportStoragePanel />
     <UpdatePanel />
+    <AgentToolsPanel />
+    <RolesPanel />
     <GithubSettingsPanel id="github-settings" />
     <div v-if="profile && preferences" class="profile-grid">
       <form class="card preferences" @submit.prevent="save">

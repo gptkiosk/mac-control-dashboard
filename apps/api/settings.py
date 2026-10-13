@@ -14,10 +14,42 @@ from pathlib import Path
 from pydantic import Field, SecretStr, model_validator
 from urllib.parse import urlsplit
 import ipaddress
+import os
+import sys
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_DATA_DIR = Path.home() / ".mac-control"
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+IS_MACOS = sys.platform == "darwin"
+
+def default_agent_tools_root(product_short_name: str = "MCD") -> Path:
+    """Where the Agent tools panel installs the agent CLIs (per user, no sudo): one folder, removable as a whole."""
+    base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return Path(base) / ("rcd-agent-tools" if product_short_name.upper() == "RCD" else "mcd-agent-tools")
+
+
+def tool_search_dirs() -> tuple[str, ...]:
+    """Folders searched for optional tools: managed installs, PATH, then common user folders."""
+    managed = os.environ.get("MAC_CONTROL_AGENT_TOOLS_ROOT") or str(default_agent_tools_root(os.environ.get("MAC_CONTROL_PRODUCT_SHORT_NAME", "MCD")))
+    extra = [str(Path.home() / ".local" / "bin"), str(Path.home() / ".grok" / "bin"), "/usr/local/bin"]
+    if IS_MACOS:
+        extra.append("/opt/homebrew/bin")  # Homebrew's standard Apple-silicon prefix
+    return tuple(dict.fromkeys(d for d in (os.path.join(managed, "bin"), *os.environ.get("PATH", "").split(os.pathsep), *extra) if d))
+
+
+def find_tool(name: str) -> str:
+    """First executable `name` on the search path, else the bare name.
+
+    A bare name keeps the integration optional: it shows as unavailable and setup never fails.
+    Set the matching MAC_CONTROL_*_PATH variable to pin an explicit location.
+    """
+    for d in tool_search_dirs():
+        candidate = Path(d) / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return name
 
 
 class Settings(BaseSettings):
@@ -79,11 +111,11 @@ class Settings(BaseSettings):
         default=(Path.home() / "Projects", DEFAULT_DATA_DIR / "workspaces"),
         description="A card's working directory must be inside one of these.",
     )
-    claude_path: str = Field(default="/opt/homebrew/bin/claude")
-    codex_path: str = Field(default=str(Path.home() / ".local" / "bin" / "codex"))
-    grok_path: str = Field(default=str(Path.home() / ".grok" / "bin" / "grok"))
-    hermes_path: str = Field(default=str(Path.home() / ".local" / "bin" / "hermes"))
-    openclaw_path: str = Field(default="/opt/homebrew/bin/openclaw")
+    claude_path: str = Field(default_factory=lambda: find_tool("claude"))
+    codex_path: str = Field(default_factory=lambda: find_tool("codex"))
+    grok_path: str = Field(default_factory=lambda: find_tool("grok"))
+    hermes_path: str = Field(default_factory=lambda: find_tool("hermes"))
+    openclaw_path: str = Field(default_factory=lambda: find_tool("openclaw"))
     hermes_config_path: Path | None = None
     openclaw_config_path: Path | None = None
     agent_executables: tuple[str, ...] = Field(
@@ -115,6 +147,12 @@ class Settings(BaseSettings):
 
     # --- Packaged updates: off unless a helper-managed update root is set up -------
     update_root: Path | None = Field(default=None, description="Install root with helper/helper.json; see packaging/README.md.")
+
+    agent_tools_root: Path | None = None
+
+    @property
+    def agent_tools_path(self) -> Path:
+        return self.agent_tools_root or default_agent_tools_root(self.product_short_name)
 
     @property
     def reports_path(self) -> Path:

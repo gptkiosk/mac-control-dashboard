@@ -18,6 +18,10 @@ Start with [Getting started](getting-started.md), then open the [Setup wizard](S
 | Help chat and how-tos | [Help](sections/help.md) · [Printable how-tos](HOW_TO.md) |
 | Profile, credentials and Discord | [Settings](configuration/settings.md) · [Profiles and Discord](PROFILES_AND_DISCORD.md) |
 
+- [Managed agent tools](install/agent-tools.md)
+- [Recommended agent mix and memberships](configuration/recommended-agent-mix.md)
+- [Agent roles](configuration/agent-roles.md)
+
 ## Configuration reference
 
 - [Settings](configuration/settings.md) and [Environment variables](configuration/environment.md)

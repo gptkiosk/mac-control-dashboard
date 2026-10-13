@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import RecommendedAgentMix from '@/components/RecommendedAgentMix.vue'
+import MembershipPrerequisites from '@/components/MembershipPrerequisites.vue'
 import ReportStoragePanel from '@/components/ReportStoragePanel.vue'
 import GithubSettingsPanel from '@/components/GithubSettingsPanel.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -11,8 +13,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useHelpStore } from '@/stores/help'
 import { navItems } from '@/router/routes'
 import { directoryName, directoryDetail } from '@/lib/selectLabels'
-import { anyInstalled, NATIVE_AGENTS, SUBSCRIPTION_CLIS } from '@/lib/agentMix'
-const steps = ['Your Mac', 'Google sign-in', 'Hermes & OpenClaw', 'OpenRouter', 'Subscriptions', 'GitHub (optional)', 'Find your way']
+import { anyInstalled, NATIVE_AGENTS } from '@/lib/agentMix'
+const steps = ['Your Mac', 'Google sign-in', 'Coordinator & workers', 'OpenRouter', 'Memberships (optional)', 'GitHub (optional)', 'Find your way']
 const auth = useAuthStore(), help = useHelpStore(), route = useRoute(), router = useRouter()
 const profile = ref<Profile | null>(null), agents = ref<AgentsPayload | null>(null), workdirs = ref<Workdir[]>([])
 const progress = ref<SetupProgress>({ step: 0, status: 'new', confirmed: [] })
@@ -30,7 +32,7 @@ const readiness = computed(() => [
   { label: 'Google sign-in', ok: googleReady.value, detail: 'Configure host OAuth and sign in with an allowed Google account.' },
   { label: 'Hermes and OpenClaw', ok: anyInstalled(available, NATIVE_AGENTS) && confirmed('native_routes'), detail: 'Install the ones you use and confirm their provider and model configuration. Either one is enough.' },
   { label: 'OpenRouter spending key', ok: hasKey.value, detail: 'Save a profile key if you want actual key spending in MCD.' },
-  { label: 'Subscription agents', ok: anyInstalled(available, SUBSCRIPTION_CLIS) && confirmed('subscriptions'), detail: 'Install the CLIs you use (Claude Code, Codex, Grok Build) and confirm subscription sign-in on the Mac. Any one is enough.' },
+  { label: 'Optional memberships', ok: confirmed('subscriptions'), detail: 'Review membership access for CLIs you choose. A free-only setup can continue without a paid membership.' },
   { label: 'Help and navigation', ok: confirmed('tour'), detail: 'Review the menu and try Help chat.' },
 ])
 async function action(fn: () => Promise<void>) {
@@ -118,6 +120,7 @@ onBeforeUnmount(() => { key.value = '' })
         <div class="step-heading"><p class="eyebrow">STEP {{ progress.step+1 }} OF {{ steps.length }}</p><h2 ref="heading" tabindex="-1">{{ steps[progress.step] }}</h2><progress :value="progress.step+1" :max="steps.length" aria-label="Setup walkthrough progress" /></div>
         <p v-if="notice" class="setup-notice" role="status">{{ notice }}</p>
         <p v-if="checksError" class="notice-warn" role="status">{{ checksError }}</p>
+        <RecommendedAgentMix platform="mac" />
         <template v-if="progress.step === 0">
           <p>MCD runs locally on a Mac. You can use its browser interface from another computer or your phone; the agents and their sign-ins belong on the Mac hosting MCD.</p>
           <ol class="instructions"><li>Use a macOS host with Git, Python 3.12 and Node/npm compatible with MCD and your agents. Follow each agent’s current installation requirements.</li><li>From your local MCD checkout, build and install dependencies with <code>bash scripts/bootstrap.sh</code>. Start the API from <code>apps/api</code> with <code>.venv/bin/python serve.py</code>; install the background service with <code>bash scripts/install-launchagent.sh</code> when ready.</li><li>Keep installation settings in the private <code>~/.mac-control/.env</code>. Configure allowed workspace roots and agent executable paths there, then restart MCD when no jobs are running.</li></ol>
@@ -153,10 +156,11 @@ onBeforeUnmount(() => { key.value = '' })
           <p>Saving a profile key does not configure agent inference, choose paid models or change the existing fallback cap. Claude and Codex keep their subscription routes.</p><RouterLink to="/profile#credentials-profile" class="btn">Manage private credentials</RouterLink>
         </template>
         <template v-else-if="progress.step === 4">
-          <p>For subscription work, sign into ChatGPT/Codex and Claude on the host Mac with accounts whose plans include the coding features you want to use.</p>
+          <p>Paid memberships are optional for the free-only baseline. For membership-priced coding, use a supported native CLI and sign into its eligible paid account. Using OpenRouter or an API key for OpenAI/Anthropic models is separate usage billing and does not use your membership allowance.</p>
           <div class="agent-checks"><article><h3>ChatGPT / Codex</h3><p class="setup-state" :class="{ ready: available('codex') }">{{ available('codex') === true ? 'Codex executable detected' : available('codex') === false ? 'Codex executable not detected' : 'Not checked' }}</p><p>Install the ChatGPT/Codex desktop app and the Codex CLI used by MCD. In the CLI run <code>codex login</code>, choose ChatGPT subscription sign-in, then check <code>codex login status</code>.</p><a href="https://learn.chatgpt.com/docs/auth" target="_blank" rel="noopener noreferrer">Official subscription sign-in guide ↗</a></article><article><h3>Claude / Claude Code</h3><p class="setup-state" :class="{ ready: available('claude') }">{{ available('claude') === true ? 'Claude Code executable detected' : available('claude') === false ? 'Claude Code executable not detected' : 'Not checked' }}</p><p>Install the Claude desktop app and Claude Code CLI. Run <code>claude</code> and sign into an eligible Claude subscription rather than API billing.</p><a href="https://code.claude.com/docs/en/setup" target="_blank" rel="noopener noreferrer">Official installation and account guide ↗</a></article><article><h3>Grok Build</h3><p class="setup-state" :class="{ ready: available('grok') }">{{ available('grok') === true ? 'Grok Build executable detected' : available('grok') === false ? 'Grok Build executable not detected' : 'Not checked' }}</p><p>Optional. Install the Grok CLI and sign in with <code>grok login</code> to a SuperGrok plan. Grok sends the task and the files it reads to xAI, so use it only on work you are willing to share; MCD runs it with telemetry and trace upload off and inside a filesystem sandbox, and only on a subscription route.</p><a href="https://x.ai/cli" target="_blank" rel="noopener noreferrer">Official Grok Build ↗</a></article></div>
+          <MembershipPrerequisites />
           <p>The CLIs and their host sign-ins are what MCD executes; desktop app sign-in alone does not establish CLI readiness. Subscription limits still apply. Review per-story models and approved fallback routes before submitting a project.</p>
-          <label class="check"><input type="checkbox" :checked="confirmed('subscriptions')" :disabled="busy" @change="confirm('subscriptions',$event)" />I have confirmed the host CLIs I use have subscription sign-in and reviewed their usage limits.</label>
+          <label class="check"><input type="checkbox" :checked="confirmed('subscriptions')" :disabled="busy" @change="confirm('subscriptions',$event)" />I reviewed the optional membership path. For agents I use, I confirmed native sign-in and limits; otherwise I will use reviewed free routes.</label>
           <RouterLink to="/help?topic=project-models" class="btn">Model and quota how-to</RouterLink>
           <p class="small muted">This is your confirmation, not an automated entitlement check. MCD does not collect subscription tokens. A paid API route needs separate approval.</p>
         </template>

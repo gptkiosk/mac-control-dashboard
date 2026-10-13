@@ -990,3 +990,50 @@ def test_story_context_drops_unrelated_decisions_but_keeps_lineage_and_recent_gl
     assert 'Lineage decision for story A.' in raw
     assert 'Global decision 5' in raw and 'Global decision 4' in raw and 'Global decision 3' in raw and 'Global decision 0' not in raw
     assert 'Other story decision 0' not in raw
+
+@pytest.mark.parametrize('agent', ['claude','codex','grok','hermes','openclaw'])
+def test_delegator_pipeline_keeps_assigned_agent_and_model_during_role_change(app, monkeypatch, agent):
+    monkeypatch.setattr(projects.RoleStore, 'delegator', lambda self: agent)
+    p=new(app); client=app[0]
+    response=client.post('/api/projects/1/plan',json={'revision':1,'approve_coordination':True})
+    assert response.status_code == 200, response.text
+    p=response.json(); route=p['pipeline']['delegator']
+    with app[1]() as db:
+        assert db.get(Card,p['pipeline']['card_id']).agent == agent
+    selected=p['pipeline']['choices'][0]
+    finish(app,p['pipeline']['card_id'],json.dumps({**selected,'rationale':'test choice'}));advance(app)
+    p=client.get('/api/projects/1').json()
+    monkeypatch.setattr(projects.RoleStore, 'delegator', lambda self: 'codex' if agent != 'codex' else 'claude')
+    finish(app,p['pipeline']['card_id'],json.dumps({'nodes':[node('story')]}));advance(app)
+    p=client.get('/api/projects/1').json()
+    assert p['pipeline']['delegator'] == route
+    with app[1]() as db:
+        card=db.get(Card,p['pipeline']['card_id'])
+        assert card.agent == agent
+        assert (card.model or '') == route['model']
+
+def test_free_only_setup_can_plan_with_hermes_without_subscription_clis(app, monkeypatch, tmp_path):
+    monkeypatch.setattr(AgentSpec, 'available', lambda self, settings: self.id == 'hermes')
+    config=tmp_path/'free-hermes.yaml';config.write_text('model:\n  default: openrouter/free\n')
+    app[3].hermes_config_path=config
+    p=new(app);client=app[0]
+    response=client.post('/api/projects/1/plan',json={'revision':1,'approve_coordination':True})
+    assert response.status_code == 200, response.text
+    p=response.json()
+    assert p['pipeline']['choices'] == [{'agent':'hermes','model':'openrouter/free'}]
+    assert p['pipeline']['delegator'] == {'agent':'hermes','model':'openrouter/free'}
+    with app[1]() as db:
+        card=db.get(Card,p['pipeline']['card_id'])
+        assert card.agent == 'hermes' and card.model == 'openrouter/free'
+
+
+def test_assignment_change_requires_new_operator_coordination_review(app, monkeypatch):
+    store=projects.RoleStore(app[3]);store.folder.mkdir(parents=True)
+    store.state.write_text(json.dumps({'roles':{'codex':'delegator'},'workspace':'','targets':[]}))
+    p=new(app);client=app[0]
+    response=client.post('/api/projects/1/plan',json={'revision':1,'approve_coordination':True,'delegator_revision':'a'*64})
+    assert response.status_code == 409
+    assert 'assignment changed' in response.json()['detail']
+    response=client.post('/api/projects/1/plan',json={'revision':1,'approve_coordination':True,'delegator_revision':store.status()['revision']})
+    assert response.status_code == 200, response.text
+    assert response.json()['pipeline']['delegator']['agent'] == 'codex'

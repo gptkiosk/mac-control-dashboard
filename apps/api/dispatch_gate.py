@@ -108,14 +108,12 @@ def reviewed_route_class(s, settings, source, model: str | None) -> str | None:
     configured = getattr(settings, "dispatch_route_classes", {}).get(key)
     if key in getattr(settings, "dispatch_route_classes", {}):
         return configured
-    # Hermes' local config is operator-owned route configuration. Its exact
-    # configured free model can be admitted without duplicating the same route
-    # in an environment variable. The card and command still pin that model,
-    # and unknown or paid routes continue to fail closed.
+    # The exact configured Hermes free route is operator-owned evidence.
+    # Capped Google BYOK is still API billing and must never be classified free.
     if agent == "hermes" and model:
-        from native_routes import automatic_route, read
+        from native_routes import read
         native = read(settings).get("hermes", {})
-        if model in native.get("models", ()) and automatic_route(model):
+        if model in native.get("models", ()) and (model.endswith(":free") or model in {"openrouter/free", "openrouter/openrouter/free"}):
             return "free"
     try:
         # Use the same effective account configuration shown by Billing & rates
@@ -139,7 +137,7 @@ def reviewed_route_class(s, settings, source, model: str | None) -> str | None:
                      if row.get("key") == link.node_key), None)
         if (node and node.get("assignee") == agent and node.get("model") == model
                 and (node.get("agent_target") or "") == (target or "")
-                and model.endswith(":free")):
+                and (model.endswith(":free") or model in {"openrouter/free", "openrouter/openrouter/free"})):
             return "free"
         # Go Free is a separate operator action recorded as an exact route and
         # target in the same immutable manifest. No other API route inherits it.

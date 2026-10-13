@@ -411,7 +411,11 @@ class AgentSpec:
     env: dict[str, str] = field(default_factory=dict)
 
     def binary(self, settings) -> str:
-        return str(getattr(settings, self.binary_setting))
+        path = str(getattr(settings, self.binary_setting))
+        if not os.path.isabs(path) or self.binary_setting not in getattr(settings, "model_fields_set", set()):
+            from tool_install import managed_bin
+            return managed_bin(getattr(settings, "agent_tools_path", None), Path(path).name) or path
+        return path
 
     def available(self, settings) -> bool:
         path = self.binary(settings)

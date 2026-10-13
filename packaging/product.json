@@ -8,7 +8,9 @@
       "arch": "arm64",
       "python_version": "3.12",
       "python_abi": "cp312",
-      "pip_platforms": ["macosx_14_0_arm64"],
+      "pip_platforms": [
+        "macosx_14_0_arm64"
+      ],
       "uv_python_platform": "aarch64-apple-darwin"
     }
   },
@@ -32,7 +34,11 @@
     "integrations/hermes/mcd-projects/*.py",
     "integrations/hermes/mcd-projects/*.yaml",
     "ops/alerts.example.toml",
-    "ops/launchd/*.template"
+    "ops/launchd/*.template",
+    "apps/api/tool_catalog.json",
+    "apps/api/tool_locks/*/package.json",
+    "apps/api/tool_locks/*/package-lock.json",
+    "packs/roles/delegator/*"
   ],
   "excluded_components": [
     "apps/mcp: separate agent tool server with its own venv; not packaged in v1",

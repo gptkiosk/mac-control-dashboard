@@ -13,6 +13,7 @@ async function setup(state='draft', tasks: import('@/lib/projects').ProjectTask[
  const doc={...emptyProject('/tmp/project'),title:'Reviewed project',brief:'An approved goal',nodes:unarranged ? [phase,story].map(n=>({...n,x:0,y:0})) : arrange([phase,story])}
  let p={id:1,document:doc,revision:1,state,can_resume_plan:state==='planning_failed',approved_revision:null,pipeline:null,error:null,updated_at:1,handoff_approval:{mode:'manual' as 'manual'|'automatic',manifest_hash:'b'.repeat(64),eligible:[{card_id:5,title:'Routine document',column:'review'}],excluded:[{card_id:6,title:'Repository publication',reason:'Publication requires individual review'}]},tasks,memory:[],workspaces:{},artifacts:{}}
  const f=stubFetch((url,init) => {
+  if(url==='/api/roles') return {body:{delegator:'hermes',revision:'a'.repeat(64)}}
   if(url==='/api/projects' && init?.method==='POST') { p={...p,document:JSON.parse(String(init.body))}; return {status:201,body:p} }
   if(url==='/api/projects') return {body:{projects:[{id:1,title:doc.title,state,revision:1,updated_at:1}]}}
   if(url==='/api/projects/1' && init?.method==='PATCH') { const body=JSON.parse(String(init.body)); p={...p,document:body.document,revision:2}; return {body:p} }
@@ -68,7 +69,7 @@ it('submits a new brief to Hermes after coordination approval and displays hones
  const writes=f.mock.calls.filter(([,init])=>(init?.method??'GET')!=='GET')
  expect(writes.map(([url])=>url)).toEqual(['/api/projects','/api/projects/1/plan'])
  expect(JSON.parse(String(writes[0]![1]?.body)).planning_bias).toBe(50)
- expect(JSON.parse(String(writes[1]![1]?.body))).toEqual({revision:1,approve_coordination:true})
+ expect(JSON.parse(String(writes[1]![1]?.body))).toEqual({revision:1,approve_coordination:true,delegator_revision:'a'.repeat(64)})
  expect(w.text()).toContain('Submitted to Hermes');expect(w.get('progress').attributes('value')).toBeUndefined()
  expect(w.text()).toContain('Link Discord in your profile');w.unmount()
 })
@@ -137,7 +138,7 @@ it('changing a mapped preference leaves existing routes intact and sets new stor
  expect(doc.planning_bias).toBe(0)
  expect(doc.nodes[1].assignee).toBe('codex');expect(doc.nodes[1].routes[0].model).toBe('claude-sonnet-5-5')
  expect(doc.nodes[2].assignee).toBe('openclaw');expect(doc.nodes[2].model).toBe('')
- await w.findAll('button').find(b=>b.text()==='Review & submit')!.trigger('click')
+ await w.findAll('button').find(b=>b.text()==='Review & submit')!.trigger('click');await flushPromises()
  expect(document.body.textContent).toContain('Story preference: Economy · OpenClaw first');w.unmount()
 })
 
@@ -292,4 +293,11 @@ it('offers no close action for a completed or planning project',async()=>{
  for(const state of ['complete','planning','dispatching']){
   const {w}=await setup(state);expect(w.findAll('button').some(b=>b.text()==='Close project…')).toBe(false);w.unmount()
  }
+})
+
+it('keeps the economy worker default free of a subscription-only model',()=>{
+ const economy=newNode('story',0,null,45)
+ expect(economy.assignee).toBe('openclaw');expect(economy.model).toBe('')
+ const balanced=newNode('story',0,null,50)
+ expect(balanced.assignee).toBe('codex');expect(balanced.model).toBe('gpt-6-luna')
 })

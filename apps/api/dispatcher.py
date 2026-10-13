@@ -410,7 +410,7 @@ class Dispatcher:
             try:
                 if agent == 'hermes':
                     from hermes_runtime import command
-                    argv = command(argv)
+                    argv = command(argv, getattr(self.settings, "agent_tools_path", None))
                 proc = await asyncio.create_subprocess_exec(
                     *argv, cwd=cwd, env=self._env(agent),
                     stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
