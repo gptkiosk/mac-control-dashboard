@@ -42,6 +42,7 @@ class Preferences(BaseModel):
     notify_plans: bool = True
     allow_discord_planning: bool = False
     allow_discord_control: bool = False
+    allow_discord_diagnostics: bool = False
     github: GithubPreferences = Field(default_factory=GithubPreferences)
     setup: SetupProgress = Field(default_factory=SetupProgress)
 
