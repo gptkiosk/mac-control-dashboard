@@ -49,6 +49,10 @@ def incomplete_error(run):
     # a report. This catches agents that put their final status after long findings
     # while avoiding ordinary discussion of a past blocker.
     explicit = explicit or re.search(r"\bthis (?:story|task) is (?:[*_`~]+)?(?:not done|not complete|unfinished|incomplete)\b|"
+                                     r"\bstatus\s*[*_`~]*\s*:\s*[*_`~]*\s*(?:not done|not complete|unfinished|incomplete)\b|"
+                                     r"\b(?:story|task)\b[^\n]{0,80}\bis (?:[*_`~]+)?(?:unfinished|incomplete)\b|"
+                                     r"\bs\d+[_-][a-z0-9_-]+\s+is (?:[*_`~]+)?(?:unfinished|incomplete)\b|"
+                                     r"\b(?:evidence )?pack is (?:[*_`~]+)?(?:unfinished|incomplete)\b|"
                                      r"\bnot fully verified\b|"
                                      r"\bthis handoff does not claim complete verification\b|"
                                      r"\bincomplete verification\b|"
