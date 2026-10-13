@@ -222,7 +222,8 @@ def dashboard(s, period="month", agent=None, target=None, now=None):
     for run in s.scalars(
         select(Run).where(Run.started_at >= min(start, month), Run.started_at <= now)
     ):
-        if (run.agent, run.session_id) in native_sessions or run.stage == "running":
+        # Only model agents have usage to price: scheduled monitor jobs and the like never call a model.
+        if run.agent not in cfg["accounts"] or (run.agent, run.session_id) in native_sessions or run.stage == "running":
             continue
         card = s.get(Card, run.card_id) if run.card_id else None
         thread = s.get(ChatThread, run.thread_id) if run.thread_id else None

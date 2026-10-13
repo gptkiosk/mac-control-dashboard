@@ -435,3 +435,11 @@ def test_runs_refused_before_any_model_call_cost_nothing(sessions):
         # Refusals are priced at 0; a cut-off run or an unexplained failure may have used tokens, so it stays unknown.
         assert d["summary"]["responses"] == 4 and d["summary"]["unpriced"] == 2
         assert d["summary"]["api_equivalent_usd"] == 0
+
+
+def test_jobs_that_call_no_model_are_not_usage_records(sessions):
+    with sessions.begin() as s:
+        s.add(Run(agent="mcd-monitor", stage="succeeded", started_at=int(NOW), working_dir="/ws", command="[]", log_path=""))
+    with sessions() as s:
+        d = dashboard(s, now=NOW + 1)
+        assert all(a["responses"] == 0 for a in d["overview"])

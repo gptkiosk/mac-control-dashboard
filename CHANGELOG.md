@@ -16,6 +16,7 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 - Runs that never reached a model, because the price gate refused them or the provider turned them away at
   its usage limit, are priced at 0 instead of counted as unpriced. A run cut off by a restart, or a failure
   with no stated cause, still stays unpriced, because it may have used tokens.
+- Scheduled monitor jobs, which never call a model, are no longer counted as usage records.
 
 ## [0.2.5] - 2026-10-13
 
