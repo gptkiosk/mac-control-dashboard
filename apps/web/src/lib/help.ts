@@ -181,6 +181,14 @@ export const helpGuides: HelpGuide[] = [
     note: 'This is the pre-dispatch spending guard, not a fault. A :free model name, a billing estimate or a past successful run does not classify a route. Paid OpenClaw and Hermes routes are always refused.',
   },
   {
+    id: 'subscription-limits', title: 'A Claude or Codex limit was reached', area: 'Costs',
+    summary: 'MCD notes when a subscription limit lifts, moves stories to an approved alternate on its own, and lets you send the rest across in one click.',
+    keywords: ['limit', 'limit reached', 'session limit', 'usage limit', 'resets', 'quota', 'reroute', 'fallback', 'alternate', 'codex', 'claude', 'resume time'],
+    steps: ['When a run stops on a limit, a notice appears at the top of every page with the time it lifts in your time zone. It appears once per limit; use the × to hide it.', 'Each story that meets the limit already moves to its approved alternate route by itself. The notice counts these rather than announcing every one.', 'To avoid wasted attempts, select Send the waiting stories to the other subscription. Stories that have not started then go to the approved alternate of the same grade (Haiku to Luna, Sonnet to Terra, Opus to Sol) until the limit lifts, and return to their own route afterwards. Turn it off in the same notice.', 'If the other subscription is limited too, or a story has no approved alternate, it waits. You can also ask Hermes in Discord for the status; changing the routing from Discord needs Allow my Discord requests to change how work is routed in your profile.'],
+    links: [{ label: 'Open Projects', to: '/projects' }, { label: 'Open your profile', to: '/profile' }],
+    note: 'Only routes the approved plan already lists are ever used, and nothing is approved, dispatched or spent beyond that. A limit with no reported lift time expires after a few hours or at the first later success.',
+  },
+  {
     id: 'model-rates', title: 'Price an unrecognized model', area: 'Costs',
     summary: 'Add explicit token rates when a model’s usage is captured but its API equivalent is unpriced.',
     keywords: ['unpriced', 'rates', 'price', 'pricing', 'million', 'cache', 'custom model'],
