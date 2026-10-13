@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ApiError, getJson, postJson } from '@/lib/api'
 
-// Shape of GET /api/updates. Everything comes from this host: no network, no provider call.
+// Shape of GET /api/app-updates. Everything comes from this host: no network, no provider call.
 interface Version { id: string; complete: boolean; version: string | null; channel: string | null; change: string | null; repository: string | null; authenticity: string | null; staged_at: number | null }
 interface Last { tx: string | null; kind: string | null; outcome: string; detail: string; target: string | null; from: string | null; at: number }
 interface Install { current: string | null; previous: string | null; versions: Version[]; tx: { id: string; kind: string; phase: string; target: string } | null; last: Last | null; needs_recovery: boolean }
@@ -71,7 +71,7 @@ function refusal(e: unknown, fallback: string) {
 
 async function read(): Promise<boolean> {
   try {
-    status.value = await getJson<UpdateStatus>('/api/updates')
+    status.value = await getJson<UpdateStatus>('/api/app-updates')
     checkedAt.value = Date.now(); reconnecting.value = false; error.value = ''
     return true
   } catch (e) {
@@ -96,7 +96,7 @@ async function submit() {
   if (!p || !confirmed.value) return
   busy.value = true; error.value = ''; notice.value = ''
   try {
-    await postJson('/api/updates/apply', { version_id: p.version.id })
+    await postJson('/api/app-updates/apply', { version_id: p.version.id })
     operation.value = { kind: p.kind, target: p.version.id, beforeTx: install.value?.last?.tx ?? null, sawTx: false, polls: 0 }
     pending.value = null; confirmed.value = false
     notice.value = `${p.kind === 'rollback' ? 'Rollback' : 'Install'} started on the host. Progress is shown below.`
