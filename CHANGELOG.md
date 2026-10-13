@@ -6,6 +6,13 @@ This file summarizes major development phases; it does not imply that this repos
 operator notes, private hostnames, personal identifiers and retirement
 records are omitted by policy.
 
+## v0.2.0 — feature level 0.2 (Oct 2026)
+- Branch-scoped git access for project agents (operator grants, hooks, credential helper).
+- Subscription limits: the lift time, one notice, a same-grade reroute option and Discord status.
+- Project context digests, a full ledger file and a cache-friendly prompt order (about a third less context).
+- A failed duplicate project card can be deleted when another card already carries its story.
+- Standard footer with product, owner, version, commits and a modified marker.
+
 ## Phase 1 — Skeleton (Oct 2026)
 - FastAPI backend skeleton (`serve.py`) with health endpoint.
 - Vue 3 frontend shell with sidebar, top bar and placeholder panels.
