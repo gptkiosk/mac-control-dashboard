@@ -10,6 +10,17 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-13
+
+### Fixed
+- A failed coordination, plan or dispatch card that another card already carries can be deleted, not
+  only duplicate stories, so a leftover duplicate no longer sits in Failed forever.
+- The GitHub page names the repository that has a problem and why (not found, access refused, or
+  temporarily unreadable) and keeps showing the others. One misspelled repository no longer blanks the
+  page or blames your login.
+- Saving the GitHub settings refuses a repository name that does not exist and suggests the closest
+  match, such as `rbp-control-dashboard` for `rpd-control-dashboard`.
+
 ## [0.2.0] - 2026-10-13
 
 ### Added
@@ -97,5 +108,6 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Optional Discord planning connection and profile preferences with encrypted write-only credential storage.
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.1
 [0.2.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.0
