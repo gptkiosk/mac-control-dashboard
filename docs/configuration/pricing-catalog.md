@@ -45,5 +45,6 @@ and apply to usage on or after their date, so history keeps the price in force a
 ## What is not in the estimate
 
 Tools, search grounding, batch, flex and priority tiers, regional or residency surcharges and taxes.
-Usage with no token counts (for example a run that failed before the model answered) stays unpriced
-rather than being counted as zero.
+A run that never reached a model (the price gate refused it, or the provider turned it away at its usage
+limit) used no tokens and is priced at 0. A run with no token counts for any other reason, such as one
+cut off by a restart or a failure that did not say why, stays unpriced rather than being counted as zero.

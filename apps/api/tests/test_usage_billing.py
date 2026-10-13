@@ -419,3 +419,19 @@ def test_published_rates_for_older_models_in_history(sessions):
         assert cost("claude-sonnet-5") == round((40_000 * 2 + 50_000 * 0.2 + 10_000 * 2.5 + 100_000 * 10) / 1e6, 6)
         assert price({"model": "gpt-5.4", "input_tokens": 131_210, "output_tokens": 372, "cached_input_tokens": 128_384}, cfg)[0] is not None
         assert price({"model": "gpt-5.5", "input_tokens": 55_058, "output_tokens": 26, "cached_input_tokens": 54_144}, cfg)[0] is not None
+
+
+def test_runs_refused_before_any_model_call_cost_nothing(sessions):
+    def run(**kw):
+        return Run(agent="codex", started_at=int(NOW), working_dir="/ws", command="[]", log_path="", model_requested="gpt-6-sol", **kw)
+
+    with sessions.begin() as s:
+        s.add(run(stage="failed", error="PRICE_UNKNOWN: route has no reviewed pricing class"))
+        s.add(run(stage="failed", error='{"message": "You\\u2019ve hit your usage limit. Try again at 10:03 PM."}'))
+        s.add(run(stage="interrupted", error="service stopped while the run was in progress"))
+        s.add(run(stage="failed", error="exit 1: something else broke"))
+    with sessions() as s:
+        d = dashboard(s, agent="codex", now=NOW + 1)
+        # Refusals are priced at 0; a cut-off run or an unexplained failure may have used tokens, so it stays unknown.
+        assert d["summary"]["responses"] == 4 and d["summary"]["unpriced"] == 2
+        assert d["summary"]["api_equivalent_usd"] == 0
