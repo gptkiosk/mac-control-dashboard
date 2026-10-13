@@ -19,6 +19,8 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 - After a crash or restart, MCD stops a leftover agent process more reliably. It now recognises the
   process even when a launcher rewrites its name (a symlinked or script-run CLI, or Python on macOS), so
   an agent is not left running and started a second time.
+- A handoff that says "Status: incomplete", "this story is incomplete" or "the evidence pack is
+  incomplete" is no longer accepted as finished work.
 
 ## [0.2.1] - 2026-10-13
 
