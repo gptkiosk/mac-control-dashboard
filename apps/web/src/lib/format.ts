@@ -128,3 +128,14 @@ export function formatDueDate(iso: string | null | undefined, now: Date = new Da
   const day = Number(m[3])
   return Number(m[1]) === now.getFullYear() ? `${month} ${day}` : `${month} ${day}, ${m[1]}`
 }
+
+/** A model id cut down to what tells models apart: "openrouter/thinkingmachines/inkling:free" becomes
+ *  "inkling · free" and "claude-opus-5-5" stays as it is. Falls back to the full id when nothing is left. */
+export function formatModelShort(id: string | null | undefined): string {
+  const full = (id ?? '').trim()
+  if (!full) return DASH
+  const [path, ...tags] = full.split(':')
+  const name = path.split('/').pop() || path
+  const tag = tags.join(':')
+  return tag ? `${name} \u00b7 ${tag}` : name
+}

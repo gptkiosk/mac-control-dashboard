@@ -10,6 +10,10 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+### Added
+- Tasks list has a Model column. It shows a condensed model name (for example `inkling · free`), the
+  model that actually ran when there is a run and the requested one otherwise; hover for the full id.
+
 ## [0.2.4] - 2026-10-13
 
 ### Added
