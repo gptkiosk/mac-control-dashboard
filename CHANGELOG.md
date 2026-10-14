@@ -10,6 +10,10 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-14
+
+MCD reaches the 0.4 feature level. The new item is specific to MCD running from a source checkout; RCD updates from its signed package and has no equivalent.
+
 ### Added
 - One-click, operator-approved update for MCD running from a source checkout. The Updates page checks the official stable release, shows the exact tag, the commit its signed manifest names and the release notes, and updates only after a separate confirmation. The signature is verified independently, the tag must point at the signed commit, and the existing reviewed upgrade script does the work (clean-tree check, data backup, drain check, exact commit and version health check, automatic rollback, private log). A detached helper survives the service restart and the page reports success, failure or rollback. Forks, modified checkouts and unsupported hosts are refused with the reason; packaged installs keep their signed updater. See `docs/configuration/source-update.md`.
 - `MAC_CONTROL_LAUNCHD_LABEL` setting so the app knows its LaunchAgent label.
@@ -258,7 +262,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.0...HEAD
 [0.2.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.7
 [0.2.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.6
 [0.2.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.5
@@ -268,4 +272,5 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.2.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.1
 [0.2.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.0
 
+[0.4.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.0
 [0.3.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.1
