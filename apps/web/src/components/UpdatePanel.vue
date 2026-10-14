@@ -21,7 +21,7 @@ interface CheckResponse { available: boolean; candidate: Candidate | null; insta
 interface Version { id: string; complete: boolean; notes?: string | null; version: string | null; channel: string | null; change: string | null; repository: string | null; authenticity: string | null; staged_at: number | null }
 interface Last { tx: string | null; kind: string | null; outcome: string; detail: string; target: string | null; from: string | null; at: number }
 interface Install { current: string | null; previous: string | null; versions: Version[]; tx: { id: string; kind: string; phase: string; target: string } | null; last: Last | null; needs_recovery: boolean }
-interface SourceInspection { eligible: boolean; problems: string[]; checkout?: string; version?: string; commit?: string; short?: string; tag?: string | null; branch?: string | null; remote?: string }
+interface SourceInspection { eligible: boolean; problems: string[]; checkout?: string; version?: string; commit?: string; short?: string; tag?: string | null; branch?: string | null; remote?: string | null }
 interface UpdateStatus { kind: string; source?: SourceInspection; detail: string; configured: boolean; problems: string[]; manual_instructions: string[]; install?: Install; blockers?: string[] }
 interface Pending { kind: 'install' | 'rollback'; version: Version }
 interface Operation { kind: Pending['kind']; target: string; beforeTx: string | null; sawTx: boolean; polls: number }
@@ -231,19 +231,23 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
 </script>
 <template>
   <section id="updates" class="card update-panel" aria-labelledby="updates-title">
-    <h2 id="updates-title">Updates</h2>
-    <p class="muted">Updates are never automatic. Checking reads the public GitHub release list only: it downloads nothing and changes nothing. Downloading, installing and rolling back each need your confirmation.</p>
+    <h2 id="updates-title" class="section-title">Updates</h2>
+    <p class="muted lead">Updates are never automatic. Checking reads the public GitHub release list only: it downloads nothing and changes nothing. Downloading, installing and rolling back each need your confirmation.</p>
     <p v-if="error" class="notice-warn" role="alert">{{ error }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="reconnecting" class="muted" role="status">Reconnecting to the service. It is restarting, so this can take a minute. Nothing is started again from here.</p>
     <template v-if="status">
       <p class="status" role="status">{{ summary }}</p>
       <template v-if="!managed">
-        <ul v-if="status.manual_instructions.length" class="updates">
+        <SourceUpdatePanel v-if="status.source" :inspection="status.source" />
+        <details v-if="status.manual_instructions.length && status.source?.eligible" class="manual">
+          <summary>Update by hand instead</summary>
+          <ol class="updates"><li v-for="step in status.manual_instructions" :key="step">{{ step }}</li></ol>
+        </details>
+        <ul v-else-if="status.manual_instructions.length" class="updates">
           <li v-for="step in status.manual_instructions" :key="step">{{ step }}</li>
         </ul>
         <p v-for="problem in status.problems" :key="problem" class="muted small">{{ problem }}</p>
-        <SourceUpdatePanel v-if="status.source" :inspection="status.source" />
       </template>
       <template v-else>
         <div class="actions">
@@ -343,13 +347,16 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
   </section>
 </template>
 <style scoped>
-.update-panel { margin: var(--gap-lg) 0; display: grid; gap: var(--gap-sm); }
+.update-panel { margin: var(--gap-lg) 0; display: grid; gap: var(--gap); }
+.lead { max-width: 72ch; line-height: var(--line-height); margin: 0; }
+.manual summary { cursor: pointer; padding: var(--gap-xs) 0; }
+.manual .updates { list-style: decimal; margin: var(--gap-sm) 0 0; line-height: var(--line-height); }
 h2, h3, h4 { margin: 0; }
 .status { font-weight: 600; margin: 0; }
 .small { font-size: var(--font-size-xs); margin: 0; }
 .actions { display: flex; gap: var(--gap); flex-wrap: wrap; align-items: center; }
 .actions label { display: flex; gap: var(--gap-sm); align-items: center; margin: 0; }
-.updates { display: grid; gap: var(--gap-sm); padding-left: var(--gap); }
+.updates { display: grid; gap: var(--gap-sm); padding-left: 1.5rem; line-height: var(--line-height); }
 .release, .confirm { display: grid; gap: var(--gap-sm); border: 1px solid var(--surface-border); border-radius: var(--radius); padding: var(--gap); justify-items: start; }
 .facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--gap-xs) var(--gap); margin: 0; font-size: var(--font-size-sm); }
 .facts dt { color: var(--text-muted); }

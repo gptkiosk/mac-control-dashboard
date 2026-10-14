@@ -9,7 +9,7 @@ const POLL_MS = 2000, MAX_POLLS = 600 // twenty minutes; polling only reads, it 
 
 interface Inspection {
   eligible: boolean; problems: string[]; checkout?: string; version?: string; commit?: string; short?: string
-  tag?: string | null; branch?: string | null; remote?: string
+  tag?: string | null; branch?: string | null; remote?: string | null
 }
 interface Candidate { tag: string; version: string; notes: string; html_url: string | null; published_at: string | null; change: string; repository: string }
 interface Check { inspection: Inspection; available: boolean; candidate: Candidate | null; verified: { commit: string; signer: string; version: string } | null; blockers: string[] }
@@ -126,50 +126,66 @@ onMounted(async () => {
 onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
 </script>
 <template>
-  <div class="source-update" aria-labelledby="source-update-title">
-    <h3 id="source-update-title">Update this checkout</h3>
-    <p class="muted">This copy runs from a source checkout. One click updates it to the newest official stable release, after you confirm the exact version. Nothing runs on a timer.</p>
+  <section class="source-update" aria-labelledby="source-update-title">
+    <header class="head">
+      <h3 id="source-update-title" class="section-title">Update this checkout</h3>
+      <p class="lead muted">This copy runs from a source checkout. One click updates it to the newest official stable release, after you confirm the exact version. Nothing runs on a timer.</p>
+    </header>
+
     <p v-if="error" class="notice-warn" role="alert">{{ error }}</p>
-    <p v-if="notice" role="status">{{ notice }}</p>
-    <p v-if="reconnecting" class="muted" role="status">Reconnecting to the service. It is restarting, so this can take a minute. Nothing is started again from here.</p>
+    <p v-if="notice" class="note" role="status">{{ notice }}</p>
+    <p v-if="reconnecting" class="note muted" role="status">Reconnecting to the service. It is restarting, so this can take a minute. Nothing is started again from here.</p>
 
     <template v-if="!inspection.eligible">
-      <p class="status" role="status">One-click update is not available here.</p>
-      <ul class="updates"><li v-for="p in inspection.problems" :key="p">{{ p }}</li></ul>
+      <div class="block">
+        <p class="status" role="status">One-click update is not available here.</p>
+        <ul class="list"><li v-for="p in inspection.problems" :key="p">{{ p }}</li></ul>
+      </div>
     </template>
     <template v-else>
-      <p class="muted small">Running {{ inspection.version }} (commit {{ inspection.short }}{{ inspection.tag ? `, ${inspection.tag}` : '' }}) from {{ inspection.checkout }}. Remote: {{ inspection.remote }}</p>
+      <dl class="facts running">
+        <dt>Running</dt><dd>{{ inspection.version }} <span class="muted">(commit {{ inspection.short }}{{ inspection.tag ? `, ${inspection.tag}` : '' }})</span></dd>
+        <dt>Checkout</dt><dd class="mono">{{ inspection.checkout }}</dd>
+        <dt>Updates from</dt><dd>{{ inspection.remote ?? `the official repository (${REPOSITORY})` }}</dd>
+      </dl>
       <div class="actions">
         <button class="btn" :disabled="busy || running" @click="check">Check for updates</button>
         <span v-if="checkedAt" class="muted small">Checked GitHub {{ new Date(checkedAt).toLocaleString() }}</span>
       </div>
 
-      <article v-if="candidate && verified" class="release">
-        <h4>Update available: {{ candidate.version }}</h4>
-        <p class="muted small">{{ candidate.tag }} · stable · published {{ candidate.published_at ?? 'unknown' }}</p>
+      <article v-if="candidate && verified" class="block release">
+        <div>
+          <h4>Update available: {{ candidate.version }}</h4>
+          <p class="muted small">{{ candidate.tag }} · stable · published {{ candidate.published_at ?? 'unknown' }}</p>
+        </div>
         <dl class="facts">
           <dt>From</dt><dd>{{ inspection.version }} ({{ inspection.short }})</dd>
-          <dt>To</dt><dd>{{ candidate.version }} (<span class="mono">{{ verified.commit }}</span>)</dd>
-          <dt>Source repository</dt><dd>{{ candidate.repository }}</dd>
-          <dt>Signature</dt><dd>valid, {{ verified.signer }}; the tag must point at the signed commit</dd>
+          <dt>To</dt><dd>{{ candidate.version }} <span class="mono">({{ verified.commit.slice(0, 12) }})</span></dd>
+          <dt>Repository</dt><dd>{{ candidate.repository }}</dd>
+          <dt>Signature</dt><dd>Valid, {{ verified.signer }}. The tag must point at the signed commit.</dd>
         </dl>
-        <h4>Release notes (plain text)</h4>
-        <pre class="notes">{{ candidate.notes || 'This release has no notes.' }}</pre>
-        <a v-if="releaseLink" :href="releaseLink" target="_blank" rel="noopener noreferrer">View this release on GitHub</a>
-        <ul v-if="blockers.length" class="updates" aria-label="Work that must finish first">
-          <li v-for="b in blockers" :key="b">{{ b }}</li>
-        </ul>
-        <p v-if="blockers.length" class="muted small">Drain first. Nothing is stopped or cancelled for you. Check again when it is done.</p>
-        <button v-else class="btn primary" :disabled="!canStart" @click="ask">Update to {{ candidate.version }}</button>
+        <div>
+          <h5>Release notes</h5>
+          <pre class="notes">{{ candidate.notes || 'This release has no notes.' }}</pre>
+          <a v-if="releaseLink" :href="releaseLink" target="_blank" rel="noopener noreferrer">View this release on GitHub</a>
+        </div>
+        <div v-if="blockers.length">
+          <p class="status">Finish this work first:</p>
+          <ul class="list" aria-label="Work that must finish first"><li v-for="b in blockers" :key="b">{{ b }}</li></ul>
+          <p class="muted small">Nothing is stopped or cancelled for you. Check again when it is done.</p>
+        </div>
+        <div v-else class="actions">
+          <button class="btn primary" :disabled="!canStart" @click="ask">Update to {{ candidate.version }}</button>
+        </div>
       </article>
 
-      <section v-if="asking && candidate && verified" class="confirm" aria-labelledby="source-confirm-title">
+      <section v-if="asking && candidate && verified" class="block confirm" aria-labelledby="source-confirm-title">
         <h4 id="source-confirm-title">Update to {{ candidate.version }}</h4>
-        <p>The service restarts for a short time. A data backup is taken first, and if the new version does not report exactly this release as healthy, the previous version is put back automatically. A log of every step is kept on the host.</p>
-        <ul class="preflight">
+        <p>The service restarts for a short time. A data backup is taken first, and if the new version does not report exactly this release as healthy, the previous version is put back automatically. Every step is logged on the host.</p>
+        <ul class="list">
           <li>Exact release: <strong>{{ candidate.tag }}</strong>, commit <span class="mono">{{ verified.commit.slice(0, 12) }}</span>.</li>
-          <li>The official repository and a clean checkout are re-checked, and so is idleness, right before anything changes.</li>
-          <li>Nothing is running, queued, waiting for approval or dispatching: the server checks again before it stops anything.</li>
+          <li>The official source and a clean checkout are checked again right before anything changes.</li>
+          <li>Nothing may be running, queued, waiting for approval or dispatching. The server checks again before it stops anything.</li>
         </ul>
         <label class="check"><input v-model="confirmed" type="checkbox" />I have read this and want to update to {{ candidate.tag }}.</label>
         <div class="actions">
@@ -179,35 +195,45 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
       </section>
     </template>
 
-    <section v-if="op?.operation" class="operation" aria-label="Update progress">
+    <section v-if="op?.operation" class="block" aria-label="Update progress">
       <h4>{{ running ? `Updating to ${op.operation.tag}` : `Update to ${op.operation.tag}: ${op.operation.state.replace('_', ' ')}` }}</h4>
       <p :class="op.operation.state === 'succeeded' ? 'status' : (running ? 'muted' : 'notice-warn')" :role="running ? 'status' : 'alert'">{{ op.operation.message }}</p>
       <ol class="steps">
-        <li v-for="s in op.operation.steps" :key="s.name" :data-state="s.state">{{ STEP_TEXT[s.name] ?? s.name }}: {{ s.state }}<span v-if="s.detail" class="muted small"> · {{ s.detail }}</span></li>
+        <li v-for="s in op.operation.steps" :key="s.name" :data-state="s.state"><strong>{{ STEP_TEXT[s.name] ?? s.name }}</strong> <span class="state">{{ s.state }}</span><span v-if="s.detail" class="muted small detail">{{ s.detail }}</span></li>
       </ol>
       <details v-if="op.log.length">
         <summary>Log</summary>
         <pre class="notes">{{ op.log.join('\n') }}</pre>
       </details>
     </section>
-  </div>
+  </section>
 </template>
 <style scoped>
-.source-update { display: grid; gap: var(--gap-sm); border-top: 1px solid var(--surface-border); padding-top: var(--gap); }
-h3, h4 { margin: 0; }
-.status { font-weight: 600; margin: 0; }
-.small { font-size: var(--font-size-xs); margin: 0; }
+.source-update { display: grid; gap: var(--gap); border-top: 1px solid var(--surface-border); padding-top: var(--gap-lg); margin-top: var(--gap-sm); }
+.head { display: grid; gap: var(--gap-xs); }
+h3, h4, h5, p { margin: 0; }
+h4 { font-size: var(--font-size); font-weight: var(--font-weight-strong); }
+h5 { font-size: var(--font-size-sm); font-weight: var(--font-weight-strong); color: var(--text-muted); margin-bottom: var(--gap-xs); }
+.lead, .block p, .note { max-width: 72ch; line-height: var(--line-height); }
+.status { font-weight: 600; }
+.small { font-size: var(--font-size-sm); }
+.block { display: grid; gap: var(--gap); padding: var(--gap); border: 1px solid var(--surface-border); border-radius: var(--radius); background: var(--accent-soft); justify-items: start; }
+.block > * { min-width: 0; max-width: 100%; }
+.confirm { background: transparent; border-color: var(--accent); }
 .actions { display: flex; gap: var(--gap); flex-wrap: wrap; align-items: center; }
-.updates { display: grid; gap: var(--gap-sm); padding-left: var(--gap); }
-.release, .confirm, .operation { display: grid; gap: var(--gap-sm); border: 1px solid var(--surface-border); border-radius: var(--radius); padding: var(--gap); justify-items: start; }
-.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--gap-xs) var(--gap); margin: 0; font-size: var(--font-size-sm); }
+.list { list-style: disc; display: grid; gap: var(--gap-sm); margin: 0; padding-left: 1.25rem; line-height: var(--line-height); }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--gap-sm) var(--gap-lg); margin: 0; font-size: var(--font-size); line-height: var(--line-height); }
 .facts dt { color: var(--text-muted); }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
-.mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--font-size-xs); }
-.notes { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16rem; overflow: auto; margin: 0; width: 100%; box-sizing: border-box; padding: var(--gap-sm); border: 1px solid var(--surface-border); border-radius: var(--radius); }
-.steps { margin: 0; padding-left: var(--gap); }
-.steps li[data-state='failed'] { font-weight: 600; }
-.preflight { margin: 0; padding-left: var(--gap); }
-.check { display: flex; align-items: flex-start; gap: var(--gap-sm); }
-.check input { flex: none; margin-top: var(--gap-xs); accent-color: var(--accent); }
+.running { padding: 0 var(--gap-xs); }
+.mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--font-size-sm); }
+.notes { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 14rem; overflow: auto; margin: 0 0 var(--gap-sm); width: 100%; box-sizing: border-box; padding: var(--gap-sm) var(--gap); border: 1px solid var(--surface-border); border-radius: var(--radius); font-family: inherit; font-size: var(--font-size-sm); line-height: var(--line-height); background: var(--panel); }
+.steps { list-style: decimal; display: grid; gap: var(--gap-sm); margin: 0; padding-left: 1.25rem; line-height: var(--line-height); }
+.steps .state { margin-left: var(--gap-xs); }
+.steps .detail { display: block; }
+.steps li[data-state='failed'] { color: var(--danger, #ef4f4f); }
+.check { display: flex; align-items: flex-start; gap: var(--gap-sm); line-height: var(--line-height); }
+.check input { flex: none; margin-top: 0.3rem; accent-color: var(--accent); }
+summary { cursor: pointer; padding: var(--gap-xs) 0; }
+@media (max-width: 40rem) { .facts { grid-template-columns: minmax(0, 1fr); gap: 0; } .facts dt { margin-top: var(--gap-sm); } }
 </style>

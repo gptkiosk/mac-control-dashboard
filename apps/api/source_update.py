@@ -156,12 +156,15 @@ def inspect(root: Path, *, product: str, label: str, system: str | None = None, 
             info["tag"] = git(root, "describe", "--tags", "--exact-match", "HEAD") or None
         except SourceUpdateError:
             info["tag"] = None
-        remote = git(root, "remote", "get-url", "origin")
+        remotes = git(root, "remote").split()
+        remote = git(root, "remote", "get-url", "origin") if "origin" in remotes else None
     except (SourceUpdateError, OSError, subprocess.SubprocessError):
-        problems.append("Git could not read this checkout (no origin remote, or the repository is damaged).")
+        problems.append("Git could not read this checkout (the repository may be damaged).")
         return {**info, "eligible": False, "problems": problems}
-    info["remote"] = sanitized_remote(remote)
-    info["official_remote"] = remote in REMOTE_FORMS
+    # A checkout with no remote at all is fine: releases are always fetched from the official repository directly.
+    # A remote that points anywhere else is a fork or a mirror, and is refused.
+    info["remote"] = sanitized_remote(remote) if remote else None
+    info["official_remote"] = remote is None or remote in REMOTE_FORMS
     if not info["official_remote"]:
         problems.append(f"origin is {info['remote']}, not the official repository {OFFICIAL_REPOSITORY}. Forks and other remotes are never updated this way.")
     try:
@@ -483,7 +486,7 @@ def _run_steps(rec: Recorder, out, root: Path, data_dir: Path, db_path: Path, cf
         if os.environ.get(hook):
             script_env[hook] = os.environ[hook]
     started = time.time()
-    proc = subprocess.Popen(["/bin/bash", str(root / "scripts" / "upgrade-driver.sh"), "--ref", commit, "--label", tag, "--require-idle"],
+    proc = subprocess.Popen(["/bin/bash", str(root / "scripts" / "upgrade-driver.sh"), "--ref", commit, "--from", OFFICIAL_URL, "--label", tag, "--require-idle"],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=script_env, cwd=str(root))
     for line in proc.stdout or []:
         log(out, line.rstrip())

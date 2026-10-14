@@ -211,6 +211,17 @@ def test_a_clean_official_checkout_is_eligible(world):
     assert info["official_remote"] and info["clean"] and info["commit"] == world.old
 
 
+def test_a_checkout_with_no_remote_is_eligible_and_updates_from_the_official_repository(world):
+    git(world.driver, "remote", "remove", "origin")                     # how a frozen production driver is kept
+    info = su.inspect(world.driver, product="mcd", label="com.test.mcd")
+    assert info["eligible"] and info["remote"] is None and info["official_remote"]
+    release_new(world)
+    operation_after_begin(world)
+    assert run_helper(world) == 0
+    assert su.read_operation(world.data)["state"] == "succeeded" and git(world.driver, "rev-parse", "HEAD") == world.commit
+    assert git(world.driver, "remote") == ""                             # nothing was left behind in the repository config
+
+
 def test_forks_and_other_remotes_are_never_updated_this_way(world):
     git(world.driver, "remote", "set-url", "origin", "https://github.com/someone/mac-control-dashboard.git")
     info = su.inspect(world.driver, product="mcd", label="com.test.mcd")

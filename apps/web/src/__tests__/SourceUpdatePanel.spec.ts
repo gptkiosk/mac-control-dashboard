@@ -34,6 +34,18 @@ it('shows nothing extra on a packaged install and no update button on an unmanag
   w.unmount()
 })
 
+it('offers the manual steps only as a fallback when the one-click update is available', async () => {
+  stubFetch(url => {
+    if (url === '/api/app-updates') return { body: { ...dev(inspection({ remote: null })), manual_instructions: ['Back up the data folder.'] } }
+    if (url === '/api/app-updates/source/operation') return { body: { operation: null, active: false, log: [] } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  expect(w.text()).toContain('the official repository')
+  expect(w.get('details.manual summary').text()).toBe('Update by hand instead')
+  w.unmount()
+})
+
 it('explains why a checkout cannot be updated and offers no button', async () => {
   stubFetch(url => {
     if (url === '/api/app-updates') return { body: dev(inspection({ eligible: false, problems: ['origin is a fork, not the official repository.'] })) }
@@ -58,7 +70,7 @@ it('reads the release only when asked, shows the exact tag, commit and plain-tex
   expect(calls(f, 'GET', '/api/app-updates/source/check')).toHaveLength(0)
   await button(w, 'Check for updates')!.trigger('click'); await flushPromises()
   expect(w.text()).toContain('Update available: 0.4.0')
-  expect(w.text()).toContain(COMMIT)
+  expect(w.text()).toContain(COMMIT.slice(0, 12))
   expect(w.find('pre.notes').text()).toBe('Adds <b>things</b>')
   expect(w.find('b').exists()).toBe(false)
   expect(w.find(`a[href^="https://github.com/${REPO}/"]`).exists()).toBe(true)
@@ -138,7 +150,7 @@ it('does not offer the button while work is running and says what to drain', asy
   const w = mount(UpdatePanel); await flushPromises()
   await button(w, 'Check for updates')!.trigger('click'); await flushPromises()
   expect(w.text()).toContain('still running')
-  expect(w.text()).toContain('Drain first')
+  expect(w.text()).toContain('Finish this work first')
   expect(button(w, 'Update to 0.4.0')).toBeUndefined()
   w.unmount()
 })

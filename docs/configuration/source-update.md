@@ -20,7 +20,7 @@ The helper runs the same reviewed script as the command line, `scripts/upgrade-d
 
 It refuses, and says why, when:
 
-- origin is not the official repository (forks and other remotes are never updated this way), or the checkout has uncommitted changes to tracked files;
+- origin points anywhere but the official repository (forks and other remotes are never updated this way; a checkout with no remote at all is fine, because releases are fetched from the official repository directly), or the checkout has uncommitted changes to tracked files;
 - the host is not macOS on Apple silicon, `git`, `npm` or `uv` is missing, or the LaunchAgent is not loaded;
 - the signed manifest is not signed by the dedicated release key, is not MCD's stable release of that version, or names a dirty or ineligible source tree;
 - the tag does not point at exactly the commit the signature names (a moved tag);

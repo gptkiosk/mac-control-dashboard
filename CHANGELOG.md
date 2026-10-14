@@ -10,6 +10,12 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-14
+
+### Fixed
+- The one-click update now works on a checkout that has no `origin` remote, which is how a production driver is usually kept: it fetches the release from the official repository directly. A remote that points anywhere else is still refused.
+- The Updates panel is easier to read: clearer spacing and headings, a plain facts list, separated buttons, the exact release and commit shown before you confirm, numbered progress steps, and the manual steps folded away when the one-click update is available.
+
 ## [0.4.0] - 2026-10-14
 
 MCD reaches the 0.4 feature level. The new item is specific to MCD running from a source checkout; RCD updates from its signed package and has no equivalent.
@@ -262,7 +268,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.1...HEAD
 [0.2.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.7
 [0.2.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.6
 [0.2.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.5
@@ -272,5 +278,6 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.2.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.1
 [0.2.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.0
 
+[0.4.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.1
 [0.4.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.0
 [0.3.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.1
