@@ -119,3 +119,9 @@ def test_a_tag_that_already_has_a_release_is_left_alone():
     gate = steps_text("gate")
     assert "gh release view" in gate and "build=false" in gate and "never alters a release" in gate
     assert JOBS["gate"]["permissions"] == {"contents": "read"}
+
+
+def test_publish_commands_name_the_repository_without_requiring_a_checkout():
+    publish = steps_text('publish-draft')
+    assert 'gh release view "$TAG" --repo "$GITHUB_REPOSITORY"' in publish
+    assert 'gh release create "$TAG" --repo "$GITHUB_REPOSITORY"' in publish
