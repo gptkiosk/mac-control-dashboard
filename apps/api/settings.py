@@ -70,6 +70,8 @@ class Settings(BaseSettings):
         description="Bind address. Stays 127.0.0.1 until Phase 4 auth is enforced.",
     )
     port: int = Field(default=8800, ge=1, le=65535)
+    launchd_label: str = Field(default="com.operator.mac-control", pattern=r"^[A-Za-z0-9._-]{1,128}$",
+                               description="The LaunchAgent this service runs under; source-checkout updates restart it.")
     data_dir: Path = Field(default=DEFAULT_DATA_DIR)
     web_dist: Path = Field(
         default=REPO_ROOT / "apps" / "web" / "dist",

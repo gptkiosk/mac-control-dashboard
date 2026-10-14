@@ -431,6 +431,19 @@ def query_release(cfg: FetchConfig, opener: Opener | None = None) -> Candidate |
     return select_candidate(cfg, releases)
 
 
+def fetch_asset_bytes(cfg: FetchConfig, asset: Asset, opener: Opener | None = None) -> bytes:
+    """One small asset (a manifest or its signature) into memory: same host rules, size and digest checks as a download."""
+    if asset.size > 1024 * 1024:
+        raise FetchError(f"{asset.name}: too large to read into memory")
+    resp = _request(cfg, asset.url, "application/octet-stream", opener)
+    data = _read_capped(resp, min(asset.limit, asset.size), time.monotonic() + cfg.limits.total_seconds)
+    if len(data) != asset.size:
+        raise FetchError(f"{asset.name}: ended early ({len(data)} of {asset.size} bytes)")
+    if asset.digest and not hmac.compare_digest(hashlib.sha256(data).hexdigest(), asset.digest):
+        raise FetchError(f"{asset.name}: sha256 differs from the digest GitHub published")
+    return data
+
+
 # --- download --------------------------------------------------------------------------
 
 

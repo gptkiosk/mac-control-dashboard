@@ -37,5 +37,8 @@ is on that release**. The same steps apply to both products; MCD and RCD share m
 
 `scripts/driver-status.sh` answers "am I on the latest?" at any time.
 
+The same upgrade can be started from the Updates page of a source checkout, after the operator confirms
+the exact version: see [One-click update of a source checkout](../configuration/source-update.md).
+
 Release notes are written for people reading the Releases page, so each entry says what changed for
 the operator, not how. A release cannot be built (`scripts/release/release.py build`) without them.
