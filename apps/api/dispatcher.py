@@ -46,6 +46,7 @@ from dispatch_gate import (DispatchDenied, admit as admit_dispatch,
 import projects
 from idempotency import refuse_timeout_retry
 from models import Card, CardDependency, ChatMessage, ChatThread, Run, RunEvent
+from profiles import SAVED_KEY_AGENTS, saved_openrouter_key
 from operator_boundary import runner_env
 
 logger = logging.getLogger("mac_control.dispatcher")
@@ -69,6 +70,16 @@ TRANSIENT_ERROR = re.compile(r"(?:rate.?limit|too many requests|quota|temporar(?
 class _Handle:
     proc: asyncio.subprocess.Process | None = None
     cancel_requested: bool = False
+
+
+SECRET_KEY = re.compile(r"sk-or-[A-Za-z0-9_\-]{12,}")
+
+
+def scrub(text: str, key: str | None = None) -> str:
+    """Remove OpenRouter keys from anything an agent printed before it is stored or shown."""
+    if key:
+        text = text.replace(key, "[redacted OpenRouter key]")
+    return SECRET_KEY.sub("[redacted OpenRouter key]", text)
 
 
 def _now() -> int:
@@ -372,9 +383,11 @@ class Dispatcher:
         started = time.monotonic()
         stage, exit_code, error = "failed", None, None
         quota_reported = False
+        supplied_key: str | None = None  # the saved OpenRouter key this run was given, if any: scrubbed from everything it prints
 
         with open(log_path, "a", encoding="utf-8") as log, open(raw_path, "a", encoding="utf-8") as raw:
             def write(text: str) -> None:
+                text = scrub(text, supplied_key)
                 stamp = time.strftime("%H:%M:%S")
                 for part in (text.splitlines() or [""]):
                     log.write(f"{stamp}  {part}\n")
@@ -386,7 +399,7 @@ class Dispatcher:
                     line_b = await stream.readline()
                     if not line_b:
                         return
-                    line = line_b.decode("utf-8", "replace").rstrip("\n")
+                    line = scrub(line_b.decode("utf-8", "replace").rstrip("\n"), supplied_key)
                     raw.write(("! " if is_stderr else "") + line + "\n")
                     if is_stderr:
                         parser.feed_stderr(line)
@@ -411,8 +424,16 @@ class Dispatcher:
                 if agent == 'hermes':
                     from hermes_runtime import command
                     argv = command(argv, getattr(self.settings, "agent_tools_path", None))
+                env = self._env(agent)
+                if agent in SAVED_KEY_AGENTS:
+                    with self.sessions() as db:
+                        supplied_key = saved_openrouter_key(db, self.settings)
+                if supplied_key:
+                    # The only operator credential an agent ever receives, and only after the operator opted in.
+                    env["OPENROUTER_API_KEY"] = supplied_key
+                    write("The saved OpenRouter key was supplied to this run (its value is never logged).")
                 proc = await asyncio.create_subprocess_exec(
-                    *argv, cwd=cwd, env=self._env(agent),
+                    *argv, cwd=cwd, env=env,
                     stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE, start_new_session=True, limit=LINE_LIMIT,
                 )
