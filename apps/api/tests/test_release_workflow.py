@@ -24,9 +24,16 @@ def steps_text(job: str) -> str:
     return "\n".join(f"{s.get('name', '')}\n{s.get('run', '')}\n{s.get('uses', '')}" for s in JOBS[job]["steps"])
 
 
-def test_it_runs_only_for_version_tags_and_never_for_pull_requests():
+def test_it_runs_for_version_tags_or_explicit_tag_dispatch_never_pull_requests():
     triggers = WORKFLOW[True] if True in WORKFLOW else WORKFLOW["on"]       # PyYAML reads the key `on` as True
-    assert list(triggers) == ["push"] and triggers["push"] == {"tags": ["v*"]}
+    assert set(triggers) == {"push", "workflow_dispatch"}
+    assert triggers["push"] == {"tags": ["v*"]}
+    inputs = triggers["workflow_dispatch"]["inputs"]
+    assert set(inputs) == {"tag"}
+    assert inputs["tag"]["required"] is True and inputs["tag"]["type"] == "string"
+    checkout = next(s for s in JOBS["build"]["steps"] if s.get("uses", "").startswith("actions/checkout"))
+    assert "format('refs/tags/{0}', inputs.tag)" in checkout["with"]["ref"]
+    assert "inputs.tag || github.ref_name" in JOBS["build"]["env"]["TAG"]
     assert "pull_request_target" not in TEXT and "workflow_run" not in TEXT
 
 
