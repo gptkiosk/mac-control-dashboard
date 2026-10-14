@@ -39,3 +39,5 @@ MCD is MIT licensed and provided as-is for independent personal and commercial u
 Screenshots use [synthetic preview data](screenshots/README.md). They illustrate controls, not verified connections to external services. Optional captures that are not included are identified explicitly in individual guides.
 
 - [Clean Mac and Raspberry Pi OS0.3.0 installation](install/clean-os-0.3.0.md)
+
+- [Project consultant and AI defaults (0.3.1)](project-consultant.md)
