@@ -191,3 +191,22 @@ def test_agent_processes_are_refused_over_real_loopback(tmp_path):
         for proc, group in ((executable_agent, False), (runner, True), (server, False)):
             if proc is not None:
                 _stop(proc, group)
+
+
+def test_zombie_access_denied_has_no_sockets_but_live_process_stays_unverified(monkeypatch):
+    from types import SimpleNamespace
+    import operator_boundary as boundary
+
+    process = SimpleNamespace(status=lambda: boundary.psutil.STATUS_ZOMBIE)
+
+    def denied(kind):
+        raise boundary.psutil.AccessDenied(12345)
+
+    process.net_connections = denied
+    monkeypatch.setattr(boundary.psutil, "Process", lambda pid: process)
+    guard = boundary.OperatorBoundary(SimpleNamespace(), None)
+    monkeypatch.setattr(guard, "_agent_processes", lambda: {12345: 1})
+    assert guard.peer(("127.0.0.1", 1234), ("127.0.0.1", 8800)) is None
+    process.status = lambda: boundary.psutil.STATUS_RUNNING
+    peer = guard.peer(("127.0.0.1", 1234), ("127.0.0.1", 8800))
+    assert peer is not None and not peer.verified
