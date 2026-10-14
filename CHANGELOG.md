@@ -253,7 +253,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.3.1...HEAD
 [0.2.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.7
 [0.2.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.6
 [0.2.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.5
@@ -262,3 +262,5 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.2.2]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.2
 [0.2.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.1
 [0.2.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.0
+
+[0.3.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.1
