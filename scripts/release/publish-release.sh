@@ -1,7 +1,7 @@
 #!/bin/bash
 # Publish the GitHub Release for a version that is committed and pushed: the tag v<version> on that
 # commit, with the notes taken from its CHANGELOG.md section. Run by the operator with their own gh
-# login; agents do not publish releases.
+# login; publication requires explicit operator authorization.
 #
 #   scripts/release/publish-release.sh --version 0.2.0 --target <commit> [--repo owner/name] [--prerelease] [--package] [--dry-run]
 #
@@ -9,7 +9,7 @@
 # section for the version, or a tag or release already exists. Then roll the running app onto the
 # tag with scripts/upgrade-driver.sh, so the footer shows the commit the release names.
 #
-# --package creates only the tag. The "draft release (macOS arm64)" workflow then builds the package,
+# --package creates only the tag. The platform release workflow then builds the package,
 # signs its manifest and creates a DRAFT release with these same notes, which you review and publish
 # on GitHub. It needs the repository secret RELEASE_SSH_PRIVATE_KEY and refuses without it. Without
 # --package a plain release (notes, no package) is created, which the in-app updater cannot install.
