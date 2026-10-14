@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from deps import get_session
 from settings import get_settings
 from models import Project, ProjectTask, Card, CardDependency, Run
-from project_schemas import Close, Document, Save, Action, Retry, GoFree, ContinueOutput, Note, Accept, HandoffPolicy, Retier, RepairExecution
+from project_schemas import Close, Document, Save, Action, Retry, GoFree, ContinueOutput, Note, Accept, HandoffPolicy, Retier, RepairExecution, ModelLock
 import projects
 
 router=APIRouter(prefix='/api/projects')
@@ -215,3 +215,9 @@ def integration(project_id:int,card_id:int,body:Accept,request:Request,s:Session
 def handoff_policy(project_id:int,body:HandoffPolicy,request:Request,s:Session=Depends(get_session)):
     identity=actor(request);write(s);p=projects.get(s,project_id)
     projects.set_handoff_policy(s,p,body,identity);s.commit();return projects.detail(s,p)
+
+
+@router.post('/{project_id}/model-lock')
+def model_lock(project_id:int,body:ModelLock,request:Request,s:Session=Depends(get_session)):
+    identity=actor(request);write(s);p=projects.get(s,project_id)
+    projects.set_model_lock(s,p,body,identity);s.commit();return projects.detail(s,p)

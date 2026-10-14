@@ -1,6 +1,6 @@
 """Bounded model-output contract. Plans are data, never commands or authorization."""
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 class Strict(BaseModel):
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
@@ -104,3 +104,8 @@ class Retier(Strict):
 class RepairExecution(Strict):
     revision: int = Field(ge=1)
     acknowledge: bool = False
+
+
+class ModelLock(Strict):
+    revision: int = Field(ge=1)
+    enabled: StrictBool

@@ -258,7 +258,7 @@ class Dispatcher:
                 # While a subscription limit lasts and the operator chose to reroute, a story that
                 # has not started goes straight to an approved alternate route of the same grade.
                 rerouted_from = None
-                if link and link.role == 'story' and card.agent in provider_limits.PROVIDERS and not getattr(card, 'output_only', False):
+                if link and link.role == 'story' and card.agent in provider_limits.PROVIDERS and not getattr(card, 'output_only', False) and not projects.card_model_locked(s, card):
                     limit_row = provider_limits.rerouting_row(s, card.agent, now)
                     if limit_row:
                         alt = provider_limits.alternate(projects.approved_story_routes(projects.get(s, link.project_id), link),
@@ -544,7 +544,7 @@ class Dispatcher:
                 self._quarantine(s, run, now)
             card = s.get(Card, card_id)
             if card and card.column == "running":
-                retrying = self._retryable(stage, error) and run.attempt < card.max_attempts
+                retrying = self._retryable(stage, error) and run.attempt < card.max_attempts and not projects.card_model_locked(s, card)
                 if retrying:
                     delay = card.retry_backoff_s * (2 ** max(0, run.attempt - 1))
                     card.column, card.retry_after = "queued", now + delay
