@@ -29,7 +29,7 @@ Confirmed on [tested environments](docs/tested-environments.md): Mac mini M4, ma
 
 ## Quick start
 
-For a fresh computer, follow [clean Mac and Raspberry Pi installation](docs/install/clean-os-0.3.0.md).
+For a fresh computer, follow [clean Mac and Raspberry Pi installation](docs/install/clean-os-0.3.1.md).
 
 See [Getting started](docs/getting-started.md) for prerequisites and setup, then the [configuration guides](docs/configuration/settings.md) for sign-in, private remote access and profile preferences.
 
@@ -48,4 +48,4 @@ Dispatch admission: see [pricing and budget policy](docs/configuration/dispatch-
 
 [Contributing](CONTRIBUTING.md) · [Discussions](https://github.com/gptkiosk/mac-control-dashboard/discussions) · [Wiki](https://github.com/gptkiosk/mac-control-dashboard/wiki) · [Agent workflow](docs/development/agent-workflow.md) · [UI preview standard](docs/development/ui-testing.md) · [Support policy](SUPPORT.md)
 
-Public participation does not promise ongoing upstream development or support. RCD is a separate repository: [rbp-control-dashboard](https://github.com/gptkiosk/rbp-control-dashboard), with a public 0.3.0 source candidate and physical Pi acceptance pending.
+Public participation does not promise ongoing upstream development or support. RCD is a separate repository: [rbp-control-dashboard](https://github.com/gptkiosk/rbp-control-dashboard), with a public 0.3.1 source candidate and physical Pi acceptance pending.
