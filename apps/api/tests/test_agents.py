@@ -106,6 +106,7 @@ def test_claude_argv_modes_and_guards():
     read = agents.build_claude(CARD, "do it", None, 1.0, "claude")
     assert read[read.index("--permission-mode") + 1] == "plan"
     assert "Bash(git push:*)" in read and read[read.index("--max-budget-usd") + 1] == "1.00"
+    assert read[read.index('--allowedTools') + 1:read.index('--allowedTools') + 3] == ['WebSearch', 'WebFetch']
     edit = agents.build_claude(SimpleNamespace(**{**vars(CARD), "mode": "edit"}), "do it", "claude-opus-5-5", 2.5, "claude")
     assert edit[edit.index("--permission-mode") + 1] == "acceptEdits"
     assert edit[edit.index("--model") + 1] == "claude-opus-5-5"
@@ -178,4 +179,5 @@ def test_output_continuation_resumes_with_only_read_tools_and_subscription():
     assert argv[argv.index('--resume')+1]=='prior-session'
     assert argv[argv.index('--mcp-config')+1]=='{"mcpServers":{}}'
     assert '--strict-mcp-config' in argv and '--disable-slash-commands' in argv
+    assert '--allowedTools' not in argv
     assert '--max-budget-usd' not in argv

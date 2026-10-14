@@ -20,11 +20,11 @@ Keep the downloaded JSON private. The import helper can configure the host:
 
 ```sh
 apps/api/.venv/bin/python scripts/configure-google-auth.py \
-  ~/.mac-control/google-oauth-client.json \
-  --enable --allowed-email operator@example.com
+  ~/.mcd-control/google-oauth-client.json \
+  --data-dir ~/.mcd-control --enable --allowed-email operator@example.com
 ```
 
-Replace the example email and source path with your own. The helper requires an owned regular source file, refuses symlinks, bounds its size and sets its permissions to `600`. It validates the web-client credentials and local callback, extracts valid HTTPS callback origins, preserves other dotenv settings and privately backs up an existing dotenv file before replacement. `--data-dir` selects the helper's output directory; the application's default dotenv lookup remains `~/.mac-control/.env`, so coordinate any custom location explicitly. Without `--enable`, the helper writes auth disabled.
+Replace the example email and source path with your own. The helper requires an owned regular source file, refuses symlinks, bounds its size and sets its permissions to `600`. It validates the web-client credentials and local callback, configures only explicitly selected callback origins, preserves other dotenv settings and privately backs up an existing dotenv file before replacement. `--data-dir` selects the helper's output directory; the application's default dotenv lookup remains `~/.mcd-control/.env`, so coordinate any custom location explicitly. Without `--enable`, the helper writes auth disabled.
 
 Restart the application after changing host settings. The LaunchAgent installer performs a reload, interrupting active runs; wait for a safe time. The installer does not load dotenv values itself: the application loads them at startup.
 
@@ -76,3 +76,11 @@ Keep the secret, downloaded JSON, recovery token and dotenv backups outside sour
 - [Environment reference](environment.md)
 - [LaunchAgent reload](launchd.md)
 - [Runtime data and backups](runtime-data.md)
+
+## Independent installations and additional operators
+
+Every installer supplies their own Web application OAuth client and approved email addresses. There is no maintainer-hosted login service, bundled client secret, personal tailnet endpoint or global account allowlist. A shared client is optional; each installation still keeps separate sessions and settings. Repeat `--allowed-email` for every approved operator on that host; do not leave the example email in place. This is explicit host access, not unrestricted access for anyone with a Google account.
+
+Download the JSON when creating the client, before closing the creation dialog. Register the exact callback for each address actually used. The helper always configures `http://127.0.0.1:8800`. Add `--origin http://127.0.0.1:5173` for an SSH tunnel using that browser port, or `--origin https://YOUR-MACHINE.YOUR-TAILNET.ts.net:9443` for your own private HTTPS endpoint. The origin excludes `/auth/callback`; Google's registration includes it. Other callbacks in a reused client JSON are not imported. Reimporting replaces the origin list with these selected addresses; pass every origin you want to retain.
+
+Run from the source checkout with its venv Python, or use the installed release's `current/runtime/bin/python` to run the checkout's helper. Restart the background service when no jobs are running, then begin a fresh login. Existing installations are not changed automatically by this helper update. Review and remove unrelated entries from their private `MAC_CONTROL_AUTH_ORIGINS` if necessary.

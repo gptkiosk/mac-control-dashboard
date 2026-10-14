@@ -10,6 +10,19 @@ For the operator: inspect open work across repositories using the existing GitHu
 
 - ![GitHub repository view](../screenshots/github-repo.png) — synthetic disconnected-state preview showing the page and connection/empty state. Repository search and PR/issue detail controls appear after a catalog is available; this image does not prove a live GitHub connection.
 
+## Choosing which repositories to show
+
+Open **Settings > GitHub** (also in the setup wizard). Enter the GitHub account that is already signed
+in with `gh` on the host and its repositories appear as a checklist, newest first, with private and
+archived ones marked. Tick the ones to show, use **Select all** or **Clear**, and search when the list is
+long. Repositories already saved are ticked for you. A saved name that is not in the account's list (another
+owner, or a name GitHub no longer shows) stays visible and marked so it can be removed. To add a repository
+from another owner, use **Add a repository by name**.
+
+Saving checks that each name exists for the signed-in login and suggests the closest match for a
+misspelling. On the GitHub page, a repository that cannot be read is named with the reason (not found, access
+refused, or temporarily unreadable) while the others keep loading.
+
 ## Controls
 
 ### Start here
@@ -51,3 +64,7 @@ For the operator: inspect open work across repositories using the existing GitHu
 - [MCP servers](mcp.md) — tool integrations separate from GitHub read-only access.
 - [Ops reports](reports.md) — Hermes reports; independent of repository state.
 - Source references: `docs/OPS_PANELS.md` (GitHub read-only behavior, `gh api --method GET`, no token scope broadening, cached query limits), `docs/HERMES_ACCESS.md` (independent of repository work), `apps/web/src/views/GithubView.vue` (UI structure and data sources).
+
+## External-action backend
+
+The current page remains read-only. The separate [external-action guard](../configuration/github-actions.md) requires an exact operator preview and individual authorization, stores an audit and suppresses duplicates. Host writes default to disabled; task/project approvals do not authorize GitHub sends. No send UI or live-provider verification is claimed.

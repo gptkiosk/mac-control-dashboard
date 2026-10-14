@@ -18,6 +18,10 @@ Start with [Getting started](getting-started.md), then open the [Setup wizard](S
 | Help chat and how-tos | [Help](sections/help.md) · [Printable how-tos](HOW_TO.md) |
 | Profile, credentials and Discord | [Settings](configuration/settings.md) · [Profiles and Discord](PROFILES_AND_DISCORD.md) |
 
+- [Managed agent tools](install/agent-tools.md)
+- [Recommended agent mix and memberships](configuration/recommended-agent-mix.md)
+- [Agent roles](configuration/agent-roles.md)
+
 ## Configuration reference
 
 - [Settings](configuration/settings.md) and [Environment variables](configuration/environment.md)
@@ -26,9 +30,14 @@ Start with [Getting started](getting-started.md), then open the [Setup wizard](S
 - [Alerts configuration](configuration/alerts-config.md)
 - [LaunchAgent installation](configuration/launchd.md)
 - [Runtime data and backups](configuration/runtime-data.md)
+- [Platform parity with RCD (Raspberry Pi OS)](PLATFORM_PARITY.md)
 
 ## Reuse and development
 
 MCD is MIT licensed and provided as-is for independent personal and commercial use. No ongoing upstream development, updates or support is promised. See [Developing your fork](../CONTRIBUTING.md), [Security policy](../SECURITY.md), [License](../LICENSE), [Third-party notices](../THIRD_PARTY_NOTICES.md), [Change history](../CHANGELOG.md) and [Ideas for forks](development/ROADMAP.md).
 
 Screenshots use [synthetic preview data](screenshots/README.md). They illustrate controls, not verified connections to external services. Optional captures that are not included are identified explicitly in individual guides.
+
+- [Clean Mac and Raspberry Pi OS0.3.1 installation](install/clean-os-0.3.1.md)
+
+- [Project consultant and AI defaults (0.3.1)](project-consultant.md)

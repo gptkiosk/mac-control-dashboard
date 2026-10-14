@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MembershipPrerequisites from '@/components/MembershipPrerequisites.vue'
 import AppSelect from '@/components/AppSelect.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import ModalShell from '@/components/ModalShell.vue'
@@ -70,6 +71,7 @@ async function save() {
     <form class="billing-form" @submit.prevent="save">
       <header>
         <h2 id="billing-title" class="section-title">Billing & API rates</h2>
+        <MembershipPrerequisites />
         <button class="btn" type="button" aria-label="Close billing settings" @click="emit('close')">
           ×
         </button>
@@ -104,13 +106,18 @@ async function save() {
               :disabled="settings.accounts[a.id].mode !== 'subscription'"
               :aria-label="`${a.name} monthly subscription`"
           /></label>
+          <p v-if="a.id === 'grok'" class="muted small grok-note">
+            Grok Build only runs on a Subscription here. Saving Subscription also means you accept that it sends the
+            task and the files it reads to xAI. Runs have telemetry and trace upload off and stay inside a sandbox.
+          </p>
         </div>
       </div>
       <details v-if="settings" class="rate-settings">
         <summary>Model rates · USD per million tokens</summary>
         <p class="muted small">
-          Source-reported cost takes precedence. Missing rates stay unpriced. Default estimates use standard
-          short-context rates verified October 9, 2026; tools, taxes and speed/residency surcharges are
+          Source-reported cost takes precedence. Models whose name ends in :free cost 0. Other missing rates stay
+          unpriced. Default estimates use standard published rates, with long-context tiers where the provider
+          has one, verified October 13, 2026; tools, taxes and speed/residency surcharges are
           excluded. Requests above a configured input limit stay unpriced. A custom rate applies uniformly up
           to that limit.
         </p>
@@ -222,6 +229,10 @@ p {
   display: flex;
   flex-direction: column;
   gap: var(--gap);
+}
+.grok-note {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 .account {
   display: grid;

@@ -1,0 +1,48 @@
+{
+  "product": "mcd",
+  "product_name": "Mac Control Dashboard",
+  "repository": "gptkiosk/mac-control-dashboard",
+  "platforms": {
+    "darwin-arm64": {
+      "os": "darwin",
+      "arch": "arm64",
+      "python_version": "3.12",
+      "python_abi": "cp312",
+      "pip_platforms": [
+        "macosx_14_0_arm64"
+      ],
+      "uv_python_platform": "aarch64-apple-darwin"
+    }
+  },
+  "include": [
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "apps/api/*.py",
+    "apps/api/alembic.ini",
+    "apps/api/.env.example",
+    "apps/api/requirements.in",
+    "apps/api/requirements.runtime.in",
+    "apps/api/pricing_catalog.json",
+    "apps/api/routes/*.py",
+    "apps/api/migrations/env.py",
+    "apps/api/migrations/script.py.mako",
+    "apps/api/migrations/versions/*.py",
+    "integrations/hermes/mcd-run.py",
+    "integrations/hermes/mcd-projects/*.py",
+    "integrations/hermes/mcd-projects/*.yaml",
+    "ops/alerts.example.toml",
+    "ops/launchd/*.template",
+    "apps/api/tool_catalog.json",
+    "apps/api/tool_locks/*/package.json",
+    "apps/api/tool_locks/*/package-lock.json",
+    "packs/roles/delegator/*"
+  ],
+  "excluded_components": [
+    "apps/mcp: separate agent tool server with its own venv; not packaged in v1",
+    "apps/web/src and node_modules: only the built UI (apps/web/dist) is shipped",
+    "tests, docs, scripts and development tooling"
+  ]
+}

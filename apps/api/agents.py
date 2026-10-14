@@ -10,6 +10,11 @@ Formats were verified on this Mac on 2026-10-09 with one read-only probe per age
                                             result (tokens, exit_code)
   openclaw agent --json                     one JSON document at exit (status, payloads,
                                             meta.agentMeta: provider, model, usage, sessionId)
+  grok     -p --output-format streaming-messages-json
+                                            JSONL in Claude Code's stream-json shape: system/init
+                                            (model, session), assistant, result (cost, usage, is_error).
+                                            Verified against xai-org/grok-build 1.0.52 source and
+                                            `grok --help`; not run against a signed-in account.
 
 Each parser turns output lines into short human-readable log lines and fills RunMeta.
 Fields an agent does not report stay None and the UI shows "not reported".
@@ -23,6 +28,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
+
+import agent_git
 
 PROMPT_PLACEHOLDER = "<prompt>"
 
@@ -113,11 +120,21 @@ class ClaudeParser(Parser):
 def build_claude(card, prompt: str, model: str | None, budget: float, binary: str,
                  session_id: str | None = None) -> list[str]:
     mode = "plan" if card.mode == "read" else "acceptEdits"
+    grant = None if getattr(card, "output_only", False) else getattr(card, "agent_git_grant", None)
+    # Belt and braces: in print mode shell commands are denied unless allowed, and these
+    # stay blocked even if a future setting allows Bash. With an operator grant, the blanket
+    # `git push` deny gives way to one exact allowed push (a deny would beat the allow).
+    denied = (agent_git.claude_denied(grant) if grant else
+              ["Bash(git push:*)", "Bash(git merge:*)", "Bash(gh pr merge:*)"])
     argv = [binary, "-p", prompt, "--output-format", "stream-json", "--verbose",
-            "--permission-mode", mode,
-            # Belt and braces: in print mode shell commands are denied unless allowed, and these
-            # stay blocked even if a future setting allows Bash.
-            "--disallowedTools", "Bash(git push:*)", "Bash(git merge:*)", "Bash(gh pr merge:*)"]
+            "--permission-mode", mode, "--disallowedTools", *denied]
+    if not getattr(card, 'output_only', False):
+        # Print-mode jobs cannot answer native approval prompts. Public research is
+        # available without granting shell, credential or publication permissions, unless the
+        # operator granted branch-scoped git access for this project.
+        argv += ["--allowedTools", "WebSearch", "WebFetch"]
+        if grant:
+            argv += agent_git.claude_allowed(grant)
     if not getattr(card,"subscription_billing",False):
         argv += ["--max-budget-usd", f"{budget:.2f}"]
     if model:
@@ -129,6 +146,58 @@ def build_claude(card, prompt: str, model: str | None, budget: float, binary: st
         # MCP tools are exposed to the continuation agent.
         argv += ["--tools", "Read,Glob,Grep", "--strict-mcp-config", "--mcp-config",
                  '{"mcpServers":{}}', "--disable-slash-commands"]
+    return argv
+
+
+# ----------------------------------------------------------------------------- Grok Build
+
+
+class GrokParser(ClaudeParser):
+    """Grok Build's `--output-format streaming-messages-json` is Claude Code's stream-json shape
+    (system/init, assistant, user tool results, result with usage and total_cost_usd), so the
+    Claude parser reads it. What differs is who the provider is, and that an error can arrive as a
+    bare `{"type":"error","message":...}` line (for example when nobody is signed in)."""
+
+    def feed(self, line: str) -> list[str]:
+        ev = _json(line)
+        if ev is not None and ev.get("type") == "error":
+            self.meta.error = str(ev.get("message") or "agent reported an error")
+            return [f"error: {self.meta.error}"]
+        out = super().feed(line)
+        if ev is not None and ev.get("type") == "system" and ev.get("subtype") == "init":
+            self.meta.provider = "xai"
+        return out
+
+
+# Telemetry and trace upload are the operator's choice, never the agent's: a dashboard-dispatched run
+# turns them off and keeps the agent inside a filesystem sandbox. See docs/configuration/grok.md.
+GROK_PRIVACY_ENV = {"GROK_TELEMETRY_ENABLED": "false", "GROK_TELEMETRY_TRACE_UPLOAD": "false",
+                    "GROK_TELEMETRY_MIXPANEL_ENABLED": "false"}
+
+
+def build_grok(card, prompt: str, model: str | None, budget: float, binary: str,
+               session_id: str | None = None) -> list[str]:
+    read_only = card.mode == "read"
+    grant = getattr(card, "agent_git_grant", None)
+    # Same rules as Claude (Grok accepts Claude's `Bash(cmd:*)` syntax; deny beats allow): git push and
+    # merges stay blocked unless the operator granted one exact push for this project.
+    denied = (agent_git.claude_denied(grant) if grant else
+              ["Bash(git push:*)", "Bash(git merge:*)", "Bash(gh pr merge:*)"])
+    argv = [binary, "--no-auto-update", "-p", prompt, "--output-format", "streaming-messages-json",
+            "--permission-mode", "plan" if read_only else "acceptEdits",
+            # Landlock on Linux, Seatbelt on macOS: read-only for a read task, the working directory
+            # (plus /tmp and ~/.grok) for an edit task. Without a profile nothing is restricted.
+            "--sandbox", "read-only" if read_only else "workspace"]
+    for rule in denied:
+        argv += ["--deny", rule]
+    if grant:
+        for rule in agent_git.claude_allowed(grant):
+            if rule != "--allowedTools":
+                argv += ["--allow", rule]
+    if model:
+        argv += ["--model", model]
+    if session_id:
+        argv += ["--resume", session_id]
     return argv
 
 
@@ -170,15 +239,19 @@ class CodexParser(Parser):
 def build_codex(card, prompt: str, model: str | None, budget: float, binary: str,
                 session_id: str | None = None) -> list[str]:
     sandbox = "read-only" if card.mode == "read" else "workspace-write"
+    grant = getattr(card, "agent_git_grant", None)
+    # With an operator grant the plain workspace-write sandbox (read-only .git, no network) is
+    # replaced by a permission profile that lets the story commit and reach GitHub only.
+    profile = [a for o in agent_git.codex_overrides() for a in ("-c", o)] if grant else []
     if session_id:
         # `codex exec resume` has no -s/-C flags, so the sandbox is forced with a config override;
         # otherwise a resumed turn would use whatever sandbox Codex's own config defaults to.
-        argv = [binary, "-c", f'sandbox_mode="{sandbox}"', "exec", "resume", "--json",
+        argv = [binary, *(profile or ["-c", f'sandbox_mode="{sandbox}"']), "exec", "resume", "--json",
                 "--skip-git-repo-check"]
         if model:
             argv += ["-m", model]
         return argv + [session_id, prompt]
-    argv = [binary, "exec", "--json", "--skip-git-repo-check", "-s", sandbox, "-C", card.working_dir]
+    argv = [binary, "exec", "--json", "--skip-git-repo-check", *(profile or ["-s", sandbox]), "-C", card.working_dir]
     if model:
         argv += ["-m", model]
     return argv + [prompt]
@@ -334,9 +407,15 @@ class AgentSpec:
     # True when the dashboard must choose the session id before the first turn (OpenClaw);
     # False when the agent reports its own session id and we resume it.
     preassigned_session: bool = False
+    # Environment this agent's runs always get, on top of the scrubbed one (never from agent output).
+    env: dict[str, str] = field(default_factory=dict)
 
     def binary(self, settings) -> str:
-        return str(getattr(settings, self.binary_setting))
+        path = str(getattr(settings, self.binary_setting))
+        if not os.path.isabs(path) or self.binary_setting not in getattr(settings, "model_fields_set", set()):
+            from tool_install import managed_bin
+            return managed_bin(getattr(settings, "agent_tools_path", None), Path(path).name) or path
+        return path
 
     def available(self, settings) -> bool:
         path = self.binary(settings)
@@ -354,6 +433,14 @@ REGISTRY: dict[str, AgentSpec] = {
         default_model=codex_default_model,
         notes="Read = read-only sandbox; Edit = workspace-write sandbox. Model is not reported by Codex.",
     ),
+    "grok": AgentSpec(
+        "grok", "Grok Build", "worker", "grok_path", build_grok, GrokParser,
+        suggested_models=("grok-4.6", "grok-4.5", "grok-build-0.1"),
+        notes="Read = plan mode in a read-only sandbox; Edit = file edits in a workspace sandbox. "
+              "git push/merge blocked. Sends the task and the files it reads to xAI. Subscription use only: "
+              "the CLI has no dollar cap, so an API-billed route is refused.",
+        env=GROK_PRIVACY_ENV,
+    ),
     "hermes": AgentSpec(
         "hermes", "Hermes", "manager", "hermes_path", build_hermes, HermesParser,
         enforces_mode=False,
@@ -365,6 +452,12 @@ REGISTRY: dict[str, AgentSpec] = {
         notes="Runs one turn via the OpenClaw gateway (default agent mm-main). Replies are never delivered to a channel.",
     ),
 }
+
+
+# Agents sold as a flat-fee plan, which a subscription account can classify as a subscription route.
+SUBSCRIPTION_AGENTS = ("claude", "codex", "grok")
+# Every agent with a billing account, in the order the dashboards list them.
+BILLED_AGENTS = ("openclaw", "hermes", "claude", "codex", "grok")
 
 
 def redact(argv: list[str], prompt: str) -> list[str]:

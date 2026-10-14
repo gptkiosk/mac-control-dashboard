@@ -10,7 +10,7 @@ import { stubFetch } from './helpers'
 import type { Profile } from '@/lib/profile'
 afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); document.body.innerHTML = '' })
 async function setup(step=0, component: typeof SetupView | typeof SetupPrompt = SetupView) {
-  let profile: Profile = {owner:'operator@example.com',preferences:{theme:'dark',planning_bias:81,working_dir:'/workspace',dashboard_origin:'',discord_channel_id:'',notify_plans:true,allow_discord_planning:false},credentials:[],discord_linked:false,discord_user_id:null,origins:['http://127.0.0.1:8800','https://example.test:9443']}
+  let profile: Profile = {owner:'operator@example.com',preferences:{theme:'dark',planning_bias:81,working_dir:'/workspace',dashboard_origin:'',discord_channel_id:'',notify_plans:true,allow_discord_planning:false,allow_discord_control:false,allow_discord_diagnostics:false},credentials:[],discord_linked:false,discord_user_id:null,origins:['http://127.0.0.1:8800','https://example.test:9443']}
   const fetch=stubFetch((url,init)=>{
     if(url==='/auth/status') return {body:{enabled:true,user:{email:profile.owner,method:'google',expires_at:10000},local_recovery:false}}
     if(url==='/api/profile/setup') {profile.preferences.setup=JSON.parse(String(init?.body));return {body:{...profile,origins:undefined}}}
@@ -31,6 +31,11 @@ it('resumes steps in the profile without touching permissions, native agents or 
   await w.get('.wizard-footer .primary').trigger('click');await flushPromises()
   expect(w.get('h2').text()).toBe('Google sign-in')
   expect(w.text()).toContain('https://example.test:9443/auth/callback')
+  expect(w.text()).toContain('YOUR-MACHINE.YOUR-TAILNET.ts.net')
+  expect(w.text()).toContain('--origin http://127.0.0.1:5173')
+  expect(w.text()).toContain('--data-dir ~/.mcd-control')
+  const privateAddresses = w.findAll('details').find(d => d.text().includes('Private addresses configured'))!
+  expect(privateAddresses.attributes('open')).toBeUndefined()
   const write=fetch.mock.calls.find(([url])=>url==='/api/profile/setup')!
   expect(JSON.parse(String(write[1]?.body))).toEqual({step:1,status:'in_progress',confirmed:[]})
   expect(profile.preferences.planning_bias).toBe(81);expect(profile.preferences.allow_discord_planning).toBe(false)
@@ -40,6 +45,10 @@ it('resumes steps in the profile without touching permissions, native agents or 
 it('reports missing executables without claiming their login or provider is verified',async()=>{
   const {w}=await setup(2)
   expect(w.text()).toContain('Executable detected');expect(w.text()).toContain('Executable not found')
+  expect(w.get('.setup-notice a[href="/profile#agent-tools"]').text()).toContain('Install or upgrade')
+  expect(w.text()).toContain('Install → configure → refresh')
+  expect(w.text()).toContain('Install runtime')
+  expect(w.text()).toContain('SSH session on the host')
   expect(w.text()).toContain('does not verify provider login or gateway health')
   expect(w.find('a[href="/profile#discord-profile"]').exists()).toBe(true)
   w.unmount()
@@ -48,7 +57,13 @@ it('saves a key write-only and clears the input before leaving or recording prog
   const {w,fetch}=await setup(3);const secret='sk-or-test-private1234'
   await w.get('#setup-openrouter').setValue(secret)
   await w.get('.key-form').trigger('submit');await flushPromises()
+  expect(w.find('#setup-openrouter').exists()).toBe(false)
+  expect(w.get('[data-test="saved-openrouter"]').text()).toContain('do not need to enter it again')
+  expect(w.text()).toContain('may separately ask for an inference key')
+  await w.findAll('button').find(b => b.text() === 'Replace saved key')!.trigger('click')
   expect((w.get('#setup-openrouter').element as HTMLInputElement).value).toBe('')
+  await w.findAll('button').find(b => b.text() === 'Cancel replacement')!.trigger('click')
+  expect(w.find('#setup-openrouter').exists()).toBe(false)
   expect(w.text()).not.toContain(secret);expect(localStorage.length).toBe(0)
   expect(w.text()).toContain('Native agent routes are unchanged')
   await w.get('.wizard-footer .primary').trigger('click');await flushPromises()
@@ -57,7 +72,7 @@ it('saves a key write-only and clears the input before leaving or recording prog
   w.unmount()
 })
 it('finishes a walkthrough while keeping unmet prerequisites visible and not dispatching jobs',async()=>{
-  const {w,fetch}=await setup(5)
+  const {w,fetch}=await setup(6)
   expect(w.get('.readiness').text()).toContain('Pending · Hermes and OpenClaw')
   expect(w.find('a[href="/help?topic=agent-tasks"]').exists()).toBe(false)
   await w.get('.wizard-footer .primary').trigger('click');await flushPromises()
@@ -75,5 +90,13 @@ it('offers first-run setup and persists Later without making setup inaccessible'
   expect(w.find('aside').exists()).toBe(false)
   const write=fetch.mock.calls.find(([url])=>url==='/api/profile/setup')!
   expect(JSON.parse(String(write[1]?.body)).status).toBe('deferred')
+  w.unmount()
+})
+
+it('connects optional membership setup to runtime installation without starting installers', async()=>{
+  const {w,fetch}=await setup(4)
+  expect(w.get('a[href="/profile#agent-tools"]').text()).toBe('Install or upgrade membership runtimes')
+  expect(w.text()).toContain('Google dashboard login does not install or sign in')
+  expect(fetch.mock.calls.some(([,init]) => (init?.method ?? 'GET') !== 'GET')).toBe(false)
   w.unmount()
 })

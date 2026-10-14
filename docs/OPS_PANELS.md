@@ -56,3 +56,11 @@ Evening Log Review and Weekly Fleet Maintenance jobs are currently disabled in H
 Connecting their output archive does not enable them, schedule a new job, invoke a model or
 post a message. New files will appear on the next catalog poll whenever the report producer
 writes them. Restoring scheduled report production remains a separate operator decision.
+
+## Deterministic Ops collectors (prototype)
+
+The Ops health panel on `/reports` shows results from the deterministic collectors. These run
+allowlisted checks with no model and report only changes. Configuration, sources, schedules and
+limits are in [Ops collectors configuration](configuration/ops-collectors.md). That page is a draft
+for story `s2-docs`: the collector design awaits human approval, and its tests have not been run.
+The replacement schedules ship disabled.

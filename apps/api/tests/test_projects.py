@@ -12,6 +12,7 @@ from settings import get_settings
 from project_schemas import Accept
 import projects
 import cards
+import project_outputs
 
 @pytest.fixture
 def app(make_client, monkeypatch, tmp_path):
@@ -25,6 +26,34 @@ def app(make_client, monkeypatch, tmp_path):
 
 def node(key,**kw):
     return dict(key=key,title=key,description='Implement a bounded local change.',scope='Only this story-owned file.',acceptance='Checks pass and reviewer verifies the artifact.',assignee='codex',model='gpt-6.1-sol',**kw)
+
+@pytest.mark.parametrize('result', [
+    '**Blocked: nothing was uploaded.** The approved release inputs are missing.',
+    'The clean install is blocked, so I have no install, update, rollback or recovery receipts.',
+    '**Verification is incomplete.** The Mac preview and ARM64 VM were not run.',
+    '**Not verified.** Code exists, but no checks ran.',
+    '**Status: not done.** The requested install was blocked.',
+    '**Status: not complete.** Nothing was installed or tested.',
+    '## Handoff: docs\n\n**Status: written, not verified. Do not mark this story Done.**\n\nNone of the documented commands was executed.',
+    'The report contains useful findings.\n\n## Final status\n\nThis story is not Done. Required checks have not been executed.',
+    'The gate packet is NOT RELEASE-READY and needs human review.',
+    'The story acceptance criteria remain unmet.',
+    'The implementation is present. Checks: I did not run tests or start a preview.',
+    'Implementation is present, but this story is not fully verified. Keep this story incomplete.',
+    'The remaining checks are incomplete. This handoff does not claim complete verification.',
+    '- **Incomplete:** backend lifecycle checks did not run successfully in the sandbox.',
+    '**Story s7 is incomplete.** None of the required checks ran in this session.',
+    'This story is **incomplete**: no release archive was built or receipt produced.',
+    ('## Long handoff\n\n' + ('Implemented detail. ' * 250) +
+     '\n\nThis story is **incomplete**: no release archive was built.'),
+    '# Evidence handoff\n\n**Status:** INCOMPLETE. The pack lists what exists.',
+    'The docs are updated, but story `s17_docs_rcd` is **incomplete**.',
+    '## Handoff: s16_docs_mcd is incomplete\n\nNothing was executed.',
+    'The evidence pack is incomplete, so nothing should be marked done.',
+    '## Handoff — incomplete verification\n\nChanges were written but require host testing.',
+])
+def test_direct_incomplete_handoff_language_is_not_completion(result):
+    assert project_outputs.incomplete_error(SimpleNamespace(result_text=result))
 
 def test_managed_workspace_symlink_cannot_escape_approved_root(app,tmp_path):
     import project_workspaces
@@ -86,7 +115,8 @@ def test_full_planning_pipeline_requires_review_then_submits_once(app):
     p=new(app);c=app[0]
     assert c.post('/api/projects/1/plan',json={'revision':1}).status_code==422
     p=c.post('/api/projects/1/plan',json={'revision':1,'approve_coordination':True}).json()
-    cid=p['pipeline']['card_id'];finish(app,cid,json.dumps({'agent':'codex','model':projects.REGISTRY['codex'].default_model() or '', 'rationale':'Fit'}));advance(app)
+    cid=p['pipeline']['card_id'];selected=next(v for v in p['pipeline']['choices'] if v['agent']=='codex')
+    finish(app,cid,json.dumps({**selected,'rationale':'Fit'}));advance(app)
     p=c.get('/api/projects/1').json();assert p['pipeline']['step']=='plan'
     finish(app,p['pipeline']['card_id'],json.dumps({'nodes':[node('a'),node('b',depends_on=['a'])]}));advance(app)
     p=c.get('/api/projects/1').json();assert p['pipeline']['step']=='return'
@@ -105,10 +135,11 @@ def test_resume_saved_planner_proposal_fills_only_human_scope_and_refreshes_cata
     c,s,wd,settings=app
     p=new(app)
     p=c.post('/api/projects/1/plan',json={'revision':1,'approve_coordination':True}).json()
-    finish(app,p['pipeline']['card_id'],json.dumps({'agent':'codex','model':projects.REGISTRY['codex'].default_model() or ''}));advance(app)
+    selected=next(v for v in p['pipeline']['choices'] if v['agent']=='codex')
+    finish(app,p['pipeline']['card_id'],json.dumps({**selected,'rationale':'Test selection'}));advance(app)
     p=c.get('/api/projects/1').json();planner_card=p['pipeline']['card_id']
     human=dict(node('review'),assignee='human',scope='',model='')
-    finish(app,planner_card,json.dumps({'nodes':[node('work'),human]}))
+    finish(app,planner_card,json.dumps({'nodes':[node('work', fallbacks=['openclaw', 'claude']),human]}))
     with s.begin() as db:
         row=db.get(Project,1);row.state='planning_failed';row.error='Legacy scope validation'
         pipeline=json.loads(row.pipeline);pipeline['execution_catalog']=[{'agent':'openclaw','targets':[{'id':'retired'}]}];row.pipeline=json.dumps(pipeline)
@@ -116,6 +147,7 @@ def test_resume_saved_planner_proposal_fills_only_human_scope_and_refreshes_cata
     assert c.post('/api/projects/1/resume-plan',json={'revision':2}).status_code==409
     resumed=c.post('/api/projects/1/resume-plan',json={'revision':1});assert resumed.status_code==200,resumed.text
     p=resumed.json();assert p['state']=='planning' and p['pipeline']['step']=='return'
+    assert p['document']['nodes'] == []  # Proposal remains unapproved until Hermes returns it.
     assert len([t for t in p['tasks'] if t['role']=='plan'])==1
     with s() as db:
         review=db.get(Card,p['pipeline']['card_id']).body
@@ -179,6 +211,26 @@ def test_story_context_review_acceptance_and_board_protection(app):
     rid=finish(app,b,'B checked')
     assert c.post(f'/api/projects/1/stories/{b}/accept',json={'run_id':rid,'summary':'B verified'}).json()['state']=='complete'
 
+def test_story_context_compacts_unrelated_history_without_mutating_ledger(app):
+    p=active(app,[node('a'),node('b',depends_on=['a']),node('unrelated')]);c,s,wd,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    with s.begin() as db:
+        project=db.get(Project,1)
+        projects.memory(db,project,'handoff','Required upstream handoff survives compaction.','operator',ids['a'])
+        projects.memory(db,project,'checkpoint','Old unrelated branch detail '+('x'*6000),'agent',ids['unrelated'])
+        for i in range(30):
+            projects.memory(db,project,'decision',f'Global decision {i} '+('y'*3000),'operator')
+    with s() as db:
+        raw=projects.context(db,db.get(Project,1),'b')
+        payload=json.loads(raw.split('Run output is proposed evidence; operator acceptance is required.\n',1)[1])
+        assert len(json.dumps(payload,ensure_ascii=False).encode())<=projects.CONTEXT_PAYLOAD_BUDGET
+        assert [story['key'] for story in payload['stories']]==['a','b']
+        assert 'Required upstream handoff survives compaction.' in raw
+        assert 'Global decision 29' in raw and 'Global decision 0' not in raw
+        assert payload['memory_compaction']['mode']=='deterministic_dependency_aware'
+        assert payload['memory_compaction']['entries_omitted']>0
+        assert len(list(db.scalars(select(projects.ProjectMemory).where(projects.ProjectMemory.project_id==1))))>=32
+
 def test_pause_prevents_claim_and_resume_keeps_revision(app):
     p=active(app,[node('a')]);c,s,wd,settings=app
     assert c.post('/api/projects/1/pause',json={'revision':1}).json()['state']=='paused'
@@ -205,11 +257,12 @@ def test_screenshot_dispatch_keeps_live_server_and_routes_unchanged(app):
         assert card.agent_target=='mm-developer'
         assert card.column=='running'
 
-def test_model_routes_handoff_same_story_once_and_no_paid_guess(app):
+@pytest.mark.parametrize('initial_error', ['usage limit reached', "You've hit your session limit · resets 7:40pm (America/Los_Angeles)"])
+def test_model_routes_handoff_same_story_once_and_no_paid_guess(app,initial_error):
     p=active(app,[node('a',routes=[{'agent':'claude','model':'claude-sonnet-5-5'},{'agent':'hermes','model':'thinkingmachines/inkling:free'}])]);c,s,wd,settings=app
     a=next(t['card_id'] for t in p['tasks'] if t['role']=='story')
     d=Dispatcher(s,settings);assert len(d._claim(2))==1
-    finish(app,a,'Partial work',stage='failed',error='usage limit reached')
+    finish(app,a,'Partial work',stage='failed',error=initial_error)
     assert c.get(f'/api/cards/{a}').json()['agent']=='claude'
     assert len(d._claim(2))==1
     finish(app,a,stage='failed',error='quota limit reached')
@@ -386,12 +439,13 @@ def test_parallel_refuses_dirty_base_and_commit_conflict_stops(app):
     claimed=d._claim(2);assert len(claimed)==1 and claimed[0][0]['id']==story['d']['card_id']
     assert (Path(story['d']['working_dir'])/'base.txt').read_text()=='Reviewed combined resolution'
 
-def test_quota_reported_only_on_stderr_still_hands_off_without_exposing_stderr(app):
+@pytest.mark.parametrize('initial_error', ['usage limit reached', "You've hit your session limit"])
+def test_quota_reported_only_on_stderr_still_hands_off_without_exposing_stderr(app,initial_error):
     import asyncio,sys
     from tests.test_dispatcher import FakeParser,_drain
     p=active(app,[node('a',routes=[{'agent':'claude','model':'claude-sonnet-5-5'}])]);c,s,wd,settings=app
     cid=next(t['card_id'] for t in p['tasks'] if t['role']=='story')
-    def fake_build(*args): return [sys.executable,'-c',"import sys; print('usage limit reached; sensitive-debug-value',file=sys.stderr); sys.exit(1)"]
+    def fake_build(card,prompt,model,*a,**k): return [sys.executable,'-c',f"import sys; print({(initial_error+'; sensitive-debug-value')!r},file=sys.stderr); sys.exit(1)",'-m',model]   # pinned model, as the gate requires
     registry={'codex':AgentSpec('codex','Fake subscription','worker','codex_path',fake_build,FakeParser)}
     d=Dispatcher(s,settings,registry=registry);asyncio.run(_drain(d))
     with s() as db:
@@ -413,6 +467,63 @@ def test_reviewed_snapshot_passes_changes_without_worker_git_permissions(app):
     assert len(d._claim(2))==1
     assert (Path(story['b']['working_dir'])/'accepted.txt').read_text()=='Checked content'
     assert not (wd/'accepted.txt').exists()
+
+
+def test_paused_project_can_retier_only_unstarted_subscription_stories(app):
+    claude = dict(node('claude-work'), assignee='claude', model='claude-opus-5-5')
+    human = dict(node('human-review'), assignee='human', model='')
+    p = active(app, [node('codex-work'), claude, human]); c, sessions, _, _ = app
+    assert c.post('/api/projects/1/retier', json={
+        'revision': 1, 'claude_model': 'claude-haiku-5-5', 'codex_model': 'gpt-6-luna', 'acknowledge': True,
+    }).status_code == 409
+    p = c.post('/api/projects/1/pause', json={'revision': 1}).json()
+    running = next(t for t in p['tasks'] if t['node_key'] == 'codex-work')
+    with sessions.begin() as db:
+        db.get(Card, running['card_id']).column = 'running'
+    response = c.post('/api/projects/1/retier', json={
+        'revision': 1, 'claude_model': 'claude-haiku-5-5', 'codex_model': 'gpt-6-luna', 'acknowledge': True,
+    })
+    assert response.status_code == 200, response.text
+    p = response.json(); tasks = {t['node_key']: t for t in p['tasks'] if t['role'] == 'story'}
+    assert tasks['codex-work']['model'] == 'gpt-6.1-sol'
+    assert tasks['claude-work']['model'] == 'claude-haiku-5-5'
+    assert tasks['human-review']['model'] is None
+    assert p['state'] == 'paused' and p['document']['planning_bias'] == 50
+    with sessions() as db:
+        manifest = json.loads(db.get(Project, 1).approved_manifest)
+        assert manifest['fallback_models'] == {'claude': 'claude-haiku-5-5', 'codex': 'gpt-6-luna'}
+        assert manifest['route_amendments'][-1]['cards'][0]['card_id'] == tasks['claude-work']['card_id']
+
+
+def test_retier_requires_operator_acknowledgement(app):
+    p = active(app, [node('work')]); c = app[0]
+    c.post('/api/projects/1/pause', json={'revision': p['revision']})
+    response = c.post('/api/projects/1/retier', json={
+        'revision': p['revision'], 'claude_model': 'claude-haiku-5-5', 'codex_model': 'gpt-6-luna',
+    })
+    assert response.status_code == 422
+
+
+def test_incomplete_read_story_can_be_repaired_as_execution_only_while_paused(app):
+    p = active(app, [dict(node('matrix'), mode='read')]); c, sessions, _, _ = app
+    c.post('/api/projects/1/pause', json={'revision': 1})
+    c.post('/api/projects/1/retier', json={
+        'revision': 1, 'claude_model': 'claude-haiku-5-5', 'codex_model': 'gpt-6-luna', 'acknowledge': True,
+    })
+    with sessions.begin() as db: db.get(Project, 1).state = 'active'
+    card_id = next(t['card_id'] for t in c.get('/api/projects/1').json()['tasks'] if t['role'] == 'story')
+    finish(app, card_id, 'Task is not complete. Tests were NOT EXECUTED and nothing was implemented.')
+    c.post('/api/projects/1/pause', json={'revision': 1})
+    response = c.post(f'/api/projects/1/stories/{card_id}/repair-execution', json={'revision': 1, 'acknowledge': True})
+    assert response.status_code == 200, response.text
+    task = next(t for t in response.json()['tasks'] if t['card_id'] == card_id)
+    assert (task['column'], task['agent'], task['model'], task['mode']) == ('queued', 'codex', 'gpt-6-luna', 'edit')
+    assert response.json()['state'] == 'paused'
+    with sessions() as db:
+        manifest = json.loads(db.get(Project, 1).approved_manifest)
+        node_data = next(n for n in manifest['document']['nodes'] if n['key'] == 'matrix')
+        assert node_data['mode'] == 'edit'
+        assert manifest['route_amendments'][-1]['kind'] == 'repair_incomplete_execution'
 
 def test_openclaw_targets_are_serialized_with_separate_story_sessions(app):
     c,s,wd,settings=app;init_repo(wd)
@@ -462,7 +573,8 @@ def test_bias_reaches_each_planning_stage_and_reviewed_edits_win(app,bias,phrase
     p=c.post('/api/projects/1/plan',json={'revision':1,'approve_coordination':True}).json()
     assert phrase in prompt(p['pipeline']['card_id'])
     assert {v['agent'] for v in p['pipeline']['choices']} <= {'codex','claude'}
-    finish(app,p['pipeline']['card_id'],json.dumps({'agent':'codex','model':projects.REGISTRY['codex'].default_model() or ''}));advance(app)
+    selected=next(v for v in p['pipeline']['choices'] if v['agent']=='codex')
+    finish(app,p['pipeline']['card_id'],json.dumps({**selected,'rationale':'Test selection'}));advance(app)
     p=c.get('/api/projects/1').json();text=prompt(p['pipeline']['card_id'])
     assert phrase in text and 'mm-developer' in text and 'must-not-propagate' not in text
     proposed=dict(node('a'),assignee='openclaw',model='openrouter/thinkingmachines/inkling:free',agent_target='mm-developer')
@@ -623,17 +735,29 @@ def test_bulk_handoffs_do_not_pass_empty_failed_or_unfinished_results(app):
     assert not any(m['kind']=='handoff' for m in q['memory'])
 
 
-def test_bulk_handoffs_keep_security_license_and_publication_manual(app):
-    p=active(app,[dict(node('docs'),title='Write section guide'),dict(node('security'),title='Review security findings'),dict(node('license'),title='Confirm license'),dict(node('publish'),title='Publish repository')]);c=app[0]
+def test_bulk_handoffs_classify_by_required_human_action_not_keywords(app):
+    p=active(app,[dict(node('docs'),title='Write section guide'),dict(node('security'),title='Review security findings'),dict(node('license'),title='Audit dependency licenses'),dict(node('release'),title='Build local release artifacts'),dict(node('operator'),title='HUMAN: Approve publication',assignee='human',model='')]);c=app[0]
     review=p['handoff_approval']
-    assert [t['title'] for t in review['eligible']]==['Write section guide']
-    assert len(review['excluded'])==3
+    assert [t['title'] for t in review['eligible']]==['Write section guide','Review security findings','Audit dependency licenses','Build local release artifacts']
+    assert [t['title'] for t in review['excluded']]==['HUMAN: Approve publication']
     assert policy_request(c,p).status_code==200
     for t in p['tasks']:
-        if t['role']=='story':finish(app,t['card_id'],'Completed proposed work.')
+        if t['role']=='story' and t['node_key']!='operator':finish(app,t['card_id'],'Completed proposed work.')
     advance(app)
     q=c.get('/api/projects/1').json();states={t['node_key']:t['column'] for t in q['tasks'] if t['role']=='story'}
-    assert states=={'docs':'done','security':'review','license':'review','publish':'review'}
+    assert states=={'docs':'done','security':'done','license':'done','release':'done','operator':'backlog'}
+
+
+def test_automatic_handoffs_use_revision_scope_not_stored_card_snapshot(app):
+    p=active(app,[node('a')]);c,s,_,_=app
+    cid=next(t['card_id'] for t in p['tasks'] if t['role']=='story')
+    assert policy_request(c,p).status_code==200
+    with s.begin() as db:
+        project=db.get(Project,1);manifest=json.loads(project.approved_manifest)
+        manifest['handoff_policy']['card_ids']=[]
+        project.approved_manifest=json.dumps(manifest)
+    finish(app,cid,'Completed the routine work.');advance(app)
+    assert c.get(f'/api/cards/{cid}').json()['column']=='done'
 
 
 def test_automatic_handoffs_respect_pause_and_can_be_disabled(app):
@@ -647,6 +771,8 @@ def test_automatic_handoffs_respect_pause_and_can_be_disabled(app):
     assert c.get('/api/projects/1').json()['tasks'][-1]['column']=='review'
 
 @pytest.mark.parametrize('result',[
+    '# S2_zeroclaw handoff: blocked, nothing implemented\n\nI stopped before writing any adapter code.',
+    '# S2_benchmark handoff: benchmark harness written, not run, no live results\n\nNo measurements were collected.',
     "I couldn't build the release candidate, so none of this story's acceptance criteria are met. Nothing was created.",
     "The docs-qa story is only partly done. The required checks need approval.",
     "I didn't create the repo, and nothing was created, pushed or changed on GitHub. Three things block this story.",
@@ -688,8 +814,277 @@ def test_past_blocker_in_completed_handoff_does_not_change_success(app):
     advance(app)
     assert c.get('/api/projects/1').json()['tasks'][-1]['column']=='review'
 
+
+def test_legacy_blocked_automatic_acceptance_is_retracted_without_erasing_evidence(app):
+    p=active(app,[node('a'),node('b',depends_on=['a'])]);c,s,_,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    assert policy_request(c,p).status_code==200
+    rid=finish(app,ids['a'],'Completed adapter.');advance(app)
+    with s.begin() as db:
+        db.get(Run,rid).result_text='# Adapter handoff: blocked, nothing implemented'
+        db.get(Run,rid).exit_code=0
+    advance(app)
+    q=c.get('/api/projects/1').json()
+    assert next(t for t in q['tasks'] if t['node_key']=='a')['column']=='failed'
+    assert next(t for t in q['tasks'] if t['node_key']=='b')['blocked_by']==[ids['a']]
+    assert any(m['kind']=='handoff' and m['run_id']==rid for m in q['memory'])
+    assert any('Automatic handoff' in m['text'] and 'superseded' in m['text'] for m in q['memory'])
+    with s() as db:
+        assert db.get(Run,rid).exit_code==0
+        ctx=projects.context(db,db.get(Project,p['id']))
+        assert projects.AUTO_HANDOFF_PREFIX not in ctx
+    count=len(q['memory']);advance(app)
+    assert len(c.get('/api/projects/1').json()['memory'])==count
+    assert Dispatcher(s,settings)._claim(2)==[]
+    assert c.post(f'/api/projects/1/stories/{ids["a"]}/retry',json={'revision':1}).status_code==200
+    assert len(Dispatcher(s,settings)._claim(2))==1
+
+
+def test_legacy_incomplete_manual_acceptance_is_not_retracted(app):
+    p=active(app,[node('a'),node('b',depends_on=['a'])]);c,s,_,_=app
+    cid=next(t['card_id'] for t in p['tasks'] if t['node_key']=='a')
+    rid=finish(app,cid,'Completed adapter.')
+    assert c.post(f'/api/projects/1/stories/{cid}/accept',json={'run_id':rid,'summary':'Operator verified artifact.'}).status_code==200
+    with s.begin() as db:db.get(Run,rid).result_text='# Adapter handoff: blocked, nothing implemented'
+    advance(app)
+    assert c.get(f'/api/cards/{cid}').json()['column']=='done'
+
 def test_recovered_tool_warning_with_report_does_not_change_success(app):
     p=active(app,[node('a')]);c=app[0];cid=next(t['card_id'] for t in p['tasks'] if t['role']=='story')
     finish(app,cid,'⚠️ 🛠️ `search build setting` failed\n\nVerification completed. Read the configuration directly; all required checks passed. Report: verified.md')
     advance(app)
     assert c.get('/api/projects/1').json()['tasks'][-1]['column']=='review'
+
+
+def free_config(settings):
+    settings.openclaw_config_path.write_text(json.dumps({'agents':{'defaults':{'models':{
+        'openrouter/example/code:free':{},'openrouter/google/gemini-2.5-flash':{},'other/free:free':{}}},
+        'list':[{'id':'mm-developer'}]}}))
+    return {'agent':'openclaw','model':'openrouter/example/code:free','agent_target':'mm-developer'}
+
+
+def test_go_free_approves_only_same_story_and_pins_free_model(app):
+    p=active(app,[node('a'),node('b',depends_on=['a'])]);c,s,wd,settings=app
+    cid=next(t['card_id'] for t in p['tasks'] if t['node_key']=='a')
+    rid=finish(app,cid,'Unverified edits remain.',stage='failed',error="You've hit your session limit")
+    route=free_config(settings)
+    before=c.get(f'/api/cards/{cid}').json()
+    detail=c.get('/api/projects/1').json()
+    assert next(t for t in detail['tasks'] if t['card_id']==cid)['free_retry_routes']==[route]
+    with s() as db: original=json.loads(db.get(Project,1).approved_manifest)
+    data={'revision':1,'run_id':rid,'model':route['model'],'agent_target':route['agent_target']}
+    url=f'/api/projects/1/stories/{cid}/go-free'
+    r=c.post(url,json=data);assert r.status_code==200,r.text
+    after=c.get(f'/api/cards/{cid}').json()
+    assert (after['agent'],after['model'],after['agent_target'],after['column'])==('openclaw',route['model'],'mm-developer','queued')
+    for key in ('body','working_dir','mode','acceptance','approved_at'): assert before[key]==after[key]
+    assert len(r.json()['tasks'])==len(detail['tasks'])
+    assert next(t for t in r.json()['tasks'] if t['node_key']=='b')['blocked_by']==[cid]
+    with s() as db:
+        m=json.loads(db.get(Project,1).approved_manifest)
+        assert m['hash']==original['hash'] and m['document']==original['document']
+        assert m['free_retries']['a']['source_run_id']==rid
+    assert c.post(url,json=data).status_code==409  # double click cannot create a duplicate
+    claimed=Dispatcher(s,settings)._claim(2)
+    assert len(claimed)==1 and claimed[0][0]['id']==cid
+    argv=claimed[0][0]['argv'];assert argv[argv.index('--model')+1]==route['model']
+    assert 'MCD GO FREE' in argv[argv.index('-m')+1]
+    finish(app,cid,stage='failed',error='429 rate limit')
+    assert c.get(f'/api/cards/{cid}').json()['column']=='failed'  # never silently escalates
+    assert Dispatcher(s,settings)._claim(2)==[]
+    assert 'Unverified edits remain.' in c.get('/api/projects/1/context').text
+
+
+@pytest.mark.parametrize('change,code', [('paid',422),('stale_run',409),('stale_revision',409),('paused',409),('removed_target',422),('uninstalled',422),('ordinary_failure',409)])
+def test_go_free_rejects_unapproved_or_stale_requests(app,monkeypatch,change,code):
+    p=active(app,[node('a')]);c,s,wd,settings=app
+    cid=next(t['card_id'] for t in p['tasks'] if t['role']=='story')
+    rid=finish(app,cid,stage='failed',error='test failed' if change=='ordinary_failure' else 'usage limit reached')
+    route=free_config(settings)
+    data={'revision':1,'run_id':rid,'model':route['model'],'agent_target':route['agent_target']}
+    if change=='paid': data['model']='openrouter/google/gemini-2.5-flash'
+    if change=='stale_run': data['run_id']=999
+    if change=='stale_revision': data['revision']=2
+    if change=='paused': c.post('/api/projects/1/pause',json={'revision':1})
+    if change=='removed_target': settings.openclaw_config_path.write_text('{}')
+    if change=='uninstalled': monkeypatch.setattr(AgentSpec,'available',lambda self,settings:False)
+    r=c.post(f'/api/projects/1/stories/{cid}/go-free',json=data);assert r.status_code==code,r.text
+    after=c.get(f'/api/cards/{cid}').json();assert after['agent']=='codex' and after['column']=='failed'
+
+
+def test_go_free_revalidates_native_configuration_before_claim(app):
+    p=active(app,[node('a')]);c,s,wd,settings=app
+    cid=next(t['card_id'] for t in p['tasks'] if t['role']=='story')
+    rid=finish(app,cid,stage='failed',error='usage limit reached');route=free_config(settings)
+    r=c.post(f'/api/projects/1/stories/{cid}/go-free',json={'revision':1,'run_id':rid,'model':route['model'],'agent_target':route['agent_target']})
+    assert r.status_code==200,r.text
+    settings.openclaw_config_path.write_text('{}')
+    assert Dispatcher(s,settings)._claim(2)==[]
+    assert c.get(f'/api/cards/{cid}').json()['column']=='failed'
+    assert 'no longer configured' in c.get('/api/projects/1').json()['error']
+
+
+# ------------------------------------------------------------------ context: digests, ledger file, cache-friendly order
+
+def long_handoff(tag, n=4000):
+    return (f'# {tag} handoff\n\n**Status:** done with one caveat.\n\n## Changes\n- changed module {tag}\n\n## Checks\n- pytest: 12 passed\n\n'
+            + ('Filler detail line. ' * (n // 20)) + '\n\n## Remaining risks\n- {tag} needs a real device\n\n## Next-story guidance\n- start from {tag}\n')
+
+def test_digest_keeps_status_changes_checks_and_risks_and_points_at_the_ledger():
+    text = long_handoff('alpha')
+    d = projects._digest(text, 700, 'ledger #9')
+    assert len(d) <= 700 and d.startswith('# alpha handoff')
+    for needle in ('Status', 'Changes', 'Checks', 'Remaining risks', 'Next-story guidance', 'ledger #9'):
+        assert needle in d
+    assert 'Filler detail line.' not in d
+    assert projects._digest('short text', 700, 'ledger #1') == 'short text'
+    assert len(projects._digest('x' * 5000, 300, 'ledger #2')) <= 300                     # no headings: still bounded
+
+def test_story_context_digests_the_lineage_keeps_direct_text_and_writes_the_full_ledger(app):
+    p=active(app,[node('a'),node('b',depends_on=['a']),node('c',depends_on=['b'])]);c,s,wd,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    with s.begin() as db:
+        project=db.get(Project,1)
+        projects.memory(db,project,'handoff',long_handoff('A',6000),'claude',ids['a'])
+        projects.memory(db,project,'handoff',long_handoff('B',3000),'claude',ids['b'])
+        projects.memory(db,project,'decision','Operator selected approved retry route for the unrelated story.','operator',ids['a'])
+    with s() as db:
+        raw=projects.context(db,db.get(Project,1),'c')
+        payload=json.loads(raw.split('Run output is proposed evidence; operator acceptance is required.\n',1)[1])
+        by_card={m['card_id']:m for m in payload['accepted_memory'] if m['kind']=='handoff'}
+        assert '[digest of' in by_card[ids['a']]['text'] and len(by_card[ids['a']]['text'])<=projects.CONTEXT_DIGEST_LIMIT     # earlier story: digest
+        assert len(by_card[ids['b']]['text'])>projects.CONTEXT_DIGEST_LIMIT                                                    # direct prerequisite: fuller text
+        assert payload['memory_compaction']['digested']>=1
+        path=Path(payload['memory_compaction']['full_ledger'])
+        assert path.is_file() and path.stat().st_mode & 0o777==0o600 and path.parent.name=='project-ledgers'
+        ledger=path.read_text()
+        assert 'Filler detail line.' in ledger and ledger.count('# A handoff')==1 and ledger.count('# B handoff')==1            # nothing omitted there
+        assert ledger.startswith('<!-- last_id:')
+        before=path.stat().st_mtime_ns; projects.context(db,db.get(Project,1),'c'); assert path.stat().st_mtime_ns==before        # rewritten only when it changed
+
+def test_prompt_puts_the_stable_parts_first_and_the_story_last(app):
+    p=active(app,[dict(node('a'),title='Story A'),dict(node('b'),title='Story B')]);c,s,wd,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    with s() as db:
+        pa=projects.claim_context(db,db.get(Card,ids['a'])); pb=projects.claim_context(db,db.get(Card,ids['b']))
+        bodies={ids['a']:db.get(Card,ids['a']).body.rstrip(),ids['b']:db.get(Card,ids['b']).body.rstrip()}
+    for prompt,card in ((pa,ids['a']),(pb,ids['b'])):
+        assert prompt.index('YOUR STORY (do this now)')>prompt.index('"brief"')>prompt.index('MCD SHARED PROJECT CONTEXT')
+        assert bodies[card] and prompt.rstrip().endswith(bodies[card])                              # the story's own text is last
+    shared=0
+    for x,y in zip(pa,pb):
+        if x!=y:break
+        shared+=1
+    assert shared>2000 and shared>len(pa)*0.4                                                    # a long shared prefix for prompt caching
+
+def test_story_context_drops_unrelated_decisions_but_keeps_lineage_and_recent_global_ones(app):
+    p=active(app,[node('a'),node('b',depends_on=['a']),node('other')]);c,s,wd,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    with s.begin() as db:
+        project=db.get(Project,1)
+        for i in range(8):projects.memory(db,project,'decision',f'Other story decision {i}','operator',ids['other'])
+        projects.memory(db,project,'decision','Lineage decision for story A.','operator',ids['a'])
+        for i in range(6):projects.memory(db,project,'decision',f'Global decision {i}','operator')
+    with s() as db:
+        raw=projects.context(db,db.get(Project,1),'b')
+    assert 'Lineage decision for story A.' in raw
+    assert 'Global decision 5' in raw and 'Global decision 4' in raw and 'Global decision 3' in raw and 'Global decision 0' not in raw
+    assert 'Other story decision 0' not in raw
+
+@pytest.mark.parametrize('agent', ['claude','codex','grok','hermes','openclaw'])
+def test_delegator_pipeline_keeps_assigned_agent_and_model_during_role_change(app, monkeypatch, agent):
+    monkeypatch.setattr(projects.RoleStore, 'delegator', lambda self: agent)
+    p=new(app); client=app[0]
+    response=client.post('/api/projects/1/plan',json={'revision':1,'approve_coordination':True})
+    assert response.status_code == 200, response.text
+    p=response.json(); route=p['pipeline']['delegator']
+    with app[1]() as db:
+        assert db.get(Card,p['pipeline']['card_id']).agent == agent
+    selected=p['pipeline']['choices'][0]
+    finish(app,p['pipeline']['card_id'],json.dumps({**selected,'rationale':'test choice'}));advance(app)
+    p=client.get('/api/projects/1').json()
+    monkeypatch.setattr(projects.RoleStore, 'delegator', lambda self: 'codex' if agent != 'codex' else 'claude')
+    finish(app,p['pipeline']['card_id'],json.dumps({'nodes':[node('story')]}));advance(app)
+    p=client.get('/api/projects/1').json()
+    assert p['pipeline']['delegator'] == route
+    with app[1]() as db:
+        card=db.get(Card,p['pipeline']['card_id'])
+        assert card.agent == agent
+        assert (card.model or '') == route['model']
+
+def test_free_only_setup_can_plan_with_hermes_without_subscription_clis(app, monkeypatch, tmp_path):
+    monkeypatch.setattr(AgentSpec, 'available', lambda self, settings: self.id == 'hermes')
+    config=tmp_path/'free-hermes.yaml';config.write_text('model:\n  default: openrouter/free\n')
+    app[3].hermes_config_path=config
+    p=new(app);client=app[0]
+    response=client.post('/api/projects/1/plan',json={'revision':1,'approve_coordination':True})
+    assert response.status_code == 200, response.text
+    p=response.json()
+    assert p['pipeline']['choices'] == [{'agent':'hermes','model':'openrouter/free'}]
+    assert p['pipeline']['delegator'] == {'agent':'hermes','model':'openrouter/free'}
+    with app[1]() as db:
+        card=db.get(Card,p['pipeline']['card_id'])
+        assert card.agent == 'hermes' and card.model == 'openrouter/free'
+
+
+def test_assignment_change_requires_new_operator_coordination_review(app, monkeypatch):
+    store=projects.RoleStore(app[3]);store.folder.mkdir(parents=True)
+    store.state.write_text(json.dumps({'roles':{'codex':'delegator'},'workspace':'','targets':[]}))
+    p=new(app);client=app[0]
+    response=client.post('/api/projects/1/plan',json={'revision':1,'approve_coordination':True,'delegator_revision':'a'*64})
+    assert response.status_code == 409
+    assert 'assignment changed' in response.json()['detail']
+    response=client.post('/api/projects/1/plan',json={'revision':1,'approve_coordination':True,'delegator_revision':store.status()['revision']})
+    assert response.status_code == 200, response.text
+    assert response.json()['pipeline']['delegator']['agent'] == 'codex'
+
+
+def test_project_model_lock_stops_quota_handoff_and_can_be_disabled(app):
+    p=active(app,[node('a',routes=[{'agent':'claude','model':'claude-sonnet-5-5'}]),node('b',depends_on=['a'])])
+    c,s,wd,settings=app
+    assert p['model_lock'] is False
+    endpoint=f"/api/projects/{p['id']}/model-lock"
+    assert c.post(endpoint,json={'revision':2,'enabled':True}).status_code==409
+    assert c.post(endpoint,json={'revision':1,'enabled':'true'}).status_code==422
+    locked=c.post(endpoint,json={'revision':1,'enabled':True})
+    assert locked.status_code==200 and locked.json()['model_lock'] is True
+    cid=next(t['card_id'] for t in p['tasks'] if t['node_key']=='a')
+    d=Dispatcher(s,settings);assert len(d._claim(2))==1
+    finish(app,cid,'Partial work',stage='failed',error='usage limit reached')
+    card=c.get(f'/api/cards/{cid}').json()
+    assert (card['agent'],card['model'],card['column'])==('codex','gpt-6.1-sol','failed')
+    assert d._claim(2)==[]
+    assert 'enabled project model lock' in c.get('/api/projects/1/context').text
+    assert c.post(endpoint,json={'revision':1,'enabled':False}).json()['model_lock'] is False
+    assert c.post(f'/api/projects/1/stories/{cid}/retry',json={'revision':1}).status_code==200
+    assert len(d._claim(2))==1
+    finish(app,cid,stage='failed',error='usage limit reached')
+    card=c.get(f'/api/cards/{cid}').json()
+    assert card['agent']=='claude' and card['column']=='queued'
+
+
+def test_project_model_lock_disables_transport_retry_and_preclaim_rerouting(app):
+    import time
+    from models import ProviderLimit
+    from agents import RunMeta
+    p=active(app,[node('a',routes=[{'agent':'claude','model':'claude-sonnet-5-5'}])])
+    c,s,wd,settings=app;cid=next(t['card_id'] for t in p['tasks'] if t['role']=='story')
+    assert c.post('/api/projects/1/model-lock',json={'revision':1,'enabled':True}).status_code==200
+    with s.begin() as db:
+        db.add(ProviderLimit(provider='codex',detected_at=int(time.time()),last_seen_at=int(time.time()),lift_at=int(time.time())+3600,rerouting=True,handoffs=0,rerouted=0))
+        db.get(Card,cid).max_attempts=3
+    d=Dispatcher(s,settings);assert len(d._claim(1))==1
+    with s() as db:
+        card=db.get(Card,cid);run=db.scalar(select(Run).where(Run.card_id==cid))
+        assert card.agent=='codex' and run.agent=='codex'
+        rid=run.id
+    d._finish(rid,cid,'failed',1,'HTTP 503 service unavailable',RunMeta(),.1)
+    with s() as db:
+        card=db.get(Card,cid)
+        assert card.column=='failed' and card.retry_after is None and card.agent=='codex'
+        assert db.scalar(select(ProviderLimit)).rerouted==0
+
+
+def test_model_lock_requires_submitted_project(app):
+    p=new(app)
+    assert app[0].post(f"/api/projects/{p['id']}/model-lock",json={'revision':1,'enabled':True}).status_code==409

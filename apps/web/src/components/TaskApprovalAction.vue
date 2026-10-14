@@ -33,7 +33,7 @@ async function approve() {
   const c = props.card, action = kind.value, runId = c.last_run?.id
   busy.value=true; error.value=''
   try {
-    if (action === 'run') await postJson(`/api/cards/${c.id}/approve`, {})
+    if (action === 'run') await postJson(`/api/cards/${c.id}/approve`, { challenge: c.approval_challenge, pin: c.approval_pin })
     else {
       const base = `/api/projects/${c.project!.id}`
       const p = await getJson<Project>(base)

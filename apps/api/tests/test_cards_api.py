@@ -49,14 +49,16 @@ def test_card_needing_approval_goes_to_review_then_queued(make_client, tmp_path)
     assert card["approval_reasons"] == ["prompt pushes or merges code"]
     moved = client.patch(f"/api/cards/{card['id']}", json={"column": "queued"}).json()
     assert moved["column"] == "review"
-    approved = client.post(f"/api/cards/{card['id']}/approve").json()
+    shown = {"challenge": moved["approval_challenge"], "pin": moved["approval_pin"]}
+    approved = client.post(f"/api/cards/{card['id']}/approve", json=shown).json()
     assert approved["column"] == "queued" and approved["approved_at"]
 
 
 def test_editing_prompt_clears_approval(make_client, tmp_path):
     client = make_client()
     card = _new(client, tmp_path, body="deploy the site").json()
-    client.post(f"/api/cards/{card['id']}/approve")
+    client.post(f"/api/cards/{card['id']}/approve",
+                json={"challenge": card["approval_challenge"], "pin": card["approval_pin"]})
     edited = client.patch(f"/api/cards/{card['id']}", json={"body": "deploy the site and email the team"}).json()
     assert edited["approved_at"] is None
     assert edited["column"] == "review"
@@ -105,7 +107,7 @@ def test_delete_and_list(make_client, tmp_path):
 def test_agents_and_workdirs(make_client, tmp_path):
     client = make_client()
     agents = {a["id"]: a for a in client.get("/api/agents").json()["agents"]}
-    assert set(agents) == {"claude", "codex", "hermes", "openclaw"}
+    assert set(agents) == {"claude", "codex", "grok", "hermes", "openclaw"}
     assert agents["hermes"]["role"] == "manager"
     paths = [w["path"] for w in client.get("/api/workdirs").json()["workdirs"]]
     assert any(p.endswith("/ws/proj") for p in paths)

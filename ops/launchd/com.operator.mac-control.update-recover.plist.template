@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Update supervisor: finishes or undoes an interrupted managed update (packaging/README.md,
+  "Managed updates"). Runs the pinned helper copy at login and every 5 minutes; with no
+  interrupted update it only reads the journal and exits. Replace __UPDATE_ROOT__ and
+  __PYTHON_PATH__ by hand; no installer renders this file yet.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.operator.mac-control.update-recover</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON_PATH__</string>
+    <string>-I</string>
+    <string>__UPDATE_ROOT__/helper/update_helper.py</string>
+    <string>recover</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__UPDATE_ROOT__/helper</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>300</integer>
+  <key>StandardOutPath</key>
+  <string>__UPDATE_ROOT__/state/recover.log</string>
+  <key>StandardErrorPath</key>
+  <string>__UPDATE_ROOT__/state/recover.log</string>
+</dict>
+</plist>

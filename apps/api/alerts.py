@@ -16,7 +16,7 @@ import uuid
 from collections import defaultdict
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select, exists, func, update, text
-from models import AlertEvent, AlertState, Run, ServiceSnapshot
+from models import AlertEvent, AlertState, Card, ProjectTask, Run, ServiceSnapshot
 
 class RunRules(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True, strict=True)
@@ -81,11 +81,50 @@ def identifier(value):
     return re.sub(r"[^A-Za-z0-9_.-]", "_", str(value))[:100]
 
 
-def run_message(run, test=False):
+def label(value,limit=140):
+    """Human-readable database labels only; never include prompts, logs or raw errors."""
+    value=re.sub(r'(?i)\b(?:https?|file|media):','_',str(value or ''))
+    return re.sub(r"[^A-Za-z0-9 .,_:#()/+-]", "_", value).strip()[:limit]
+
+
+def failure_kind(run):
+    text=getattr(run,'error',None) or ''
+    if re.search(r'session limit|usage limit|rate.?limit|quota|too many requests|limit reached|429',text,re.I):
+        return ('limit','Agent limit reached',f'{label(run.agent).title()} reported a session, usage or provider capacity limit.')
+    if run.stage=='timeout' or re.search(r'timed? out|timeout|stopped responding|idle limit',text,re.I):
+        return ('timeout','Run timed out','The agent or provider did not return a complete handoff before its time limit.')
+    if re.search(r'auth(?:entication|orization)?|sign.?in|login|credential|permission denied|forbidden|unauthorized|401|403',text,re.I):
+        return ('auth','Agent access failed','The agent sign-in or provider authorization needs attention.')
+    if re.search(r'budget|price|spend|cost cap',text,re.I):
+        return ('budget','Budget check stopped the run','MCD stopped the run at its configured price or spending boundary.')
+    return ('failure','Run stopped','The agent process exited before MCD received a successful handoff.')
+
+
+def run_message(run, test=False, card=None, project_id=None, origin='http://127.0.0.1:8800'):
     prefix = "[MCD TEST]" if test else "[MCD]"
-    return (f"{prefix} Run failed\nRun: #{run.id} · Agent: {identifier(run.agent)}\n"
-            f"State: {identifier(run.stage)} · Exit: {run.exit_code if run.exit_code is not None else 'not reported'}\n"
-            + ("Temporary verification run; no production task or service was changed." if test else "Open MCD to inspect the run."))
+    kind,heading,explanation=failure_kind(run)
+    fallback=bool(card and card.assignee_type=='agent' and card.agent!=run.agent and card.column in {'queued','running'})
+    if fallback:
+        heading += ' — approved fallback '+('running' if card.column=='running' else 'queued')
+    lines=[f'{prefix} {heading}']
+    if card:
+        lines.append(f'Task: #{card.id} {label(card.title)}'+(f' · Project #{project_id}' if project_id else ''))
+    lines.append(f'Run: #{run.id} · Agent: {identifier(run.agent)} · State: {identifier(run.stage)} · Exit: {run.exit_code if run.exit_code is not None else "not reported"}')
+    lines.append('What happened: '+explanation+' Partial work, if any, is unverified.')
+    if test:
+        lines.append('Temporary verification run; no production task or service was changed.')
+    elif fallback:
+        lines.append(f'Next: MCD selected the reviewed fallback {label(card.agent).title()}'+
+            (f' / {label(card.model)}' if card.model else '')+'. It continues the same task and preserves prior evidence.')
+    elif kind=='limit' and project_id:
+        lines.append('Next: Open the story and choose an approved retry route. If Go Free is offered, it uses a configured OpenRouter :free route.')
+    elif kind=='limit' and card:
+        lines.append('Next: Open the task, choose another configured agent/model, and rerun it after reviewing partial work.')
+    else:
+        lines.append('Next: Inspect the run details and partial workspace changes before retrying or changing agents.')
+    if card and not test:lines.append(f'Open task: {origin}/tasks?card={card.id}')
+    elif not test:lines.append(f'Open runs: {origin}/tasks')
+    return '\n'.join(lines)[:1000]
 
 
 class HermesSender:
@@ -123,8 +162,8 @@ class HermesSender:
 
 
 class AlertMonitor:
-    def __init__(self, sessions, path, sender, clock=time.time):
-        self.sessions, self.path, self.sender, self.clock = sessions, path, sender, clock
+    def __init__(self, sessions, path, sender, clock=time.time, origin='http://127.0.0.1:8800'):
+        self.sessions, self.path, self.sender, self.clock, self.origin = sessions, path, sender, clock, origin.rstrip('/')
         self.rules = AlertRules()
         self.error = None
         self.checked_at = None
@@ -182,8 +221,10 @@ class AlertMonitor:
                     Run.ended_at >= state["activated_at"], Run.ended_at <= now, ~Run.id.in_(state["excluded"]), ~seen)
                     .order_by(Run.ended_at, Run.id).limit(100))
                 for run in runs:
+                    card=s.get(Card,run.card_id) if run.card_id else None
+                    link=s.get(ProjectTask,run.card_id) if run.card_id else None
                     s.add(AlertEvent(id=uuid.uuid4().hex, source_key=f"run:{run.id}", run_id=run.id,
-                        kind="run_failed", message=run_message(run), destination=rules.destination,
+                        kind="run_failed", message=run_message(run,card=card,project_id=link.project_id if link else None,origin=self.origin), destination=rules.destination,
                         status="pending", created_at=now))
             if rules.services.enabled:
                 since = max(state["activated_at"], now - rules.services.window_seconds)

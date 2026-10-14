@@ -14,19 +14,38 @@ from models import UserProfile, UserCredential
 PROVIDERS = ('openrouter','discord')
 class SetupProgress(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    step: int = Field(default=0, ge=0, le=5, strict=True)
+    step: int = Field(default=0, ge=0, le=6, strict=True)
     status: Literal['new','in_progress','deferred','complete'] = 'new'
     confirmed: list[Literal['host','native_routes','subscriptions','tour']] = Field(default_factory=list,max_length=4)
+
+class GithubPreferences(BaseModel):
+    """Operator view restrictions only. Host configuration remains the hard ceiling."""
+    model_config = ConfigDict(extra='forbid')
+    public_only: bool = False
+    repos: list[str] = Field(default_factory=list, max_length=100)
+
+    @field_validator('repos')
+    @classmethod
+    def github_repos(cls, value):
+        import re
+        if len(set(value)) != len(value) or any(not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', item) for item in value):
+            raise ValueError('Invalid GitHub repository selection.')
+        return value
 
 class Preferences(BaseModel):
     model_config = ConfigDict(extra='forbid', hide_input_in_errors=True)
     theme: Literal['system','light','dark'] = 'system'
+    ai_agent: Literal['hermes','openclaw','claude','codex','grok'] = 'hermes'
+    ai_model: str = Field(default='openrouter/free', min_length=1, max_length=200, pattern=r'^[^\s\x00-\x1f]+$')
     planning_bias: int = Field(default=50,ge=0,le=100,strict=True)
     working_dir: str = Field(default='',max_length=500)
     dashboard_origin: str = Field(default='',max_length=300)
     discord_channel_id: str = Field(default='',pattern=r'^([0-9]{16,22})?$')
     notify_plans: bool = True
     allow_discord_planning: bool = False
+    allow_discord_control: bool = False
+    allow_discord_diagnostics: bool = False
+    github: GithubPreferences = Field(default_factory=GithubPreferences)
     setup: SetupProgress = Field(default_factory=SetupProgress)
 
     @field_validator('dashboard_origin')

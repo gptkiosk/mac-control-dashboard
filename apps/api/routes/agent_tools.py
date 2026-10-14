@@ -71,6 +71,9 @@ def draft(session, card_id):
 def task(session, card):
     data = _card_dict(card, deps=_dependency_maps(session, [card.id]))
     # _card_dict without a last run exposes no commands, logs, session IDs or result text.
+    # Approval nonces and audit are for the operator's approve request only.
+    for key in ("approval_challenge", "approval_pin", "approval_audit"):
+        data.pop(key, None)
     return data
 
 @router.get("/tasks")

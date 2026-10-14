@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import RolesPanel from '@/components/RolesPanel.vue'
+import ReportStoragePanel from '@/components/ReportStoragePanel.vue'
+import GithubSettingsPanel from '@/components/GithubSettingsPanel.vue'
+import AgentToolsPanel from '@/components/AgentToolsPanel.vue'
+import UpdatePanel from '@/components/UpdatePanel.vue'
 import { onMounted, ref } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import AppSelect from '@/components/AppSelect.vue'
@@ -13,7 +18,7 @@ const error = ref(''), notice = ref(''), busy = ref(false), pairing = ref('')
 const secrets = ref<Record<string,string>>({ openrouter: '', discord: '' })
 const spending = ref<Record<string, number | string | boolean | null> | null>(null)
 const theme = useThemeStore()
-function apply(p: Profile) { profile.value = p; preferences.value = structuredClone(p.preferences) }
+function apply(p: Profile) { profile.value = p; preferences.value = {ai_agent:'hermes',ai_model:'openrouter/free',...structuredClone(p.preferences)} }
 async function action(fn: () => Promise<void>) {
   if (busy.value) return
   busy.value = true; error.value = ''; notice.value = ''
@@ -66,12 +71,17 @@ async function importPreferences(event: Event) { await action(async () => {
     <p class="muted">Planning defaults, your Discord connection and private provider credentials.</p>
     <RouterLink to="/setup" class="btn">Open setup wizard</RouterLink>
     <p v-if="error" class="notice-warn" role="alert">{{ error }}</p><p v-if="notice" class="card" role="status">{{ notice }}</p>
+    <ReportStoragePanel />
+    <UpdatePanel />
+    <AgentToolsPanel />
+    <RolesPanel />
+    <GithubSettingsPanel id="github-settings" />
     <div v-if="profile && preferences" class="profile-grid">
       <form class="card preferences" @submit.prevent="save">
         <h2>Preferences</h2><p class="muted owner">{{ profile.owner }}</p>
         <label>Appearance<AppSelect v-model="preferences.theme" aria-label="Profile appearance"><option value="system">Follow device</option><option value="light">Light</option><option value="dark">Dark</option></AppSelect></label>
         <label>Default working directory<AppSelect v-model="preferences.working_dir" aria-label="Default working directory"><option value="">Use first allowed workspace</option><option v-for="w in workdirs" :key="w.path" :value="w.path" :data-description="directoryDetail(w.path,w.branch)">{{ directoryName(w.path) }}</option></AppSelect></label>
-        <PlanningBiasSlider v-model="preferences.planning_bias" />
+        <section id="ai-settings"><h3>AI defaults</h3><p>New consultant chats, agent chats, task forms and project planning start with Hermes on OpenRouter’s free router. Change these defaults to use your installed membership CLI or a reviewed API model. Existing conversations and approved projects keep their selected routes.</p><label>Default AI agent<AppSelect v-model="preferences.ai_agent" aria-label="Default AI agent"><option value="hermes">Hermes · OpenRouter</option><option value="openclaw">OpenClaw · OpenRouter</option><option value="claude">Claude Code · native membership</option><option value="codex">Codex · native membership</option><option value="grok">Grok Build · native membership</option></AppSelect></label><label>Default AI model<input v-model="preferences.ai_model" class="input" maxlength="200" required placeholder="openrouter/free" /></label><p class="muted">Choose a model supported by the selected CLI. Memberships require native sign-in; OpenRouter/API keys do not use membership allowances. Free routes can throttle or fail; this preference never authorizes paid fallback. Model-policy checks and existing approvals still apply.</p><RouterLink to="/help?topic=project-consultant">AI defaults and consultant help</RouterLink></section><PlanningBiasSlider v-model="preferences.planning_bias" />
         <div class="actions"><button class="btn primary" :disabled="busy">Save preferences</button><button type="button" class="btn" @click="exportPreferences">Export preferences</button><label class="btn import">Import preferences<input type="file" accept="application/json" @change="importPreferences" /></label></div>
         <p class="muted small">Exports contain settings only. Credentials, encryption keys, Discord pairing and setup confirmations are excluded. Workspace paths and the dashboard address must match the destination installation.</p>
       </form>
@@ -82,6 +92,8 @@ async function importPreferences(event: Event) { await action(async () => {
           <label>Dashboard address for project links<AppSelect v-model="preferences.dashboard_origin" aria-label="Dashboard address"><option value="">Installation default</option><option v-for="o in origins" :key="o" :value="o">{{ o }}</option></AppSelect></label>
           <label class="check"><input v-model="preferences.notify_plans" type="checkbox" />Notify me when a plan is ready or planning stops.</label>
           <label class="check"><input v-model="preferences.allow_discord_planning" type="checkbox" />Allow my Discord requests to start subscription planning with Hermes coordination.</label>
+          <label class="check"><input v-model="preferences.allow_discord_control" type="checkbox" />Allow my Discord requests to change how work is routed, such as sending waiting stories to the other subscription while a limit lasts. Approvals, dispatch, billing and credentials stay in MCD.</label>
+          <label class="check"><input v-model="preferences.allow_discord_diagnostics" type="checkbox" />Allow Hermes to read failed runs for me in Discord: errors, short handoff excerpts and log tails, with credentials and addresses removed. Read only.</label>
           <p class="muted small">Hermes uses its configured OpenRouter route, including capped Google BYOK fallback. This permission covers planning when you ask. Paid API planners and story execution require separate review in MCD.</p>
           <div class="actions"><button class="btn" :disabled="busy" @click="save">Save connection</button><button class="btn primary" :disabled="busy || !preferences.discord_channel_id" @click="pair">{{ profile.discord_linked ? 'Pair again' : 'Get pairing code' }}</button><button class="btn" :disabled="busy" @click="refresh">Check pairing</button><button v-if="profile.discord_linked" class="btn" :disabled="busy" @click="unlink">Unlink Discord</button></div>
           <div v-if="pairing" class="pairing" role="status"><strong>Send to Hermes in this channel within 10 minutes:</strong><p>{{ pairing }}</p><small>Treat the code as private. Then choose Check pairing.</small></div>

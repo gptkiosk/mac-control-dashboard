@@ -1,6 +1,6 @@
 # Mac Control Dashboard (MCD)
 
-Mac Control Dashboard (`mac-control`) is a local control center for the Mac mini M4 that monitors hardware health (CPU, GPU, memory, temperature, power, network, disk), tracks service health and crash-loop detection, manages a task board with agent dispatch (Claude Code, Hermes, OpenClaw, Codex) and execution approvals, provides agent chat with session resume, supports reviewed project planning with shared memory and bounded model routing, exposes read-only GitHub and operational report panels, and delivers durable failure alerts through an outbox with verification. It runs on a single FastAPI port (default 8800) with a Vue 3 frontend, binds to loopback by default (`127.0.0.1`), and supports optional private HTTPS remote access only through an operator-configured endpoint.
+Mac Control Dashboard (`mac-control`) is a local control center for the Mac mini M4 that monitors hardware health (CPU, GPU, memory, temperature, power, network, disk), tracks service health and crash-loop detection, manages a task board with agent dispatch (Claude Code, Codex CLI, Grok Build, Hermes, OpenClaw) and execution approvals, provides agent chat with session resume, supports reviewed project planning with shared memory and bounded model routing, exposes read-only GitHub and operational report panels, and delivers durable failure alerts through an outbox with verification. It runs on a single FastAPI port (default 8800) with a Vue 3 frontend, binds to loopback by default (`127.0.0.1`), and supports optional private HTTPS remote access only through an operator-configured endpoint.
 
 **MIT licensed · Provided as-is · Forks welcome.** You may use and customize the code and documentation for personal or commercial purposes under the [MIT license](LICENSE). No ongoing upstream development, updates, support or pull request review is promised. Users maintain their own installations and forks.
 
@@ -29,6 +29,8 @@ Confirmed on [tested environments](docs/tested-environments.md): Mac mini M4, ma
 
 ## Quick start
 
+For a fresh computer, follow [clean Mac and Raspberry Pi installation](docs/install/clean-os-0.3.1.md).
+
 See [Getting started](docs/getting-started.md) for prerequisites and setup, then the [configuration guides](docs/configuration/settings.md) for sign-in, private remote access and profile preferences.
 
 Once MCD is running, open **Setup wizard** from the header account menu, Settings or Help, or visit `/setup`. The [wizard guide](docs/SETUP_WIZARD.md) walks through Mac prerequisites, Google sign-in, Hermes and OpenClaw, a profile-owned OpenRouter key, subscription routes and the main menu. Integration prerequisites depend on the features you choose; the wizard distinguishes detected configuration from operator confirmations.
@@ -39,8 +41,11 @@ This source release packages MCD for independent reuse under MIT. Installations 
 
 For your own changes, see the [fork development guide](CONTRIBUTING.md). [Development history](docs/development/CHANGELOG.md) and the [historical roadmap](docs/development/ROADMAP.md) describe the implementation and possible work for fork owners, without promising future delivery. Review the [security policy](SECURITY.md) and preserve the [third-party notices](THIRD_PARTY_NOTICES.md). Detailed how-tos live in [the documentation index](docs/README.md).
 
+Host report folders: see [report storage configuration](docs/configuration/report-storage.md).
+Dispatch admission: see [pricing and budget policy](docs/configuration/dispatch-policy.md).
+
 ## Community and agent-managed development
 
 [Contributing](CONTRIBUTING.md) · [Discussions](https://github.com/gptkiosk/mac-control-dashboard/discussions) · [Wiki](https://github.com/gptkiosk/mac-control-dashboard/wiki) · [Agent workflow](docs/development/agent-workflow.md) · [UI preview standard](docs/development/ui-testing.md) · [Support policy](SUPPORT.md)
 
-Public participation does not promise ongoing upstream development or support. RCD is a separate repository: [rbp-control-dashboard](https://github.com/gptkiosk/rbp-control-dashboard), currently license/docs/community staging pending code-release sign-off.
+Public participation does not promise ongoing upstream development or support. RCD is a separate repository: [rbp-control-dashboard](https://github.com/gptkiosk/rbp-control-dashboard), with a shared 0.3.1 production release; broader hardware/provider acceptance remains under operator testing.

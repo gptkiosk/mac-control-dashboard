@@ -35,11 +35,31 @@ const reviewCard = (): CardDetail => ({
     column: 'review',
     needs_approval: true,
     approval_reasons: ['Edit mode on main'],
+    approval_challenge: 'nonce-1',
+    approval_pin: 'a'.repeat(64),
   }),
   runs: [],
 })
 
 describe('CardDetailPanel', () => {
+  it('identifies an older failure and returns to the latest active run without changing the task', async () => {
+    const detail: CardDetail = { ...card({id:45,column:'running'}), runs:[
+      run({id:48,card_id:45,stage:'running',ended_at:null,error:null,result_text:null}),
+      run({id:45,card_id:45,stage:'failed',error:'Old failure',result_text:'Old report'}),
+    ] }
+    const {w,f}=mountPanel(detail)
+    await flushPromises()
+    expect(w.find('[data-testid="run-history-notice"]').exists()).toBe(false)
+    await w.findAll('button.run-btn')[1]!.trigger('click')
+    expect(w.get('[data-testid="run-history-notice"]').text()).toContain('Viewing older Run #45. Latest Run #48: Running')
+    expect(w.get('[data-testid="run-result"]').text()).toBe('Old report')
+    await w.findAll('button').find(b=>b.text()==='View latest run #48')!.trigger('click')
+    expect(w.find('[data-testid="run-history-notice"]').exists()).toBe(false)
+    expect(w.get('[data-testid="run-meta"]').text()).toContain('Running')
+    expect(calls(f,'POST','/api/')).toHaveLength(0)
+    w.unmount()
+  })
+
   it('explains a normal CLI exit when the provider timed out', async () => {
     const detail: CardDetail = {
       ...card({ id: 5, column: 'failed' }),
@@ -84,6 +104,7 @@ describe('CardDetailPanel', () => {
     const posts = calls(f, 'POST', '/api/cards/5/approve')
     expect(posts).toHaveLength(1)
     expect(headerOf(posts[0]![1], 'X-Mac-Control')).toBe('1')
+    expect(JSON.parse(String(posts[0]![1]?.body))).toEqual({ challenge: 'nonce-1', pin: 'a'.repeat(64) })
     expect(w.get('[data-testid="panel-message"]').text()).toContain('Approved')
     w.unmount()
   })

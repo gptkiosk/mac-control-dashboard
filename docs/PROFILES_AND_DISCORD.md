@@ -28,7 +28,7 @@ Profile credentials are write-only, encrypted with Fernet and separated by signe
 
 **Export preferences** includes settings only; credentials, pairing and encryption material are excluded. Import loads settings for review; Save validates workspace and origin against the new installation. Review paths/channel/address and pair again on a new installation. Appearance is shared through the profile when explicitly set; browser/device theme remains usable when profile access is unavailable.
 
-For a clean distribution, ship version-controlled source, dependencies and the native plugin, **never** `.env`, OAuth client JSON, runtime database/logs, vault.key, credential backups or agent-tokens. Host bootstrap configuration and allowed operator emails must be set explicitly. `scripts/configure-google-auth.py --allowed-email operator@example.com` imports configured HTTPS callback origins from the downloaded client JSON rather than hardcoding a tailnet hostname. Machine workspaces are allowlisted in private host configuration.
+For a clean distribution, ship version-controlled source, dependencies and the native plugin, **never** `.env`, OAuth client JSON, runtime database/logs, vault.key, credential backups or agent-tokens. Host bootstrap configuration and allowed operator emails must be set explicitly. `scripts/configure-google-auth.py --allowed-email operator@example.com` configures only explicitly selected host origins with `--origin`, rather than trusting every callback in a shared client JSON rather than hardcoding a tailnet hostname. Machine workspaces are allowlisted in private host configuration.
 
 ## Native Hermes integration
 

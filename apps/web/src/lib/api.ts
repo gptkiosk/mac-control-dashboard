@@ -90,6 +90,7 @@ export interface ReleaseEnvelope {
   version: string
   environment: string
   commit_sha?: string | null
+  dirty?: boolean
   has_migrations?: boolean
   owner?: string
   product?: string
@@ -225,7 +226,7 @@ export type UpdatesPayload = UpdatesOk | UpdatesError
 
 // ---- Phase 3: agents, workdirs, cards, runs ----
 
-export type AgentId = 'claude' | 'codex' | 'hermes' | 'openclaw'
+export type AgentId = 'claude' | 'codex' | 'grok' | 'hermes' | 'openclaw'
 export type RunStage = 'running' | 'succeeded' | 'failed' | 'timeout' | 'cancelled' | 'interrupted' | 'awaiting_approval'
 export type CardColumn = 'backlog' | 'queued' | 'running' | 'review' | 'done' | 'failed'
 export type CardMode = 'read' | 'edit'
@@ -259,6 +260,24 @@ export interface AgentCurrentRun {
   title: string
   model: string | null
   running_s: number
+  liveness?: RunLiveness
+}
+
+export interface RunLiveness {
+  state: 'live' | 'quiet' | 'dead' | 'unknown'
+  stale: boolean
+  checked_at: number
+  pid_alive: boolean | null
+  last_activity_at: number | null
+  reason: string
+}
+
+export interface UnresponsiveRun {
+  run_id: number
+  card_id: number | null
+  thread_id: number | null
+  since_s: number
+  liveness: RunLiveness
 }
 
 export interface AgentProcess {
@@ -303,6 +322,7 @@ export interface Agent {
   enforces_mode: boolean
   notes: string
   current: AgentCurrentRun[]
+  unresponsive?: UnresponsiveRun[]
   last_run: Run | null
   runs_24h: Num
   failed_24h: Num
@@ -315,6 +335,7 @@ export interface Agent {
 
 export interface AgentsPayload {
   subagents_checked_at?: Num
+  checked_at?: number
   agents: Agent[]
 }
 
@@ -333,6 +354,8 @@ export type Priority = 'urgent' | 'high' | 'normal' | 'low'
 
 export interface Card {
   project?: { id: number; node_key: string; role: string } | null
+  superseded_by?: number | null
+  closed_project?: boolean
   id: number
   title: string
   body: string
@@ -350,6 +373,9 @@ export interface Card {
   needs_approval: boolean
   approval_reasons: string[]
   approved_at: Num
+  /** One-time nonce and route pin the approve request must echo; null when not awaiting approval. */
+  approval_challenge?: string | null
+  approval_pin?: string | null
   created_by: string
   created_at: number
   updated_at: number
@@ -563,6 +589,7 @@ export interface UsageSummary {
   cache_write_tokens: number
   api_equivalent_usd: number | null
   unpriced: number
+  unpriced_models?: string[]
   sessions: number
   last_active: number | null
   models: (Omit<UsageSummary, 'models'> & { model: string })[]

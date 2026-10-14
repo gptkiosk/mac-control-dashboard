@@ -1,0 +1,2 @@
+# Reviewed false positive: a made-up JWT-shaped string in a redaction test (fixed at run time since v0.2.4).
+38cc466a002c9483b927fd8f385e7b801ddb4fa9:apps/api/tests/test_failure_mining.py:jwt:23

@@ -12,6 +12,31 @@ SUFFIXES = {".md", ".markdown", ".txt"}
 FLAGS = os.O_RDONLY | os.O_NOFOLLOW
 DIR_FLAGS = FLAGS | os.O_DIRECTORY
 
+# Reject every symlink component, including ancestors of a report root.
+def open_directory(path: Path):
+    path = path.expanduser().absolute()
+    if ".." in path.parts:
+        raise OSError("Invalid report folder")
+    fd = os.open(path.anchor, DIR_FLAGS)
+    try:
+        for part in path.parts[1:]:
+            child = os.open(part, DIR_FLAGS, dir_fd=fd)
+            os.close(fd)
+            fd = child
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+SECRET_NAMES = {"secrets", "secret", "credentials", "credential", "config", "private",
+                "keys", "key", "tokens", "token", "passwords", "password", "auth", "oauth",
+                "vault", "agent-tokens", "ssh", "aws", "gnupg", "keychains", "library",
+                "codex", "grok", "openclaw", "git", "env", "kube", "docker", "azure", "gcloud", "keyring", "keyrings"}
+
+def sensitive_component(name):
+    return name.lower().lstrip(".") in SECRET_NAMES
+
+
 class ReportsReader:
     def __init__(self, root: Path, hermes_root: Path | None = None):
         self.root = root.expanduser().absolute()
@@ -33,7 +58,7 @@ class ReportsReader:
                     if visited > MAX_ENTRIES:
                         limited = True
                         return
-                    if entry.name.startswith("."):
+                    if entry.name.startswith(".") or sensitive_component(entry.name) or sensitive_component(Path(entry.name).stem):
                         continue
                     try:
                         info = entry.stat(follow_symlinks=False)
@@ -46,6 +71,8 @@ class ReportsReader:
                             name = "/".join(path_parts)
                             identity = name if source_id == "ops" else f"{source_id}:{name}"
                             title = name
+                            if source_id == "ops" and parts and parts[0] == "historic-archive":
+                                title = "Historic (archived) · " + "/".join(path_parts[1:])
                             if source_id == "hermes":
                                 header_fd = os.open(entry.name, FLAGS | os.O_NONBLOCK, dir_fd=fd)
                                 with os.fdopen(header_fd, "rb") as header:
@@ -63,7 +90,7 @@ class ReportsReader:
         for source_id, root in self.roots.items():
             source = {"id": source_id, "root": str(root), "available": False, "error": None}
             try:
-                root_fd = os.open(root, DIR_FLAGS)
+                root_fd = open_directory(root)
                 try:
                     walk(root_fd, ())
                     source["available"] = True
@@ -80,7 +107,7 @@ class ReportsReader:
         report = next((r for r in self.catalog()["reports"] if r["id"] == report_id), None)
         if report is None:
             raise FileNotFoundError()
-        fd = os.open(self.roots[report["source_id"]], DIR_FLAGS)
+        fd = open_directory(self.roots[report["source_id"]])
         try:
             parts = report["name"].split("/")
             for part in parts[:-1]:

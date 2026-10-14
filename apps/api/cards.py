@@ -7,7 +7,8 @@ Column rules:
   backlog / done / failed   free moves for any card that is not running
 
 Approval is tied to the card's content: editing the prompt, mode, working directory, agent or
-model clears the approval and re-runs the rules.
+model clears the approval and re-runs the rules. An approval is a single-use grant bound to the
+card's route pin, a nonce and an expiry (approval.py); each new run needs a new approval.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from agents import REGISTRY
 from models import COLUMNS, Card, CardDependency
 
 APPROVAL_FIELDS = {"body", "mode", "working_dir", "agent", "model", "agent_target", "assignee_type"}
-EDITABLE_FIELDS = APPROVAL_FIELDS | {"title", "timeout_s", "budget_usd", "priority", "due_date",
+EDITABLE_FIELDS = APPROVAL_FIELDS | {"title", "timeout_s", "max_attempts", "retry_backoff_s", "budget_usd", "priority", "due_date",
                                      "estimate_minutes", "tags", "acceptance"}
 PRIORITIES = ("urgent", "high", "normal", "low")
 TAG_RE = re.compile(r"^[a-z0-9][a-z0-9 &._-]{0,31}$")
@@ -80,6 +81,8 @@ def _apply_rules(card: Card, roots) -> None:
     card.needs_approval = bool(reasons)
     card.approval_reasons = json.dumps(reasons) if reasons else None
     card.approved_at = None
+    if reasons:
+        approval.issue_challenge(card)
 
 
 def validate_fields(data: dict) -> None:
@@ -98,6 +101,10 @@ def validate_fields(data: dict) -> None:
         raise HTTPException(status_code=422, detail="Estimate must be 1 to 100000 minutes")
     if "mode" in data and data["mode"] not in ("read", "edit"):
         raise HTTPException(status_code=422, detail="Mode must be read or edit")
+    if data.get("max_attempts") is not None and not 1 <= int(data["max_attempts"]) <= 10:
+        raise HTTPException(status_code=422, detail="Max attempts must be 1 to 10")
+    if data.get("retry_backoff_s") is not None and not 0 <= int(data["retry_backoff_s"]) <= 3600:
+        raise HTTPException(status_code=422, detail="Retry backoff must be 0 to 3600 seconds")
     if "title" in data and not str(data["title"]).strip():
         raise HTTPException(status_code=422, detail="Title is required")
 
@@ -112,6 +119,8 @@ def create(s: Session, data: dict, settings, created_by: str = "operator") -> Ca
         mode=data.get("mode") or "read", working_dir=data.get("working_dir"),
         column="backlog", position=_next_position(s, "backlog"),
         timeout_s=int(data.get("timeout_s") or settings.default_timeout_s),
+        max_attempts=int(data.get("max_attempts") or 1),
+        retry_backoff_s=int(data.get("retry_backoff_s") or 0), retry_attempts=0,
         budget_usd=data.get("budget_usd"), created_by=created_by,
         priority=data.get("priority") or "normal", due_date=data.get("due_date") or None,
         estimate_minutes=data.get("estimate_minutes"),
@@ -159,8 +168,19 @@ def move(s: Session, card: Card, to: str, position: float | None) -> Card:
     human = card.assignee_type == "human"
     if to == "running" and not human:
         raise HTTPException(status_code=409, detail="Only the dispatcher starts runs. Move the card to Queued.")
-    if to == "queued" and not human and card.needs_approval and card.approved_at is None:
-        to = "review"
+    if to == "queued" and not human and card.needs_approval:
+        # Project stories are authorized by their approved project revision, not a card grant.
+        problem = (("not approved" if card.approved_at is None else None) if projects.binding(s, card.id)
+                   else approval.grant_problem(card, _now()))
+        if problem:
+            if card.approved_at is not None:  # a used or stale grant never re-arms on a move
+                approval.audit(card, _now(), "dispatch_refused", problem)
+                approval.issue_challenge(card)
+            to = "review"
+    # A deliberate requeue after a terminal state starts a new execution. Automatic retries
+    # leave the card queued and therefore cannot reset their own finite budget.
+    if to == "queued" and card.column in ("done", "failed"):
+        card.retry_attempts, card.retry_after = 0, None
     card.column = to
     card.position = position if position is not None else _next_position(s, to)
     card.updated_at = _now()
@@ -215,14 +235,19 @@ def remove_dependency(s: Session, card: Card, depends_on_id: int) -> None:
     card.updated_at = _now()
 
 
-def approve(card: Card) -> Card:
+def approve(card: Card, challenge: str | None, pin: str | None, ttl_s: int) -> Card:
+    """Approve the exact card version the operator was shown, once.
+
+    A refused request raises approval.ApprovalRefused after recording it on the card; the
+    caller commits that audit entry before returning 409.
+    """
     if card.assignee_type == "human":
         raise HTTPException(status_code=409, detail="Human tasks do not need approval.")
     if card.column == "running":
         raise HTTPException(status_code=409, detail="Card is already running.")
     if not card.needs_approval:
         raise HTTPException(status_code=409, detail="This card does not need approval.")
-    card.approved_at = _now()
+    approval.grant(card, challenge, pin, _now(), ttl_s)
     if card.column in ("review", "backlog"):
         card.column = "queued"
     card.updated_at = _now()

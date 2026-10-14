@@ -27,9 +27,10 @@ def monitor(sessions, tmp_path, now, sender=None, delivery=True):
     return m, sent
 
 def run(sessions, now, stage='failed', ended=None, **extra):
+    exit_code=extra.pop('exit_code',7)
     with sessions.begin() as s:
         r=Run(agent='codex', stage=stage, started_at=now-10, ended_at=ended if ended is not None else now,
-              working_dir='/private/path', command='private prompt', log_path='', exit_code=7, error='private token', **extra)
+              working_dir='/private/path', command='private prompt', log_path='', exit_code=exit_code, error='private token', **extra)
         s.add(r); s.flush(); return r.id
 
 def snapshots(sessions, times, counts, **extra):
@@ -50,14 +51,38 @@ def test_historical_failures_ignored_new_failures_once_across_restarts(sessions,
     assert len(sent)==1
 
 def test_forced_dispatcher_failure_creates_one_notification(sessions,tmp_path):
-    import time
-    now=[int(time.time())]
+    now=[1000]
     m,sent=monitor(sessions,tmp_path,now); m.tick()
-    cid=_card(sessions,tmp_path,"import sys;sys.exit(23)")
-    d=Dispatcher(sessions,_settings(tmp_path),registry=_registry())
-    asyncio.run(_drain(d))
+    now[0]=1001
+    with sessions.begin() as s:
+        from models import Card
+        card=Card(title='Synthetic failure',body='bounded fixture',assignee_type='agent',agent='codex',mode='read',
+            working_dir=str(tmp_path),priority='normal',column='failed',position=1,timeout_s=30,needs_approval=False,
+            created_by='operator',created_at=1000,updated_at=1000)
+        s.add(card);s.flush();cid=card.id
+        s.add(Run(card_id=cid,agent='codex',stage='failed',started_at=990,ended_at=1001,working_dir=str(tmp_path),
+            command='[redacted]',log_path='',exit_code=23,error='process failed'))
     m.tick(); m.tick()
     assert len(sent)==1 and 'Exit: 23' in sent[0][1]
+    assert f'Task: #{cid}' in sent[0][1] and f'/tasks?card={cid}' in sent[0][1]
+
+def test_limit_alert_explains_reviewed_fallback_and_next_action():
+    failed=SimpleNamespace(id=98,agent='codex',stage='failed',exit_code=1,error="You've hit your session limit")
+    fallback=SimpleNamespace(id=99,title='Finish documentation',assignee_type='agent',agent='claude',model='claude-sonnet-5-5',column='queued')
+    message=run_message(failed,card=fallback,project_id=3,origin='https://mcd.example.test')
+    assert message.startswith('[MCD] Agent limit reached — approved fallback queued')
+    assert 'Task: #99 Finish documentation · Project #3' in message
+    assert 'MCD selected the reviewed fallback Claude / claude-sonnet-5-5' in message
+    assert 'https://mcd.example.test/tasks?card=99' in message
+    assert 'session limit' not in message.lower()  # Raw provider error is never copied.
+
+def test_limit_alert_without_fallback_explains_project_retry_choices():
+    failed=SimpleNamespace(id=100,agent='claude',stage='failed',exit_code=1,error='usage limit reached')
+    card=SimpleNamespace(id=101,title='Bounded story',assignee_type='agent',agent='claude',model='opus',column='failed')
+    message=run_message(failed,card=card,project_id=3)
+    assert message.startswith('[MCD] Agent limit reached')
+    assert 'choose an approved retry route' in message
+    assert 'Go Free' in message and '/tasks?card=101' in message
 
 def test_cancelled_and_successful_not_alerted_but_timeout_is(sessions,tmp_path):
     now=[1000]; m,sent=monitor(sessions,tmp_path,now); m.tick()
@@ -122,6 +147,9 @@ def test_rules_permissions_symlink_and_message_directives(tmp_path):
     r=SimpleNamespace(id=1,agent='@everyone MEDIA:/secret',stage='failed',exit_code=1)
     message=run_message(r)
     assert '@' not in message and 'MEDIA:' not in message and '/secret' not in message
+    card=SimpleNamespace(id=2,title='@everyone MEDIA:/private https://untrusted.example',assignee_type='agent',agent='codex',model=None,column='failed')
+    message=run_message(r,card=card)
+    assert '@' not in message and 'MEDIA:' not in message and 'https://untrusted' not in message
 
 def test_hermes_transport_uses_stdin_and_requires_matching_ack(monkeypatch):
     import alerts

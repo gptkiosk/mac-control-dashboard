@@ -72,9 +72,10 @@ Tasks needing human interaction, decisions or required answers stay manual, incl
 Set the primary model per story and review an ordered list of alternate routes.
 
 1. Select a story and choose its agent and model. Claude and Codex use their existing subscription logins. Suggestions are editable; availability depends on the installed CLI and account.
-2. Add Model route entries in the order you want. Alternate subscription models or reviewed free/API routes are tried once per story after an explicit reported quota or rate limit, using the same workspace and a checkpoint. Other errors require an explicit retry.
-3. Use Review & submit to inspect every route. Hermes/OpenClaw API routes require a separate acknowledgment. Automatic alternate API routes are limited to Inkling free, Gemma free and Google Gemini 2.5 Flash.
-4. Open Agents to inspect actual key-wide spending and the current monthly limit. The shared key has a $20 monthly cap including recorded BYOK usage. Google calls outside that key and differences in upstream invoicing are outside the cap.
+2. In Stories & runs, enable Model lock to stop failed tasks without automatic retries or equivalent-model switching. Default off retains approved alternatives; manual retry remains explicit.
+3. Add Model route entries in the order you want. Alternate subscription models or reviewed free/API routes are tried once per story after an explicit reported quota or rate limit, using the same workspace and a checkpoint. Other errors require an explicit retry.
+4. Use Review & submit to inspect every route. Hermes/OpenClaw API routes require a separate acknowledgment. Automatic alternate API routes are limited to Inkling free, Gemma free and Google Gemini 2.5 Flash.
+5. Open Agents to inspect actual key-wide spending and the current monthly limit. The shared key has a $20 monthly cap including recorded BYOK usage. Google calls outside that key and differences in upstream invoicing are outside the cap.
 
 Quota handoff is reactive; MCD cannot predict all subscription windows or guarantee free-model availability. A model switch within one subscription may share the same exhausted quota. No unapproved paid model is selected automatically.
 
@@ -134,6 +135,20 @@ Check updates and peer connectivity without changing the machine.
 3. Open Tailscale peers to inspect reachability. Existing Serve proxies are not changed by viewing this page.
 
 [Open available updates](http://127.0.0.1:8800/mac#upd-title) · [Open Tailscale peers](http://127.0.0.1:8800/mac#ts-title) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=updates)
+
+## Check, install or roll back a dashboard update
+
+Look for a newer release on GitHub, read what changed, then download, install or roll back with operator sign-in.
+
+1. Sign in as the operator. Only the operator can see or change dashboard updates; other sessions get a sign-in message.
+2. Open Updates in Settings and press Check for updates. This reads the public GitHub release list and nothing else: it downloads nothing and changes nothing. The release notes appear as plain text.
+3. To fetch a release, paste its manifest SHA-256 from the release page and confirm. The package is downloaded, verified against that digest and staged. Nothing is stopped yet.
+4. Read “What changed” for the staged version, then confirm the install. The helper stops the service, saves a data snapshot, switches versions and runs a health check; a failed check rolls the version back by itself.
+5. Roll back to the previous version from the same panel. It returns the code only; data written meanwhile stays.
+
+Every step stays disabled while an update is in progress or a blocker is listed. A source checkout or an unmanaged install shows the manual steps instead.
+
+[Open dashboard updates](http://127.0.0.1:8800/profile#updates) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=app-updates)
 
 ## Create and run an agent task
 
@@ -197,7 +212,7 @@ Task details show run history, output, exit status and captured usage.
 
 1. Open the task, then inspect the last run and its output/history.
 2. Read Stage and Error before Exit code. OpenClaw can exit with code 0 while its agent result reports a provider timeout. Timed out means the agent did not finish; it does not authorize a model switch.
-3. Review partial output and changed files against the task’s definition of done. Correct the task or timeout setting when necessary, review any new approval requirement, then use Run again. Cancel run is available for an active run. Failed, timed-out or interrupted runs can generate alerts; cancellation does not.
+3. Review partial output and changed files against the task’s definition of done. Correct the task or timeout setting when necessary, then use Rerun task or an approved alternative on the failed task screen. After a subscription limit, Go Free! lets you select a configured OpenClaw target and OpenRouter :free model for that story only; it excludes paid-model and Google BYOK fallback. Cancel run is available for an active run. Failed, timed-out or interrupted runs can generate alerts; cancellation does not.
 
 [Open task run history](http://127.0.0.1:8800/tasks) · [Open alert history](http://127.0.0.1:8800/#alerts-title) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=runs)
 
@@ -241,13 +256,53 @@ Read/Edit restrictions depend on the agent. Check the explanatory note in New ch
 
 Compare captured API-equivalent usage against each agent’s full monthly subscription.
 
-1. Open Agents → Billing & rates. For Claude Code or Codex, choose Subscription and enter your USD per month, such as 20.
-2. Save. Select This month in Agents and read the agent’s subscription and savings summary.
-3. Savings compare captured API-equivalent usage for this calendar month against the full monthly subscription, counted once across that agent’s sub-agents.
+1. Claude Code and Codex use the standard Subscription / $20 monthly defaults on a new installation. Open Agents → Billing & rates only when you need to change those defaults.
+2. Select Save billing after changing a billing mode, monthly amount or custom model rate. An unchanged save is not required for task dispatch.
+3. Select This month in Agents and read the agent’s subscription and savings summary.
+4. Savings compare captured API-equivalent usage for this calendar month against the full monthly subscription, counted once across that agent’s sub-agents.
 
 These are captured-usage estimates, not provider invoices. Partial coverage or missing prices limits the comparison; a negative result means captured API-equivalent usage is below the subscription fee.
 
 [Open Billing & rates](http://127.0.0.1:8800/agents?agent=codex&action=billing) · [Open cost summary](http://127.0.0.1:8800/agents?agent=codex#usage-summary) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=subscriptions)
+
+## A task fails with PRICE_UNKNOWN
+
+Dispatch refuses any route that has no reviewed pricing class. The run fails in under a second and never starts an agent.
+
+1. Claude Code or Codex: the effective Billing & rates configuration is authoritative. Standard membership defaults are Subscription; save only if you intentionally changed a mode or amount.
+2. OpenClaw: an approved project story automatically reviews its exact pinned :free model and target. Go Free records its exact route separately. Standalone tasks need an exact free entry in MAC_CONTROL_DISPATCH_ROUTE_CLASSES (for example openclaw|mm-developer|<exact model id>). Restart MCD after changing a host setting.
+3. Hermes: project coordination pins the configured native free model. Other Hermes tasks need an explicit configured free route.
+4. Rerun the task. Each rerun takes a fresh claim, so a fix applies to new runs only; failed runs keep the class they froze.
+
+This is the pre-dispatch spending guard, not a fault. A :free model name, a billing estimate or a past successful run does not classify a route. Paid OpenClaw and Hermes routes are always refused.
+
+[Open Billing & rates](http://127.0.0.1:8800/agents?action=billing) · [Open Tasks](http://127.0.0.1:8800/tasks) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=price-unknown)
+
+## Use Grok Build as an agent
+
+Grok Build is xAI’s terminal coding agent. MCD can run it on a SuperGrok subscription, next to or instead of any other agent.
+
+1. Install the CLI on the host and sign in with grok login (or grok login --device-code on a machine without a browser). MCD never sees the sign-in.
+2. Open Agents, then Billing & rates, set Grok Build to Subscription and save. Until you do, MCD refuses to start it, because the CLI has no dollar cap and an API-billed route cannot be bounded.
+3. Create a task or choose Grok Build as a project story agent or fallback. Pick a model such as grok-4.6, grok-4.5 or grok-build-0.1, or leave it blank for the CLI default.
+4. Read the data notice first: Grok sends the task and the files it reads to xAI. MCD runs it with telemetry and trace upload off, inside a filesystem sandbox (read-only for a read task, the working directory for an edit task), with git push and merge blocked.
+
+MCD works with any mix of agents installed, including only Grok Build. Usage for Grok comes from the runs MCD dispatches; it does not read the CLI’s own session history. Grok is not used as a project planner, and subscription limit notices cover Claude Code and Codex only.
+
+[Open Billing & rates](http://127.0.0.1:8800/agents?action=billing) · [Open Agents](http://127.0.0.1:8800/agents) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=grok-build)
+
+## A Claude or Codex limit was reached
+
+MCD notes when a subscription limit lifts, moves stories to an approved alternate on its own, and lets you send the rest across in one click.
+
+1. When a run stops on a limit, a notice appears at the top of every page with the time it lifts in your time zone. It appears once per limit; use the × to hide it.
+2. Each story that meets the limit already moves to its approved alternate route by itself. The notice counts these rather than announcing every one.
+3. To avoid wasted attempts, select Send the waiting stories to the other subscription. Stories that have not started then go to the approved alternate of the same grade (Haiku to Luna, Sonnet to Terra, Opus to Sol) until the limit lifts, and return to their own route afterwards. Turn it off in the same notice.
+4. If the other subscription is limited too, or a story has no approved alternate, it waits. You can also ask Hermes in Discord for the status; changing the routing from Discord needs Allow my Discord requests to change how work is routed in your profile.
+
+Only routes the approved plan already lists are ever used, and nothing is approved, dispatched or spent beyond that. A limit with no reported lift time expires after a few hours or at the first later success.
+
+[Open Projects](http://127.0.0.1:8800/projects) · [Open your profile](http://127.0.0.1:8800/profile) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=subscription-limits)
 
 ## Price an unrecognized model
 
@@ -257,7 +312,7 @@ Add explicit token rates when a model’s usage is captured but its API equivale
 2. Choose or enter the exact model ID, enable Save custom rates for this model, and fill all five non-negative input/output/cache rates.
 3. Save and review usage again. Source-reported cost takes precedence; custom rates apply uniformly up to their input limit.
 
-Use rates from the model provider. Missing rates remain unpriced; tools, taxes and other surcharges are outside token estimates.
+Use rates from the model provider. Models ending in :free cost 0. Other missing rates remain unpriced; tools, taxes and other surcharges are outside token estimates.
 
 [Open model rate settings](http://127.0.0.1:8800/agents?action=billing) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=model-rates)
 
@@ -301,9 +356,10 @@ Draft access cannot queue/start runs, approve/complete/delete tasks, change inte
 
 Inspect accessible repositories and their current open work using the existing GitHub login.
 
-1. Open GitHub and search the repository list.
-2. Select a repository to load its open pull requests and issues. Select an item’s link to open it on GitHub.
-3. Use Refresh to check again. Notice partial, stale or capped results; this panel does not merge PRs, edit issues or broaden your token’s scopes.
+1. GitHub is optional. If it is not set up, open Settings > GitHub (optional), choose the account already signed in with gh, list the repositories to show, and save. Your profile’s public contribution graph is a separate GitHub setting: Profile > Contribution settings > Private contributions.
+2. Open GitHub and search the repository list.
+3. Select a repository to load its open pull requests and issues. Select an item’s link to open it on GitHub.
+4. Use Refresh to check again. Notice partial, stale or capped results; this panel does not merge PRs, edit issues or broaden your token’s scopes.
 
 [Open GitHub projects](http://127.0.0.1:8800/github#github-title) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=github)
 
@@ -314,6 +370,7 @@ Read actual Markdown/text reports with their source and timestamp.
 1. Open Ops reports. The newest modified report is selected first; choose another from the list.
 2. Check the source, timestamp and historical warning before interpreting its findings.
 3. Use Refresh to rescan. Hermes cron archives show the actual Response, omitting archived Prompt instructions. Viewing does not generate a new report or enable a schedule.
+4. For collector reports, a warning or critical finding can become one Backlog task from the report. The task keeps a link back to the report; choosing the same finding again opens the existing task.
 
 The catalog is capped at 200 files. Oversized/binary files are not previewed. An empty source is different from an unavailable source; old reports do not describe current fleet health.
 
