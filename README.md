@@ -48,4 +48,4 @@ Dispatch admission: see [pricing and budget policy](docs/configuration/dispatch-
 
 [Contributing](CONTRIBUTING.md) · [Discussions](https://github.com/gptkiosk/mac-control-dashboard/discussions) · [Wiki](https://github.com/gptkiosk/mac-control-dashboard/wiki) · [Agent workflow](docs/development/agent-workflow.md) · [UI preview standard](docs/development/ui-testing.md) · [Support policy](SUPPORT.md)
 
-Public participation does not promise ongoing upstream development or support. RCD is a separate repository: [rbp-control-dashboard](https://github.com/gptkiosk/rbp-control-dashboard), with a public 0.3.1 source candidate and physical Pi acceptance pending.
+Public participation does not promise ongoing upstream development or support. RCD is a separate repository: [rbp-control-dashboard](https://github.com/gptkiosk/rbp-control-dashboard), with a shared 0.3.1 production release; broader hardware/provider acceptance remains under operator testing.

@@ -214,3 +214,5 @@ failed, 2 bad usage, 3 declined.
 hand. It builds twice, verifies, scans, checks that the lock installs from wheels only, and
 uploads a short-lived workflow artifact. It does not publish a release. Action pinning and
 enablement are handled in the s8-ci story.
+
+Production 0.3.1 verification key and signing procedure: [release signatures](release-signing.md).
