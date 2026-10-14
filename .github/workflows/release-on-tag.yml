@@ -84,7 +84,7 @@ jobs:
           version="$(python3 -I -c 'import ast; p="apps/api/version.py"; t=ast.parse(open(p).read()); print(next(ast.literal_eval(n.value) for n in t.body if isinstance(n, ast.Assign) and any(isinstance(x, ast.Name) and x.id == "__version__" for x in n.targets)))')"
           test "${TAG}" = "v${version}"
           python3 -I scripts/release/changelog.py check "${version}"
-          python3 -I scripts/release/changelog.py notes "${version}" --repo "${GITHUB_REPOSITORY}" > release-notes.md
+          python3 -I scripts/release/changelog.py notes "${version}" --repo "${GITHUB_REPOSITORY}" > "$RUNNER_TEMP/release-notes.md"
       - name: Build deterministic release
         run: scripts/release/build-macos-arm64.sh --out dist-release --repro
       - name: Verify and identify the package assets
@@ -113,7 +113,7 @@ jobs:
         uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce
         with:
           name: release-notes
-          path: release-notes.md
+          path: ${{ runner.temp }}/release-notes.md
           if-no-files-found: error
           retention-days: 1
 
