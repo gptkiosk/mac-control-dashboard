@@ -10,6 +10,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-14
+
+### Fixed
+- The release package builds again. The signed package for 0.4.1 was refused by the content scan because the source-update code spelled out the SSH form of the GitHub address, which looks like an email address. It is now assembled at run time, and a test runs the release content scan over the packaged source so this cannot reach a tag again. 0.4.1 was tagged but never released; 0.4.2 carries everything in it.
+
 ## [0.4.1] - 2026-10-14
 
 ### Fixed
@@ -268,7 +273,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.2...HEAD
 [0.2.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.7
 [0.2.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.6
 [0.2.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.5
@@ -278,6 +283,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.2.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.1
 [0.2.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.0
 
+[0.4.2]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.2
 [0.4.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.1
 [0.4.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.0
 [0.3.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.1
