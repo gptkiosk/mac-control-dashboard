@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 import release_fetch as rf
+import source_update as su
 import update_engine as ue
 from routes.agent_tools import operator
 from settings import REPO_ROOT, get_settings
@@ -34,6 +35,13 @@ class FetchIn(BaseModel):
     channel: str = Field(default="stable", pattern=r"^(stable|prerelease)$")
     confirm: bool
     manifest_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class SourceStartIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tag: str = Field(pattern=r"^v[0-9]+\.[0-9]+\.[0-9]+$")   # exactly the tag the check showed
+    commit: str = Field(pattern=r"^[0-9a-f]{40}$")            # and the signed commit it named
+    confirm: bool
 
 
 class VersionIn(BaseModel):
@@ -62,6 +70,8 @@ def update_status(request: Request):
     cfg, problems = _helper(root)
     body = {"kind": kind, "detail": detail, "configured": cfg is not None, "problems": problems,
             "manual_instructions": ue.manual_instructions(kind, _product(cfg))}
+    if kind == "dev":
+        body["source"] = _source_inspection()   # local git state only; nothing is fetched
     if cfg is None:
         return body
     try:
@@ -70,6 +80,52 @@ def update_status(request: Request):
         body["problems"] = exc.problems
     body["blockers"] = ue.drain_blockers(cfg.db_path)
     return body
+
+
+def _source_inspection() -> dict:
+    s = get_settings()
+    return su.inspect(REPO_ROOT, product=s.product_short_name, label=s.launchd_label)
+
+
+def _refused(exc: su.SourceUpdateError, status: int = 409):
+    first, rest = (exc.problems or ["Refused."])[0], (exc.problems or [])[1:]
+    return HTTPException(status, {"message": first, "problems": rest, "blockers": exc.blockers})
+
+
+@router.get("/source")
+def source_status(request: Request):
+    """This checkout's eligibility and the last or running source-update operation. Local only."""
+    operator(request)
+    return {"inspection": _source_inspection(), **su.status(get_settings().data_dir)}
+
+
+@router.get("/source/check")
+def source_check(request: Request):
+    """Read-only: the official release list and the signed manifest of the newest stable release. Downloads no package."""
+    operator(request)
+    s = get_settings()
+    try:
+        return su.check(REPO_ROOT, s.data_dir, db_path=s.db_path, product=s.product_short_name, label=s.launchd_label)
+    except su.SourceUpdateError as exc:
+        raise _refused(exc, 502) from None
+
+
+@router.post("/source/start", status_code=202)
+def source_start(request: Request, body: SourceStartIn):
+    """Start the update the operator confirmed. The helper outlives the service restart; poll /source/operation."""
+    operator(request)
+    s = get_settings()
+    try:
+        return su.begin(REPO_ROOT, s.data_dir, db_path=s.db_path, product=s.product_short_name, label=s.launchd_label,
+                        port=s.port, tag=body.tag, commit=body.commit, confirm=body.confirm)
+    except su.SourceUpdateError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/source/operation")
+def source_operation(request: Request):
+    operator(request)
+    return su.status(get_settings().data_dir)
 
 
 @router.post("/stage", status_code=202)

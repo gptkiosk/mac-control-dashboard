@@ -10,6 +10,10 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+### Added
+- One-click, operator-approved update for MCD running from a source checkout. The Updates page checks the official stable release, shows the exact tag, the commit its signed manifest names and the release notes, and updates only after a separate confirmation. The signature is verified independently, the tag must point at the signed commit, and the existing reviewed upgrade script does the work (clean-tree check, data backup, drain check, exact commit and version health check, automatic rollback, private log). A detached helper survives the service restart and the page reports success, failure or rollback. Forks, modified checkouts and unsupported hosts are refused with the reason; packaged installs keep their signed updater. See `docs/configuration/source-update.md`.
+- `MAC_CONTROL_LAUNCHD_LABEL` setting so the app knows its LaunchAgent label.
+
 ## [0.3.1] - 2026-10-14
 
 ### Added

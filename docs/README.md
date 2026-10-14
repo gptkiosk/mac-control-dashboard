@@ -29,6 +29,7 @@ Start with [Getting started](getting-started.md), then open the [Setup wizard](S
 - [Private remote access](configuration/remote-access.md)
 - [Alerts configuration](configuration/alerts-config.md)
 - [LaunchAgent installation](configuration/launchd.md)
+- [One-click update of a source checkout](configuration/source-update.md)
 - [Runtime data and backups](configuration/runtime-data.md)
 - [Platform parity with RCD (Raspberry Pi OS)](PLATFORM_PARITY.md)
 

@@ -28,6 +28,7 @@ The profile UI is separate from the host environment table; it does not expose o
 |---|---|---|---|---|
 | `MAC_CONTROL_HOST` | `127.0.0.1` | `str` | Bind address. Keep the loopback bind for the documented Tailscale proxy deployment, including after sign-in is enabled. | No |
 | `MAC_CONTROL_PORT` | `8800` | `int` | Main server port (1–65535). The current installer health check is fixed to loopback port 8800; a custom port needs separate verification. | No |
+| `MAC_CONTROL_LAUNCHD_LABEL` | `com.operator.mac-control` | `str` | LaunchAgent label of this service (letters, digits, `.`, `_`, `-`). The Updates page uses it to confirm the service is loaded and to restart it during a one-click source update. Set it here when you installed the LaunchAgent under another label. | No |
 | `MAC_CONTROL_DEV_PORT` | `5173` | `int` | Vite dev server port; allowed by the request guard during development. | No |
 | `MAC_CONTROL_LOG_LEVEL` | `info` | `str` | Logging level. Conventional values are `debug`, `info`, `warning`, `error`; the value is free-form and not validated by the code. | No |
 | `MAC_CONTROL_DATA_DIR` | `~/.mac-control` | `Path` | Runtime directory (database, run logs, alerts, vault). Keep private storage mode `700`; individual helpers enforce their own checks. | No |

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AppSelect from '@/components/AppSelect.vue'
+import SourceUpdatePanel from '@/components/SourceUpdatePanel.vue'
 import { ApiError, getJson, postJson } from '@/lib/api'
 
 // Only this product and repository are ever offered. The server enforces the same rule; this is a second check.
@@ -20,7 +21,8 @@ interface CheckResponse { available: boolean; candidate: Candidate | null; insta
 interface Version { id: string; complete: boolean; notes?: string | null; version: string | null; channel: string | null; change: string | null; repository: string | null; authenticity: string | null; staged_at: number | null }
 interface Last { tx: string | null; kind: string | null; outcome: string; detail: string; target: string | null; from: string | null; at: number }
 interface Install { current: string | null; previous: string | null; versions: Version[]; tx: { id: string; kind: string; phase: string; target: string } | null; last: Last | null; needs_recovery: boolean }
-interface UpdateStatus { kind: string; detail: string; configured: boolean; problems: string[]; manual_instructions: string[]; install?: Install; blockers?: string[] }
+interface SourceInspection { eligible: boolean; problems: string[]; checkout?: string; version?: string; commit?: string; short?: string; tag?: string | null; branch?: string | null; remote?: string }
+interface UpdateStatus { kind: string; source?: SourceInspection; detail: string; configured: boolean; problems: string[]; manual_instructions: string[]; install?: Install; blockers?: string[] }
 interface Pending { kind: 'install' | 'rollback'; version: Version }
 interface Operation { kind: Pending['kind']; target: string; beforeTx: string | null; sawTx: boolean; polls: number }
 
@@ -241,6 +243,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
           <li v-for="step in status.manual_instructions" :key="step">{{ step }}</li>
         </ul>
         <p v-for="problem in status.problems" :key="problem" class="muted small">{{ problem }}</p>
+        <SourceUpdatePanel v-if="status.source" :inspection="status.source" />
       </template>
       <template v-else>
         <div class="actions">
