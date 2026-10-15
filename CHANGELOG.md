@@ -10,6 +10,13 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-10-15
+
+### Added
+- Housekeeping in Profile: leftovers the server finds by fixed rules, which only you can resolve. First two kinds: runs left in "awaiting approval" on stories that are already done (they used to block updates), and old update backups beyond the newest three and 30 days. Each finding is re-checked when applied, the database is backed up first, every action is audited, and nothing changes without your confirmation.
+- Hermes can read the findings and propose a fix on a free model (new Profile switch, off by default). It cannot change anything: its proposal waits for your approval, and only that approval makes the app act on exactly the findings frozen in the proposal. See `docs/configuration/housekeeping.md`.
+- The Updates panel points to Housekeeping when an update is blocked by an approval wait.
+
 ## [0.4.4] - 2026-10-15
 
 ### Fixed
@@ -283,7 +290,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.5
 [0.4.4]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.4
 [0.4.3]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.3
 [0.2.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.7

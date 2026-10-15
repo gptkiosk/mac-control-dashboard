@@ -173,6 +173,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
           <p class="status">Finish this work first:</p>
           <ul class="list" aria-label="Work that must finish first"><li v-for="b in blockers" :key="b">{{ b }}</li></ul>
           <p class="muted small">Nothing is stopped or cancelled for you. Check again when it is done.</p>
+          <p v-if="blockers.some(b => b.includes('waiting on a human decision'))" class="muted small">If an approval wait is an old run that is already finished, <a href="#housekeeping">Housekeeping</a> below can resolve it.</p>
         </div>
         <div v-else class="actions">
           <button class="btn primary" :disabled="!canStart" @click="ask">Update to {{ candidate.version }}</button>
