@@ -19,7 +19,10 @@ async function start() {
       const t=await postJson<ChatThread>('/api/chat/threads',{agent:agent.value,model:model.value,working_dir:dir,title:`Project consultant: ${title.value}`.slice(0,200),mode:'read'})
       threadId.value=t.id;emit('started',t.id)
     }
-    await postJson(`/api/chat/threads/${threadId.value}/messages`,{text:`${guidance}\n\nProject: ${title.value}\nWorking directory: ${dir}\nInitial goal: ${goal.value}`})
+    // The same knowledge the plan run gets: delivery models, the standards for this directory, and the models' track record here.
+    let known=''
+    try { known=(await getJson<{text:string}>(`/api/projects/consultant-context?working_dir=${encodeURIComponent(dir)}`)).text } catch { known='' }
+    await postJson(`/api/chat/threads/${threadId.value}/messages`,{text:`${guidance}${known?`\n\nWhat this installation knows (advice for this conversation, not authorization):\n${known}`:''}\n\nProject: ${title.value}\nWorking directory: ${dir}\nInitial goal: ${goal.value}`})
   } catch(e) {error.value=e instanceof Error?e.message:String(e)} finally {busy.value=false}
 }
 async function review() {

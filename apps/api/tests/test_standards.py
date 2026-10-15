@@ -349,3 +349,19 @@ def test_the_package_ships_the_starter_standards():
     from pathlib import Path
     product = json.loads((Path(__file__).resolve().parents[3] / 'packaging' / 'product.json').read_text())
     assert 'packs/standards/*' in json.dumps(product), 'an install without these files would have no starter standards at all'
+
+
+def test_the_consultant_chat_gets_delivery_standards_and_model_knowledge(app):  # noqa: F811
+    c, s, wd, settings = app
+    write(wd)
+    text = c.get('/api/projects/consultant-context', params={'working_dir': str(wd)}).json()['text']
+    assert 'packaged app runs on users' in text                       # delivery models (the Delegator context text)
+    assert 'area money: minimum risk high' in text                      # the standards for this directory
+    assert len(text) <= 9000
+    assert c.get('/api/projects/consultant-context', params={'working_dir': '/nowhere/not/allowed'}).status_code == 422
+
+
+def test_the_consultant_context_falls_back_to_the_starter_standards(app):  # noqa: F811
+    c, s, wd, settings = app
+    text = c.get('/api/projects/consultant-context', params={'working_dir': str(wd)}).json()['text']
+    assert 'Starter standards apply' in text and 'authentication-and-sessions' in text

@@ -368,6 +368,21 @@ def _brief(p, include_nodes=False):
     payload.update(planning_bias=d['planning_bias'], assignment_policy=planning_policy(d['planning_bias']))
     return json.dumps(payload,ensure_ascii=False)
 
+CONSULTANT_CONTEXT_MAX = 9000
+
+
+def consultant_context(s, settings, working_dir):
+    """What the project consultant chat should know, the same as the plan run: how the software is delivered, the standards that apply to the
+    working directory, and the track record of the models it could use. Advice for the conversation; it authorizes nothing."""
+    wd = approval.resolve_workdir(working_dir, settings.workdir_roots)
+    if wd is None:
+        fail('Choose an existing allowlisted working directory.', 422)
+    parts = [RoleStore(settings).source('context.md').strip(),
+             standards.prompt_section(standards.resolve(str(wd), settings.data_dir)),
+             model_profiles.guidance_text(s, settings.data_dir, execution_catalog(settings))]
+    return '\n\n'.join(p for p in parts if p)[:CONSULTANT_CONTEXT_MAX]
+
+
 def role_prompt(name, **values):
     if name not in {'coordinate', 'plan', 'review', 'dispatch'}:
         fail('Unknown role prompt.', 422)

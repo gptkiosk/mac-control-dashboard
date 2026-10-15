@@ -4,6 +4,14 @@ Open Projects and choose **Refine with project consultant** below Create project
 
 Choose **Review brief & submit to Hermes** to copy the latest completed reply into an editable New project review. Check the title, brief, workspace and planning model. Approve coordination and submit, or save a draft. Hermes must be the assigned Delegator in Settings → Agent roles. Coordination returns a project map for review; implementation stories still require their separate approved revision. Busy or approval-pending chat turns cannot be silently handed off. Closing the panel keeps its thread; its Projects URL includes the consultant thread number for reopening. Full conversation history is also in Chat.
 
+## What the consultant knows
+
+The first message to the consultant carries the same knowledge a plan run gets: how the software is delivered (hosted or packaged and what
+that means for risk), the standards that apply to the chosen working directory (the repository's own, or the starter standards) with each
+area's minimum risk, and the track record of the models it could use (free or paid, context, tools, how they have done here by kind of work,
+unproven stated plainly). It is advice for the conversation and authorizes nothing; the gates and your approvals still decide. If it cannot be
+read, the conversation starts without it.
+
 ## Free-first settings
 
 Profile → **AI defaults** sets the agent/model for new consultant chats, agent chats, task forms and project planning. The initial values are Hermes and `openrouter/free`. Every feature links to these settings and this help topic. Install the selected runtime and configure its provider on the dashboard host. The dashboard spending-check credential is not automatically copied to native agents.

@@ -10,6 +10,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.14] - 2026-10-15
+
+### Changed
+- The project consultant chat now starts with the same knowledge a plan run gets: how the software is delivered, the standards that apply to the chosen working directory, and the track record of the models it could use. It is advice for the conversation and authorizes nothing; if it cannot be read the chat starts without it. See `docs/project-consultant.md`.
+
 ## [0.4.13] - 2026-10-15
 
 ### Added
@@ -342,7 +347,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.13...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.14...HEAD
+[0.4.14]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.14
 [0.4.13]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.13
 [0.4.12]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.12
 [0.4.11]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.11
