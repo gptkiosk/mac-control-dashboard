@@ -10,6 +10,15 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.10] - 2026-10-15
+
+### Added
+- You can keep your own coordinator wording across updates. Copy a file from `packs/roles/delegator/` into `roles/custom/` in your data folder and edit it: your copy is used instead of the shipped one, survives every update, and a copy that would break planning (a dropped placeholder, a stray `$`, empty or unreadable) is ignored in favour of the shipped text. The roles status lists customized and ignored files.
+- A guide, `docs/configuration/upgrades-and-your-data.md`, says what an update keeps, replaces and never touches: settings, the database, preferences, credentials, the coordinator assignment and guidance, standards, project memory, and what your agents know.
+
+### Fixed
+- A profile saved by a newer version (for example after a rollback) no longer breaks the profile page in an older one: preferences this version does not know are ignored when loading, and missing ones take their defaults.
+
 ## [0.4.9] - 2026-10-15
 
 ### Changed
@@ -317,7 +326,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.9...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.10...HEAD
+[0.4.10]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.10
 [0.4.9]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.9
 [0.4.8]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.8
 [0.4.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.7
