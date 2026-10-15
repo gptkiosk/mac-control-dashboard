@@ -1,4 +1,6 @@
 name: Application checks
+# Cost note: macOS runners bill at ten times the Linux rate, so the macOS API job runs once per merge (on main) and on demand,
+# not on every pull request push. Every change is also tested on a Mac before it is proposed; Linux runs on every pull request.
 on:
   pull_request:
   push:
@@ -6,12 +8,29 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   api:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    name: api (ubuntu-latest)
+    # Pull requests and manual runs. A merge to main already passed this on its pull request.
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r apps/api/requirements.lock.txt
+      - run: python -m pytest apps/api/tests -q
+  api-macos:
+    name: api (macos-latest)
+    # Once per merge to main (and on demand): the platform MCD runs on, including the macOS sandbox tests.
+    if: github.event_name != 'pull_request'
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,6 +41,7 @@ jobs:
       - run: python -m pip install -r apps/api/requirements.lock.txt
       - run: python -m pytest apps/api/tests -q
   web:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
