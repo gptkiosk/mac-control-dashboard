@@ -27,13 +27,42 @@ class Recorder:
 
 
 # --------------------------------------------------------------------------------------------------------- acting
-def test_run_and_restart_and_remove_are_fixed_launchctl_calls_on_this_users_domain(tmp_path):
+def test_run_and_restart_and_remove_use_the_commands_that_work_for_submitted_jobs_with_a_fallback(tmp_path):
     uid = os.getuid()
-    for action, argv in (("run", ["launchctl", "kickstart", f"gui/{uid}/ai.hermes.gateway"]), ("restart", ["launchctl", "kickstart", "-k", f"gui/{uid}/ai.hermes.gateway"]),
-                         ("remove", ["launchctl", "bootout", f"gui/{uid}/ai.hermes.gateway"])):
+    label = "ai.hermes.gateway"
+    target = f"gui/{uid}/{label}"
+    for action, argv in (("run", ["launchctl", "kickstart", target]), ("restart", ["launchctl", "kickstart", "-k", target]), ("remove", ["launchctl", "remove", label])):
         run = Recorder()
-        out = sc.act(action, "ai.hermes.gateway", LISTED, PREFIXES, tmp_path, "op", run=run, confirm_label="ai.hermes.gateway")
+        out = sc.act(action, label, LISTED, PREFIXES, tmp_path, "op", run=run, confirm_label=label)
         assert run.calls == [argv] and out["ok"] and out["action"] == action
+
+
+def test_a_submitted_job_that_the_modern_commands_cannot_find_is_still_removed_run_and_restarted(tmp_path):
+    """The failure seen on update helpers: `bootout` and `kickstart` answered 'No such process' for jobs made by `launchctl submit`."""
+    label = "ai.hermes.gateway"
+    uid = os.getuid()
+
+    class Modern:
+        calls: list = []
+
+        def __call__(self, argv, timeout=30):
+            self.calls.append(list(argv))
+            return (3, "Boot-out failed: 3: No such process") if argv[1] in ("bootout", "kickstart") else (0, "")
+    run = Modern()
+    run.calls = []
+    assert sc.act("remove", label, LISTED, PREFIXES, tmp_path, "op", run=run, confirm_label=label)["ok"]
+    assert run.calls == [["launchctl", "remove", label]]                       # the legacy command is the primary for removal
+    run.calls = []
+    assert sc.act("run", label, LISTED, PREFIXES, tmp_path, "op", run=run)["ok"]
+    assert run.calls == [["launchctl", "kickstart", f"gui/{uid}/{label}"], ["launchctl", "start", label]]
+    run.calls = []
+    assert sc.act("restart", label, LISTED, PREFIXES, tmp_path, "op", run=run)["ok"]
+    assert run.calls == [["launchctl", "kickstart", "-k", f"gui/{uid}/{label}"], ["launchctl", "stop", label], ["launchctl", "start", label]]
+
+
+def test_when_every_command_fails_the_last_message_is_reported(tmp_path):
+    with pytest.raises(sc.ServiceError, match="launchctl refused: Boot-out failed"):
+        sc.act("remove", "ai.hermes.gateway", LISTED, PREFIXES, tmp_path, "op", run=Recorder(3, "Boot-out failed: 3: No such process"), confirm_label="ai.hermes.gateway")
 
 
 def test_the_dashboards_own_service_cannot_be_restarted_or_removed_but_can_be_run_or_inspected(tmp_path, monkeypatch):

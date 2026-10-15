@@ -25,6 +25,7 @@ What is found today:
 | Finding | When | What the fix does |
 |---|---|---|
 | Stale approval wait | A run sits in `awaiting_approval` on a story that is already done or failed, and a later run on that story succeeded. | Marks the run cancelled (superseded) with an audit note. Its result, logs, model, usage and session are not changed. |
+| Finished update helper still loaded | An update helper job (`…source-update.<time>.<id>`) is still registered with launchd at least 15 minutes after it started and no update is running. (macOS only.) | Unloads that job (`launchctl remove`). Nothing else changes. |
 | Old update backup | A folder under `~/.mac-control/upgrades` that is older than 30 days and not one of the newest 3. | Deletes that folder. Receipts (the small JSON beside it) are kept. Nothing is removed while a source update is running. |
 
 Before any database row changes, the server takes a consistent copy of the database (`upgrades/pre-maintenance-…/data.db`).
@@ -35,12 +36,25 @@ default) and a paired Discord account, Hermes can list the findings, explain the
 redacted evidence marked as untrusted text. It has no way to apply anything: the apply route is operator-only and agent
 processes are refused. The explanation and proposal run on whatever route you give Hermes, including the free router.
 
+**Finished update helpers are also cleaned up for you.** Each update runs its helper as its own launchd job and the helper removes itself when it
+finishes. On some Macs that leaves the job listed, running a process that no longer exists, and they pile up on the Services page. MCD now unloads
+a finished helper automatically about a quarter of an hour after its update (never while an update is running; switch off with
+`MAC_CONTROL_REAP_UPDATE_HELPERS=false`), and the same finding appears here if you prefer to do it yourself.
+
+**After hours.** Set `MAC_CONTROL_HOUSEKEEPING_AUTO` to the kinds you want cleaned up overnight, for example
+`stale_update_helper,stale_approval_wait,old_update_backup`, and the server applies exactly those fixed actions once a day between
+`MAC_CONTROL_HOUSEKEEPING_WINDOW_START_HOUR` and `..._END_HOUR` (default 1 to 5, local time). It is off by default. Each finding is checked
+again at that moment, nothing runs while an update is running, a database backup is taken before any row changes, and every action goes
+to the audit file as `after-hours`. The panel shows the last run and what it did. Hermes can read the same status and explain it, but
+the schedule and the actions are fixed code, not a model.
+
 The Updates panel points here when a blocker is an approval wait.
 
 ## Settings involved
 
 - Profile preference `allow_discord_maintenance` (default off).
 - Retention: newest 3 backup folders kept, anything younger than 30 days kept.
+- `MAC_CONTROL_HOUSEKEEPING_AUTO` (default empty), `MAC_CONTROL_HOUSEKEEPING_WINDOW_START_HOUR` (1) and `MAC_CONTROL_HOUSEKEEPING_WINDOW_END_HOUR` (5); `MAC_CONTROL_REAP_UPDATE_HELPERS` (default true).
 - Operator API: `GET /api/maintenance`, `POST /api/maintenance/apply {finding_ids, confirm}`,
   `POST /api/maintenance/proposals/<id>/approve|reject`. Hermes bridge actions: `maintenance`, `maintenance_propose`.
 

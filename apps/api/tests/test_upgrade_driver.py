@@ -81,6 +81,22 @@ def test_upgrades_to_a_tag_backs_up_verifies_and_writes_a_receipt(world):
     assert "pip sync" in calls and "run build" in calls and "npm ci" not in calls          # the lock changed, package-lock did not
 
 
+def test_a_long_changelog_with_the_dated_section_does_not_produce_a_false_missing_section_warning(world):
+    """`grep -q` closes the pipe at the first match; under pipefail the writer's SIGPIPE used to turn a section that is there into a warning."""
+    commit_version(world.src, "0.2.0", lock="a==2\n")
+    long_tail = "".join(f"## [0.0.{i}] - 2026-01-01\n\n### Added\n- {'x' * 80}\n\n" for i in range(2500))
+    (world.src / "CHANGELOG.md").write_text(f"# Changelog\n\n## [0.2.0] - 2026-10-13\n\n### Added\n- thing\n\n{long_tail}")
+    git(world.src, "add", "-A"); git(world.src, "commit", "-q", "-m", "long changelog"); git(world.src, "tag", "v0.2.1-long")
+    (world.src / "apps/api/version.py").write_text('__version__ = "0.2.1"\n')
+    text = (world.src / "CHANGELOG.md").read_text().replace("## [0.2.0] - 2026-10-13", "## [0.2.1] - 2026-10-13", 1)
+    (world.src / "CHANGELOG.md").write_text(text)
+    git(world.src, "add", "-A"); git(world.src, "commit", "-q", "-m", "0.2.1"); git(world.src, "tag", "v0.2.1")
+    assert len(text) > 200_000          # far larger than a pipe buffer
+    r = world.run("--ref", "v0.2.1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "warning" not in r.stdout and "upgraded: v0.2.1" in r.stdout
+
+
 def test_dependencies_are_synced_only_when_a_lock_changed(world):
     commit_version(world.src, "0.2.0", lock="a==1\n", tag="v0.2.0")
     assert world.run("--ref", "v0.2.0").returncode == 0

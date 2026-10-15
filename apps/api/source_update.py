@@ -19,6 +19,7 @@ key did not sign, is refused. Packaged installs keep their own signed-package up
 """
 from __future__ import annotations
 
+import calendar
 import fcntl
 import hashlib
 import json
@@ -264,6 +265,56 @@ def check(root: Path, data_dir: Path, *, db_path: Path, product: str, label: str
 
 def read_operation(data_dir: Path) -> dict | None:
     return read_json(data_paths(data_dir)["op"])
+
+
+HELPER_MIN_AGE_S = 15 * 60
+
+
+def _helper_pattern(label: str):
+    return re.compile("^" + re.escape(label) + r"\.source-update\.(?P<ts>[0-9]{8}t[0-9]{6}z)\.(?P<hash>[0-9a-f]{6})$")
+
+
+def stale_helpers(data_dir: Path, label: str, now: int | None = None, run=None) -> list[dict]:
+    """Update helper jobs that are still registered with launchd after their update is over.
+
+    Each update starts its helper as its own launchd job, and the helper removes itself when it finishes. On some systems that
+    self-removal leaves the job listed (showing as running with a process that no longer exists), and they pile up. A helper is stale when no
+    update holds the operation lock and the job is at least fifteen minutes old, so a helper that is doing its work is never touched.
+    """
+    import service_control
+    now = int(now if now is not None else time.time())
+    run = run or service_control.default_run
+    if operation_active(Path(data_dir)):
+        return []
+    try:
+        code, listing = run(["launchctl", "list"])
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if code != 0:
+        return []
+    pattern, out = _helper_pattern(label), []
+    for line in listing.splitlines():
+        parts = line.split("\t")
+        found = pattern.match(parts[-1].strip()) if len(parts) >= 3 else None
+        if not found:
+            continue
+        started = calendar.timegm(time.strptime(found.group("ts").upper(), "%Y%m%dT%H%M%SZ"))
+        if now - started >= HELPER_MIN_AGE_S:
+            pid = parts[0].strip()
+            out.append({"label": parts[-1].strip(), "pid": int(pid) if pid.isdigit() else None, "started_at": started, "age_hours": round((now - started) / 3600, 1)})
+    return out
+
+
+def reap_helpers(data_dir: Path, label: str, now: int | None = None, run=None) -> list[str]:
+    """Unload the stale helpers (see stale_helpers). Returns the labels removed."""
+    import service_control
+    run = run or service_control.default_run
+    removed = []
+    for helper in stale_helpers(data_dir, label, now, run):
+        code, _ = service_control.run_with_fallback("remove", helper["label"], run)
+        if code == 0:
+            removed.append(helper["label"])
+    return removed
 
 
 def operation_active(data_dir: Path) -> bool:
@@ -533,4 +584,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _code = main()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(_code)          # the helper is a launchd job: end the process now, whatever else is still alive, so the job is never left "running"

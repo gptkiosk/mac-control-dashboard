@@ -10,6 +10,18 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-16
+
+### Added
+- After-hours housekeeping. Set `MAC_CONTROL_HOUSEKEEPING_AUTO` to the kinds you want cleaned up overnight (`stale_update_helper`, `stale_approval_wait`, `old_update_backup`) and the server applies exactly those fixed actions once a day inside a window (default 1 to 5 local time). Off by default. Each finding is re-checked at that moment, a database backup is taken before any row changes, nothing runs during an update, and every action is audited as `after-hours`. The Housekeeping panel shows the last run; Hermes can read and explain the status.
+- A new housekeeping finding, "Finished update helper still loaded", for update helper jobs left registered with launchd after their update.
+
+### Fixed
+- Remove on the Services page failed for jobs started with `launchctl submit` (the update helpers) with "Boot-out failed: 3: No such process". Remove now uses `launchctl remove`, which works for them, with the newer command as a fallback; Run now and Restart gain the matching fallbacks.
+- Update helper jobs piled up on the Services page, each showing as running with a process that no longer exists. MCD now unloads a finished helper automatically about a quarter of an hour after its update (never while an update is running; `MAC_CONTROL_REAP_UPDATE_HELPERS=false` switches it off), and the helper process now ends itself explicitly.
+- Every update logged "warning: ... has no dated CHANGELOG section" even when the section was there: `grep -q` closed the pipe and the upgrade script's strict mode counted the writer's broken pipe as a failure. The check now reads the whole file.
+- The Services Actions column is wider so the buttons and the explanation do not stack into a tall block.
+
 ## [0.5.0] - 2026-10-15
 
 ### Added
@@ -357,7 +369,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.1
 [0.5.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.0
 [0.4.14]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.14
 [0.4.13]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.13
