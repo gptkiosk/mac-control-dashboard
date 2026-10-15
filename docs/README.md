@@ -40,7 +40,7 @@ Start with [Getting started](getting-started.md), then open the [Setup wizard](S
 
 ## Reuse and development
 
-MCD is MIT licensed and provided as-is for independent personal and commercial use. No ongoing upstream development, updates or support is promised. See [Developing your fork](../CONTRIBUTING.md), [Security policy](../SECURITY.md), [License](../LICENSE), [Third-party notices](../THIRD_PARTY_NOTICES.md), [Change history](../CHANGELOG.md) and [Ideas for forks](development/ROADMAP.md).
+MCD is MIT licensed and provided as-is for independent personal and commercial use. No ongoing upstream development, updates or support is promised. See [Developing your fork](../CONTRIBUTING.md), [Security policy](../SECURITY.md), [License](../LICENSE), [Third-party notices](../THIRD_PARTY_NOTICES.md), [Release and update pipeline](development/distribution.md), [Change history](../CHANGELOG.md) and [Ideas for forks](development/ROADMAP.md).
 
 Screenshots use [synthetic preview data](screenshots/README.md). They illustrate controls, not verified connections to external services. Optional captures that are not included are identified explicitly in individual guides.
 
