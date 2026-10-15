@@ -38,7 +38,8 @@
     "apps/api/tool_catalog.json",
     "apps/api/tool_locks/*/package.json",
     "apps/api/tool_locks/*/package-lock.json",
-    "packs/roles/delegator/*"
+    "packs/roles/delegator/*",
+    "packs/standards/*"
   ],
   "excluded_components": [
     "apps/mcp: separate agent tool server with its own venv; not packaged in v1",
