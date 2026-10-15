@@ -135,6 +135,15 @@ class Card(Base):
     estimate_minutes: Mapped[int | None] = mapped_column(Integer)
     tags: Mapped[str | None] = mapped_column(Text)  # JSON list of lowercase tags
     acceptance: Mapped[str | None] = mapped_column(Text)  # definition of done
+    # Standard job envelope (see job_envelope.py): filterable, aggregatable columns, all optional so older cards stay valid.
+    # Who a human task is assigned to (an approved user: an email or short name). None = unassigned. Agent tasks use `agent`/`model`.
+    assignee_user: Mapped[str | None] = mapped_column(String(255), index=True)
+    kind: Mapped[str | None] = mapped_column(String(16), index=True)  # research|plan|implement|review|test|docs|ops|triage
+    size: Mapped[str | None] = mapped_column(String(4))  # xs|s|m|l|xl
+    risk: Mapped[str | None] = mapped_column(String(8))  # low|medium|high
+    area: Mapped[str | None] = mapped_column(String(40))
+    route_tier: Mapped[str | None] = mapped_column(String(16))  # free|subscription|api|human, derived from the route
+    route_reason: Mapped[str | None] = mapped_column(String(300))
     column: Mapped[str] = mapped_column(String(20), default="backlog", index=True)
     position: Mapped[float] = mapped_column(Float, default=0.0)
     timeout_s: Mapped[int] = mapped_column(Integer)
