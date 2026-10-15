@@ -10,6 +10,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.11] - 2026-10-15
+
+### Added
+- Ask Hermes to add to a repository's standards. With the new Profile switch on, Hermes can read a project's standards and propose an addition to the repository's standards file: a risk area, a check, a security bullet or a tightening rule. The server proves it is only an addition (nothing removed, reworded, lowered or loosened) and shows you the exact diff on the project page. Approving creates a new branch in the repository for you to review and merge; your current branch and files are not touched and nothing is pushed. See `docs/configuration/standards.md`.
+
 ## [0.4.10] - 2026-10-15
 
 ### Added
@@ -327,7 +332,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.10...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.11...HEAD
+[0.4.11]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.11
 [0.4.10]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.10
 [0.4.9]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.9
 [0.4.8]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.8
