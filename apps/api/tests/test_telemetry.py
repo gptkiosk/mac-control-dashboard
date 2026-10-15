@@ -57,6 +57,7 @@ def test_each_record_carries_assignee_agent_and_model_and_the_tiles_match_the_bo
     assert people[("codex", "agent")]["done"] == 1 and people[("jamie@example.com", "human")]["open"] == 1 and people[("Unassigned", "human")]["open"] == 1
     assert {m["agent"] for m in out["models"]} == {"codex"} and out["models"][0]["model"] == "gpt-6.1-sol"
     assert {x["column"]: x["count"] for x in out["by_status"]} == {"backlog": 1, "queued": 0, "running": 1, "review": 1, "done": 1, "failed": 1}
+    assert {x["tier"]: x["count"] for x in out["by_tier"]} == {"free": 0, "subscription": 3, "api": 0, "human": 2}   # the donut's numbers
 
 
 def test_cost_is_reported_and_api_equivalent_apart_and_free_and_unpriced_are_not_guessed(sessions):

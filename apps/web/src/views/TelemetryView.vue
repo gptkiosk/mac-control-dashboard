@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import AppSelect from '@/components/AppSelect.vue'
 import BarList from '@/components/BarList.vue'
+import DonutChart from '@/components/DonutChart.vue'
+import StackedBars from '@/components/StackedBars.vue'
 import StatTile from '@/components/StatTile.vue'
 import { ApiError, getJson } from '@/lib/api'
 import { FILTERS, minutes, money, percent, seconds, type FilterKey, type Telemetry } from '@/lib/telemetry'
@@ -26,6 +28,9 @@ async function load() {
 function reset() { for (const key of FILTERS) filters.value[key] = ''; void load() }
 const active = computed(() => FILTERS.some(k => filters.value[k]))
 const t = computed(() => data.value?.tiles)
+const OUTCOME = [{ key: 'open', label: 'Open', color: 'var(--accent)' }, { key: 'done', label: 'Done', color: 'var(--ok)' }, { key: 'failed', label: 'Failed', color: 'var(--danger)' }]
+const RUNS = [{ key: 'ok', label: 'Succeeded', color: 'var(--ok)' }, { key: 'bad', label: 'Did not succeed', color: 'var(--danger)' }]
+const DONE = [{ key: 'done', label: 'Done', color: 'var(--ok)' }, { key: 'rest', label: 'Not done', color: 'var(--accent)' }]
 const when = (ts: number) => new Date(ts * 1000).toLocaleString()
 onMounted(load)
 </script>
@@ -53,24 +58,28 @@ onMounted(load)
       <p class="muted small totals">Reported cost {{ money(data.totals.cost_usd) }} · API-equivalent {{ money(data.totals.api_equivalent_usd) }} · {{ data.totals.tokens.toLocaleString() }} tokens · {{ data.totals.unpriced_runs }} unpriced {{ data.totals.unpriced_runs === 1 ? 'run' : 'runs' }}. {{ data.note }}</p>
 
       <div class="grid">
-        <BarList title="Workload by status" :items="data.by_status.map(s => ({ label: s.column, value: s.count }))" />
-        <BarList title="Work by assignee" :items="data.by_assignee.map(a => ({ label: `${a.name} (${a.type})`, value: a.open + a.done + a.failed, note: `${a.open} open · ${a.done} done` }))" />
+        <DonutChart title="Workload by status" :slices="data.by_status.map(s => ({ label: s.column, value: s.count }))" />
+        <DonutChart title="Work by route" :slices="data.by_tier.map(x => ({ label: x.tier, value: x.count }))" />
+        <StackedBars title="Work by assignee" :parts="OUTCOME" :rows="data.by_assignee.map(a => ({ label: `${a.name} (${a.type})`, values: { open: a.open, done: a.done, failed: a.failed } }))" />
+        <StackedBars title="Jobs" :parts="OUTCOME" :rows="data.jobs.map(j => ({ label: `${j.job} ${j.title}`, values: { open: j.open, done: j.done, failed: j.failed }, hint: `${j.job}: estimate ${minutes(j.estimate_minutes)}, actual ${minutes(j.actual_minutes)}, cost ${money(j.cost_usd)}` }))" empty="No approved plans yet. Stories made from a plan appear here, one row per plan revision." />
+        <StackedBars title="Runs by model" :parts="RUNS" :rows="data.models.map(m => ({ label: `${m.agent} · ${m.model}`, values: { ok: m.succeeded, bad: m.runs - m.succeeded }, hint: `${percent(m.success_rate)} success, median ${seconds(m.median_seconds)}, cost ${money(m.cost_usd)}, API-equivalent ${money(m.api_equivalent_usd)}` }))" empty="No runs in this period." />
+        <StackedBars title="Work by kind" :parts="DONE" :rows="data.by_kind.map(k => ({ label: k.kind, values: { done: k.done, rest: k.stories - k.done }, hint: `median ${minutes(k.median_minutes)}, first pass ${percent(k.first_pass_rate)}` }))" />
         <BarList title="Completed per week" :items="data.velocity.map(v => ({ label: v.week, value: v.done }))" empty="No completed work in the last eight weeks." />
         <BarList title="Median time per kind (minutes)" :items="data.by_kind.filter(k => k.median_minutes != null).map(k => ({ label: k.kind, value: Math.round(k.median_minutes!) }))" empty="No finished work with a recorded time." />
       </div>
 
-      <section class="card" aria-label="Jobs">
-        <h2 class="section-title">Jobs</h2>
+      <details class="card detail" aria-label="Jobs table">
+        <summary>Jobs: the numbers</summary>
         <p v-if="!data.jobs.length" class="muted small">No approved plans yet. Stories made from a plan appear here, one row per plan revision.</p>
         <div v-else class="table-scroll"><table class="data-table">
           <caption class="sr-only">Jobs</caption>
           <thead><tr><th>Job</th><th>Plan</th><th class="num">Stories</th><th class="num">Done</th><th class="num">Open</th><th class="num">Failed</th><th class="num">Estimate</th><th class="num">Actual</th><th class="num">Cost</th><th class="num">API-equivalent</th></tr></thead>
           <tbody><tr v-for="j in data.jobs" :key="j.job"><td>{{ j.job }}</td><td>{{ j.title }}</td><td class="num">{{ j.stories }}</td><td class="num">{{ j.done }}</td><td class="num">{{ j.open }}</td><td class="num">{{ j.failed }}</td><td class="num">{{ minutes(j.estimate_minutes) }}</td><td class="num">{{ minutes(j.actual_minutes) }}</td><td class="num">{{ money(j.cost_usd) }}</td><td class="num">{{ money(j.api_equivalent_usd) }}</td></tr></tbody>
         </table></div>
-      </section>
+      </details>
 
-      <section class="card" aria-label="Agents and models">
-        <h2 class="section-title">Agents and models</h2>
+      <details class="card detail" aria-label="Agents and models table">
+        <summary>Agents and models: the numbers</summary>
         <p class="muted small">The model that actually served each run, which can differ from the one requested after a fallback.</p>
         <p v-if="!data.models.length" class="muted small">No runs in this period.</p>
         <div v-else class="table-scroll"><table class="data-table">
@@ -78,17 +87,17 @@ onMounted(load)
           <thead><tr><th>Agent</th><th>Model</th><th>Route</th><th class="num">Runs</th><th class="num">Success</th><th class="num">Median time</th><th class="num">Tokens</th><th class="num">Cost</th><th class="num">API-equivalent</th><th class="num">Served instead of requested</th></tr></thead>
           <tbody><tr v-for="m in data.models" :key="`${m.agent}|${m.model}|${m.tier}`"><td>{{ m.agent }}</td><td>{{ m.model }}</td><td>{{ m.tier }}</td><td class="num">{{ m.runs }}</td><td class="num">{{ percent(m.success_rate) }}</td><td class="num">{{ seconds(m.median_seconds) }}</td><td class="num">{{ m.tokens.toLocaleString() }}</td><td class="num">{{ money(m.cost_usd) }}</td><td class="num">{{ money(m.api_equivalent_usd) }}</td><td class="num">{{ m.served_instead_of_requested }}</td></tr></tbody>
         </table></div>
-      </section>
+      </details>
 
-      <section class="card" aria-label="By kind of work">
-        <h2 class="section-title">By kind of work</h2>
+      <details class="card detail" aria-label="Kinds of work table">
+        <summary>Kinds of work: the numbers</summary>
         <p v-if="!data.by_kind.length" class="muted small">No work yet.</p>
         <div v-else class="table-scroll"><table class="data-table">
           <caption class="sr-only">By kind of work</caption>
           <thead><tr><th>Kind</th><th class="num">Work</th><th class="num">Done</th><th class="num">Median time</th><th class="num">First pass</th><th class="num">Actual over estimate</th></tr></thead>
           <tbody><tr v-for="k in data.by_kind" :key="k.kind"><td>{{ k.kind }}</td><td class="num">{{ k.stories }}</td><td class="num">{{ k.done }}</td><td class="num">{{ minutes(k.median_minutes) }}</td><td class="num">{{ percent(k.first_pass_rate) }}</td><td class="num">{{ k.median_actual_over_estimate == null ? '–' : `×${k.median_actual_over_estimate}` }}</td></tr></tbody>
         </table></div>
-      </section>
+      </details>
 
       <section class="card" aria-label="Latest activity">
         <h2 class="section-title">Latest activity</h2>
@@ -110,6 +119,8 @@ onMounted(load)
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--gap); }
 .totals { max-width: 100ch; line-height: var(--line-height); }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: var(--gap); }
+.detail summary { cursor: pointer; font-weight: 600; }
+.detail[open] summary { margin-bottom: var(--gap-sm); }
 .activity { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--gap-sm); }
 h2 { margin: 0; }
 </style>

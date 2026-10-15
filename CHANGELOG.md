@@ -13,7 +13,7 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 ## [0.4.7] - 2026-10-15
 
 ### Added
-- Telemetry: a Jobs and telemetry page that shows how work is going by job (one approved plan revision), kind, risk, size, route, who it is assigned to (a person or an agent), agent and model. It shows unassigned, in progress, waiting for you, completed, estimates missing and failed work; workload by status and assignee; completed per week; estimate against actual time per job; first-pass rate and time per kind; and a table of agents and models with success rate, median time, tokens, reported cost, API-equivalent cost and how often a different model served a run than the one requested. Filters narrow everything at once. It is read-only and computed from the existing records. See `docs/configuration/telemetry.md`.
+- Telemetry: a Jobs and telemetry page that shows how work is going by job (one approved plan revision), kind, risk, size, route, who it is assigned to (a person or an agent), agent and model. It shows unassigned, in progress, waiting for you, completed, estimates missing and failed work; as charts you can read at a glance (donuts for workload by status and by route; stacked bars for work by assignee, by job, by model and by kind; completed per week; median time per kind), with the numbers on hover. The detailed tables (jobs, agents and models with success rate, median time, tokens, reported cost, API-equivalent cost and how often a different model served a run than the one requested, and kinds of work) are folded away until you open them. Filters narrow everything at once. It is read-only and computed from the existing records. See `docs/configuration/telemetry.md`.
 
 ## [0.4.6] - 2026-10-15
 

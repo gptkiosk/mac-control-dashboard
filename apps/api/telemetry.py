@@ -121,6 +121,8 @@ def overview(s, now: int | None = None, days: int = 30, filters: dict | None = N
 
     status = [{"column": c, "count": sum(1 for r in recs if r["card"].column == c)} for c in ("backlog", "queued", "running", "review", "done", "failed")]
 
+    by_tier = [{"tier": t, "count": sum(1 for r in recs if r["tier"] == t)} for t in job_envelope.TIERS]
+
     people: dict[tuple[str, str], dict] = {}
     for r in recs:
         row = people.setdefault((r["assignee"], r["assignee_type"]), {"name": r["assignee"], "type": r["assignee_type"], "open": 0, "done": 0, "failed": 0})
@@ -203,7 +205,7 @@ def overview(s, now: int | None = None, days: int = 30, filters: dict | None = N
         "size": [r["card"].size for r in everything], "tier": [r["tier"] for r in everything], "assignee": [r["assignee"] for r in everything],
         "agent": [r["card"].agent for r in everything], "model": [r["model"] for r in everything]}.items()}
     return {
-        "generated_at": now, "days": days, "filters": f, "options": options, "tiles": tiles, "by_status": status, "by_assignee": by_assignee,
+        "generated_at": now, "days": days, "filters": f, "options": options, "tiles": tiles, "by_status": status, "by_tier": by_tier, "by_assignee": by_assignee,
         "velocity": velocity, "jobs": job_rows, "by_kind": by_kind, "models": model_rows, "activity": activity,
         "totals": {"cost_usd": round(sum(r["cost_usd"] for r in recs), 4), "api_equivalent_usd": round(sum(r["api_equivalent_usd"] for r in recs), 4),
                    "unpriced_runs": sum(r["unpriced"] for r in recs), "tokens": sum(r["tokens"] for r in recs), "cards": len(recs)},

@@ -16,7 +16,7 @@ export interface ModelRow {
 export interface ActivityRow { at: number; card_id: number; title: string; outcome: string; assignee: string; agent: string; model: string | null; job: string | null }
 export interface Telemetry {
   generated_at: number; days: number; filters: Record<string, string>; options: Record<string, string[]>
-  tiles: TelemetryTiles; by_status: { column: string; count: number }[]; by_assignee: AssigneeRow[]; velocity: { week: string; done: number }[]
+  tiles: TelemetryTiles; by_status: { column: string; count: number }[]; by_tier: { tier: string; count: number }[]; by_assignee: AssigneeRow[]; velocity: { week: string; done: number }[]
   jobs: JobRow[]; by_kind: KindRow[]; models: ModelRow[]; activity: ActivityRow[]
   totals: { cost_usd: number; api_equivalent_usd: number; unpriced_runs: number; tokens: number; cards: number }
   note: string
