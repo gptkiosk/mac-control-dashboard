@@ -357,7 +357,11 @@ def test_the_consultant_chat_gets_delivery_standards_and_model_knowledge(app):  
     text = c.get('/api/projects/consultant-context', params={'working_dir': str(wd)}).json()['text']
     assert 'packaged app runs on users' in text                       # delivery models (the Delegator context text)
     assert 'area money: minimum risk high' in text                      # the standards for this directory
-    assert len(text) <= 9000
+    assert len(text) <= 16000
+    for heading in ('## How the software is delivered', '## Standards that apply to this working directory', '## Methods and practices to build the plan on'):
+        assert heading in text
+    assert 'Development practice:' in text and 'Application security:' in text and 'Delivering a packaged app:' in text and 'Delivering a hosted web app:' in text
+    assert 'Test behavior and rules' in text
     assert c.get('/api/projects/consultant-context', params={'working_dir': '/nowhere/not/allowed'}).status_code == 422
 
 
@@ -365,3 +369,14 @@ def test_the_consultant_context_falls_back_to_the_starter_standards(app):  # noq
     c, s, wd, settings = app
     text = c.get('/api/projects/consultant-context', params={'working_dir': str(wd)}).json()['text']
     assert 'Starter standards apply' in text and 'authentication-and-sessions' in text
+
+
+def test_a_users_own_copy_of_a_guide_is_what_the_consultant_reads(tmp_path):
+    folder = tmp_path / 'standards'
+    folder.mkdir()
+    (folder / 'practices.md').write_text('# mine\n\n## My method\n\n- Always pair on migrations.\n')
+    assert 'Always pair on migrations.' in standards.guide_text('practices.md', tmp_path)
+    assert 'Test behavior and rules' in standards.guide_text('practices.md')               # no data folder: the shipped guide
+    assert standards.guide_text('../secrets.md', tmp_path) == '' and standards.guide_text('starter.md', tmp_path) == ''   # only the named guides
+    (folder / 'practices.md').write_text('x' * (standards.MAX_BYTES + 1))
+    assert 'Test behavior and rules' in standards.guide_text('practices.md', tmp_path)      # an unusable copy falls back to the shipped guide

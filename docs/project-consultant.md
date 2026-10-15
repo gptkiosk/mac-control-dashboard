@@ -6,11 +6,15 @@ Choose **Review brief & submit to Hermes** to copy the latest completed reply in
 
 ## What the consultant knows
 
-The first message to the consultant carries the same knowledge a plan run gets: how the software is delivered (hosted or packaged and what
-that means for risk), the standards that apply to the chosen working directory (the repository's own, or the starter standards) with each
-area's minimum risk, and the track record of the models it could use (free or paid, context, tools, how they have done here by kind of work,
-unproven stated plainly). It is advice for the conversation and authorizes nothing; the gates and your approvals still decide. If it cannot be
-read, the conversation starts without it.
+The first message to the consultant carries the same knowledge a plan run gets, in four labelled parts: how the software is delivered
+(hosted or packaged and what that means for risk); the standards that apply to the chosen working directory (the repository's own, or the
+starter standards) with each area's minimum risk; the methods and practices to build the plan on (development practice, hosted and packaged
+delivery, application security); and the track record of the models it could recommend (free or paid, context, tools, how they have done here
+by kind of work, unproven stated plainly). The consultant is told to use it in the discussion and to write the brief so the coordinator can plan
+from it directly: Approach and methods, Risks and the standards areas they fall under, Security considerations, and Model and route
+considerations (free or paid, and why), alongside the usual goal, phases, stories and definitions of done. It is advice for the conversation and
+authorizes nothing; the gates and your approvals still decide. If it cannot be read, the conversation starts without it. To change the methods,
+copy a guide from `packs/standards/` to `standards/` in your data folder and edit it; your copy is used and survives updates.
 
 ## Free-first settings
 

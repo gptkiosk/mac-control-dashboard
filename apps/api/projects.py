@@ -368,7 +368,7 @@ def _brief(p, include_nodes=False):
     payload.update(planning_bias=d['planning_bias'], assignment_policy=planning_policy(d['planning_bias']))
     return json.dumps(payload,ensure_ascii=False)
 
-CONSULTANT_CONTEXT_MAX = 9000
+CONSULTANT_CONTEXT_MAX = 16000
 
 
 def consultant_context(s, settings, working_dir):
@@ -377,10 +377,15 @@ def consultant_context(s, settings, working_dir):
     wd = approval.resolve_workdir(working_dir, settings.workdir_roots)
     if wd is None:
         fail('Choose an existing allowlisted working directory.', 422)
-    parts = [RoleStore(settings).source('context.md').strip(),
-             standards.prompt_section(standards.resolve(str(wd), settings.data_dir)),
-             model_profiles.guidance_text(s, settings.data_dir, execution_catalog(settings))]
-    return '\n\n'.join(p for p in parts if p)[:CONSULTANT_CONTEXT_MAX]
+    found = standards.resolve(str(wd), settings.data_dir)
+    methods = '\n\n'.join(f"{label}:\n{standards.guide_text(name, settings.data_dir)}" for label, name in
+                           (('Development practice', 'practices.md'), ('Delivering a hosted web app', 'web-app-delivery.md'), ('Delivering a packaged app', 'packaged-app-delivery.md'),
+                            ('Application security', 'security.md')) if standards.guide_text(name, settings.data_dir))
+    parts = [('How the software is delivered', RoleStore(settings).source('context.md').strip()),
+             ('Standards that apply to this working directory', standards.prompt_section(found)),
+             ('Methods and practices to build the plan on', methods),
+             ('Models you could recommend', model_profiles.guidance_text(s, settings.data_dir, execution_catalog(settings)))]
+    return '\n\n'.join(f'## {title}\n{body}' for title, body in parts if body)[:CONSULTANT_CONTEXT_MAX]
 
 
 def role_prompt(name, **values):

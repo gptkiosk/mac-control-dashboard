@@ -13,7 +13,7 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 ## [0.4.14] - 2026-10-15
 
 ### Changed
-- The project consultant chat now starts with the same knowledge a plan run gets: how the software is delivered, the standards that apply to the chosen working directory, and the track record of the models it could use. It is advice for the conversation and authorizes nothing; if it cannot be read the chat starts without it. See `docs/project-consultant.md`.
+- The project consultant chat now starts with the same knowledge a plan run gets: how the software is delivered, the standards that apply to the chosen working directory, the methods and practices (development practice, hosted and packaged delivery, application security) and the track record of the models it could recommend. It writes the brief so the coordinator can plan from it directly (approach and methods, risks by standards area, security considerations, model and route considerations). You can keep your own copy of any guide in the data folder. It is advice for the conversation and authorizes nothing; if it cannot be read the chat starts without it. See `docs/project-consultant.md`.
 
 ## [0.4.13] - 2026-10-15
 
