@@ -293,6 +293,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
           <li v-for="b in blockers" :key="b">{{ b }}</li>
         </ul>
         <p v-if="blockers.length" class="muted small">Drain first. Nothing is stopped or cancelled for you.</p>
+        <p v-if="blockers.some(b => b.includes('waiting on a human decision'))" class="muted small">If an approval wait is an old run that is already finished, <a href="#housekeeping">Housekeeping</a> below can resolve it.</p>
         <p v-if="install?.needs_recovery" class="notice-warn" role="alert">An earlier update was interrupted. Run recovery on the host before changing versions.</p>
 
         <h3>Available</h3>

@@ -444,3 +444,18 @@ class ProviderLimit(Base):
     handoffs: Mapped[int] = mapped_column(Integer, default=0)
     rerouted: Mapped[int] = mapped_column(Integer, default=0)
     resolved_at: Mapped[int | None] = mapped_column(Integer)
+
+
+class MaintenanceProposal(Base):
+    """A housekeeping action the coordinator proposed. It carries only finding ids frozen at proposal time; the operator's approval
+    makes the app (never a model) re-verify and apply them. ``status``: pending, applied, rejected, failed."""
+    __tablename__ = "maintenance_proposal"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[int] = mapped_column(Integer)
+    created_by: Mapped[str] = mapped_column(String(255))
+    summary: Mapped[str] = mapped_column(String(500))
+    finding_ids: Mapped[str] = mapped_column(Text)  # JSON list
+    status: Mapped[str] = mapped_column(String(16), index=True, default="pending")
+    decided_at: Mapped[int | None] = mapped_column(Integer)
+    decided_by: Mapped[str | None] = mapped_column(String(255))
+    result: Mapped[str | None] = mapped_column(Text)  # JSON per-finding outcome
