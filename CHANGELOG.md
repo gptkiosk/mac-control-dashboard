@@ -10,6 +10,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.15] - 2026-10-15
+
+### Added
+- Coordinator scorecard, in a new section of the Telemetry page. Every approved plan is scored by fixed checks (schema, the job envelope, estimates against size, checkable acceptance criteria, bounded scope, dependencies, route reasons, no stories too big to run, a review for high-risk work, and the standards' floors), compared with what the coordinator returned (how many nodes a person added, removed or changed) and recorded with the planner, the Delegator and the coordinator wording in effect (a version label such as `v2`, `+custom` for your own copies, and a hash). The page shows plan score by planner and by wording with edits per plan, first-pass completion and estimate error, so a change can be compared with the one before it. Eight fixed, general briefs and a scoring route let you try any model or wording change on the same plans. See `docs/configuration/coordinator-scorecard.md`.
+
 ## [0.4.14] - 2026-10-15
 
 ### Changed
@@ -347,7 +352,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.14...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.15...HEAD
+[0.4.15]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.15
 [0.4.14]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.14
 [0.4.13]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.13
 [0.4.12]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.12
