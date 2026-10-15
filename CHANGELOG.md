@@ -10,6 +10,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-10-15
+
+### Fixed
+- An update is no longer blocked by approval waits that nobody can decide. A run left in "awaiting approval" on a story that is already done or failed (a later run completed it) was counted as a pending human decision forever, so the Updates panel and the packaged updater refused to start. Only waits on stories that are still open, or on no story, block an update now.
+
 ## [0.4.3] - 2026-10-15
 
 ### Added
@@ -278,7 +283,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.4
 [0.4.3]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.3
 [0.2.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.7
 [0.2.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.2.6

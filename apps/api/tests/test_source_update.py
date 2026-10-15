@@ -139,7 +139,7 @@ def world(tmp_path, monkeypatch):
     w.data = tmp_path / "data"; w.data.mkdir()
     w.db = w.data / "data.db"
     con = sqlite3.connect(w.db)
-    con.executescript('create table run (id integer, stage text, ended_at integer); create table card (id integer, "column" text, approved_at integer, approval_grant text);'
+    con.executescript('create table run (id integer, card_id integer, stage text, ended_at integer); create table card (id integer, "column" text, approved_at integer, approval_grant text);'
                       "create table project (id integer, state text);")
     con.commit(); con.close()
     (w.data / ".env").write_text("A=1\n")
@@ -318,8 +318,8 @@ def test_the_manifest_must_be_mcd_stable_and_this_version(world):
 def test_blockers_are_reported_by_the_check_but_do_not_hide_the_release(world):
     release_new(world)
     con = sqlite3.connect(world.db)
-    con.execute("insert into run values (1, 'running', NULL)")
-    con.execute("insert into run values (2, 'awaiting_approval', NULL)")
+    con.execute("insert into run (id, stage, ended_at) values (1, 'running', NULL)")
+    con.execute("insert into run (id, stage, ended_at) values (2, 'awaiting_approval', NULL)")
     con.execute("insert into card (id, \"column\") values (1, 'queued')")
     con.execute("insert into project values (1, 'active')")
     con.commit(); con.close()
@@ -361,7 +361,7 @@ def test_begin_refuses_a_commit_the_signature_does_not_name(world):
 
 def test_begin_never_stops_work_it_says_what_to_drain(world):
     release_new(world)
-    con = sqlite3.connect(world.db); con.execute("insert into run values (1, 'running', NULL)"); con.commit(); con.close()
+    con = sqlite3.connect(world.db); con.execute("insert into run (id, stage, ended_at) values (1, 'running', NULL)"); con.commit(); con.close()
     err = refusal(begin, world)
     assert err.blockers and "Drain first" in err.problems[0] and not su.data_paths(world.data)["op"].exists()
 
