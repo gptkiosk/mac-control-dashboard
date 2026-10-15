@@ -34,6 +34,7 @@ Start with [Getting started](getting-started.md), then open the [Setup wizard](S
 - [The standard job envelope](configuration/job-envelope.md)
 - [Jobs and telemetry](configuration/telemetry.md)
 - [Repository standards](configuration/standards.md)
+- [Starter standards](configuration/starter-standards.md)
 - [Share the saved OpenRouter key with Hermes and OpenClaw](configuration/saved-openrouter-key.md)
 - [Runtime data and backups](configuration/runtime-data.md)
 - [Platform parity with RCD (Raspberry Pi OS)](PLATFORM_PARITY.md)
