@@ -38,6 +38,7 @@ Start with [Getting started](getting-started.md), then open the [Setup wizard](S
 - [What survives an update](configuration/upgrades-and-your-data.md)
 - [Model profiles](configuration/model-profiles.md)
 - [Coordinator scorecard](configuration/coordinator-scorecard.md)
+- [Service actions](configuration/service-actions.md)
 - [Share the saved OpenRouter key with Hermes and OpenClaw](configuration/saved-openrouter-key.md)
 - [Runtime data and backups](configuration/runtime-data.md)
 - [Platform parity with RCD (Raspberry Pi OS)](PLATFORM_PARITY.md)
