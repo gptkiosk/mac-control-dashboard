@@ -3,24 +3,24 @@ import { createMemoryHistory } from 'vue-router'
 import { createAppRouter } from '@/router'
 import { navItems } from '@/router/routes'
 
-const NAMES = ['overview', 'mac', 'services', 'projects', 'tasks', 'agents', 'chat', 'mcp', 'github', 'reports', 'help', 'profile']
+const NAMES = ['overview', 'mac', 'services', 'projects', 'tasks', 'telemetry', 'agents', 'chat', 'mcp', 'github', 'reports', 'help', 'profile']
 
 describe('router', () => {
   const router = createAppRouter(createMemoryHistory())
 
-  it('has all twelve navigation routes, sign-in and the catch-all', () => {
+  it('has all thirteen navigation routes, sign-in and the catch-all', () => {
     const names = router.getRoutes().map((r) => r.name)
     for (const n of NAMES) expect(names).toContain(n)
     expect(names).toContain('not-found')
     expect(names).toContain('login')
     expect(names).toContain('setup')
-    expect(router.getRoutes()).toHaveLength(15)
+    expect(router.getRoutes()).toHaveLength(16)
   })
 
   it('keeps sidebar order and paths', () => {
     expect(navItems.map((n) => n.name)).toEqual(NAMES)
     expect(navItems.map((n) => n.path)).toEqual([
-      '/', '/mac', '/services', '/projects', '/tasks', '/agents', '/chat', '/mcp', '/github', '/reports', '/help', '/profile',
+      '/', '/mac', '/services', '/projects', '/tasks', '/telemetry', '/agents', '/chat', '/mcp', '/github', '/reports', '/help', '/profile',
     ])
   })
 
