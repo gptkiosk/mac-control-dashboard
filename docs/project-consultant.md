@@ -6,8 +6,9 @@ Choose **Review brief & submit to Hermes** to copy the latest completed reply in
 
 ## What the consultant knows
 
-The first message to the consultant carries the same knowledge a plan run gets, in four labelled parts: how the software is delivered
-(hosted or packaged and what that means for risk); the standards that apply to the chosen working directory (the repository's own, or the
+The first message to the consultant carries the same knowledge a plan run gets, in five labelled parts: how the software is delivered
+(hosted or packaged and what that means for risk); which product and host this is, which agent runtimes are installed (and how each is
+billed), who the Delegator is and the spending policy (no keys, paths or account identities); the standards that apply to the chosen working directory (the repository's own, or the
 starter standards) with each area's minimum risk; the methods and practices to build the plan on (development practice, hosted and packaged
 delivery, application security); and the track record of the models it could recommend (free or paid, context, tools, how they have done here
 by kind of work, unproven stated plainly). The consultant is told to use it in the discussion and to write the brief so the coordinator can plan
