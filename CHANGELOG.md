@@ -10,6 +10,13 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.9] - 2026-10-15
+
+### Changed
+- Repository standards now shape plans. When a project's repository has `docs/development/standards.md`, the planner is told the repository's areas and their minimum risk, every story's `area` must be one of them, its risk may not be below the area's minimum, and a high-risk story may not use a free-only route. A plan that breaks these is refused at approval with the reasons. A missing or unreadable file still only warns. See `docs/configuration/standards.md`.
+- The repository's checks (its Definition of done table) are frozen on the approved plan revision and added to the definition of done of every agent story that writes, so the agent has to run and report them. The Delegator's planning guidance now also explains how to choose area and risk and to cite the standard in the route reason.
+- Telemetry can be cut by property (the standards' property the plan was approved under): a Property filter and a "Work by property" chart with each property's first-pass rate and median time.
+
 ## [0.4.8] - 2026-10-15
 
 ### Added
@@ -309,7 +316,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.8...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.9...HEAD
+[0.4.9]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.9
 [0.4.8]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.8
 [0.4.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.7
 [0.4.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.6
