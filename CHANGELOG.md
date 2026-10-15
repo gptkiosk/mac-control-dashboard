@@ -10,6 +10,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-10-15
+
+### Added
+- Telemetry: a Jobs and telemetry page that shows how work is going by job (one approved plan revision), kind, risk, size, route, who it is assigned to (a person or an agent), agent and model. It shows unassigned, in progress, waiting for you, completed, estimates missing and failed work; as charts you can read at a glance (donuts for workload by status and by route; stacked bars for work by assignee, by job, by model and by kind; completed per week; median time per kind), with the numbers on hover. The detailed tables (jobs, agents and models with success rate, median time, tokens, reported cost, API-equivalent cost and how often a different model served a run than the one requested, and kinds of work) are folded away until you open them. Filters narrow everything at once. It is read-only and computed from the existing records. See `docs/configuration/telemetry.md`.
+
 ## [0.4.6] - 2026-10-15
 
 ### Added
@@ -298,7 +303,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.7...HEAD
+[0.4.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.7
 [0.4.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.6
 [0.4.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.5
 [0.4.4]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.4

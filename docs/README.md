@@ -32,6 +32,7 @@ Start with [Getting started](getting-started.md), then open the [Setup wizard](S
 - [One-click update of a source checkout](configuration/source-update.md)
 - [Housekeeping: findings Hermes can propose and you approve](configuration/housekeeping.md)
 - [The standard job envelope](configuration/job-envelope.md)
+- [Jobs and telemetry](configuration/telemetry.md)
 - [Share the saved OpenRouter key with Hermes and OpenClaw](configuration/saved-openrouter-key.md)
 - [Runtime data and backups](configuration/runtime-data.md)
 - [Platform parity with RCD (Raspberry Pi OS)](PLATFORM_PARITY.md)
