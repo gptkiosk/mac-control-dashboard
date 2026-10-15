@@ -10,6 +10,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.13] - 2026-10-15
+
+### Added
+- The coordinator now uses model profiles. A planning request includes a compact paragraph on the models it may choose (free or paid, context, tool support, and the track record here by kind of work, with unproven stated plainly), and the submit review shows non-blocking route advice for each story: a proven poor record for that kind of work, no listed tool use for work that edits files, or an unproven model on medium or high risk work. The gates, risk floors and approvals still decide; your own coordinator wording keeps working. See `docs/configuration/model-profiles.md`.
+
 ## [0.4.12] - 2026-10-15
 
 ### Added
@@ -337,7 +342,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.12...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.13...HEAD
+[0.4.13]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.13
 [0.4.12]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.12
 [0.4.11]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.11
 [0.4.10]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.10
