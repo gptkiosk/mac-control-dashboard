@@ -10,6 +10,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.12] - 2026-10-15
+
+### Added
+- Model profiles, in a new Models section of the Telemetry page: what each model can do (free or paid, context size, tools, structured output, reasoning, price), how it has done in your own runs (runs, success rate, median time, cost, by kind of work, with a model shown as unproven for a kind until it has 10 runs) and notes people add with a source and a date (stale after 90 days). A Refresh free models action reads OpenRouter's public model list and shows what is new, what is no longer free and what changed, without editing your price catalog or any route. MCD ships no opinions about which model is better at what. The last read and your notes are kept across updates, and `MAC_CONTROL_MODEL_REFRESH_ENABLED` can switch the refresh off. See `docs/configuration/model-profiles.md`.
+
 ## [0.4.11] - 2026-10-15
 
 ### Added
@@ -332,7 +337,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.11...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.12...HEAD
+[0.4.12]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.12
 [0.4.11]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.11
 [0.4.10]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.10
 [0.4.9]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.9
