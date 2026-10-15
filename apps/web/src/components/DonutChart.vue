@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 
 // A donut with a legend that carries the numbers, so colour is never the only signal. Plain SVG, no chart library.
-const props = defineProps<{ title: string; slices: { label: string; value: number }[]; empty?: string }>()
+const props = defineProps<{ title: string; slices: { label: string; value: number; color?: string }[]; empty?: string }>()
 const COLORS = ['var(--accent)', 'var(--ok)', 'var(--warn)', 'var(--danger)', 'var(--text-muted, #8b949e)', 'var(--accent-soft)']
 const R = 15.9155   // circumference 100, so a slice's dash length is its percentage
 const shown = computed(() => props.slices.filter(s => s.value > 0))
@@ -11,7 +11,7 @@ const arcs = computed(() => {
   let offset = 0
   return shown.value.map((s, i) => {
     const pct = (s.value / total.value) * 100
-    const arc = { ...s, color: COLORS[i % COLORS.length]!, pct, dash: `${pct} ${100 - pct}`, offset: -offset }
+    const arc = { ...s, color: s.color ?? COLORS[i % COLORS.length]!, pct, dash: `${pct} ${100 - pct}`, offset: -offset }
     offset += pct
     return arc
   })

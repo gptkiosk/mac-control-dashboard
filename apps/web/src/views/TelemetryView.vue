@@ -31,6 +31,7 @@ const t = computed(() => data.value?.tiles)
 const OUTCOME = [{ key: 'open', label: 'Open', color: 'var(--accent)' }, { key: 'done', label: 'Done', color: 'var(--ok)' }, { key: 'failed', label: 'Failed', color: 'var(--danger)' }]
 const RUNS = [{ key: 'ok', label: 'Succeeded', color: 'var(--ok)' }, { key: 'bad', label: 'Did not succeed', color: 'var(--danger)' }]
 const DONE = [{ key: 'done', label: 'Done', color: 'var(--ok)' }, { key: 'rest', label: 'Not done', color: 'var(--accent)' }]
+const STATUS_COLOR: Record<string, string> = { backlog: 'var(--text-muted, #8b949e)', queued: 'var(--accent)', running: 'var(--warn)', review: '#a371f7', done: 'var(--ok)', failed: 'var(--danger)' }
 const when = (ts: number) => new Date(ts * 1000).toLocaleString()
 onMounted(load)
 </script>
@@ -58,7 +59,7 @@ onMounted(load)
       <p class="muted small totals">Reported cost {{ money(data.totals.cost_usd) }} · API-equivalent {{ money(data.totals.api_equivalent_usd) }} · {{ data.totals.tokens.toLocaleString() }} tokens · {{ data.totals.unpriced_runs }} unpriced {{ data.totals.unpriced_runs === 1 ? 'run' : 'runs' }}. {{ data.note }}</p>
 
       <div class="grid">
-        <DonutChart title="Workload by status" :slices="data.by_status.map(s => ({ label: s.column, value: s.count }))" />
+        <DonutChart title="Workload by status" :slices="data.by_status.map(s => ({ label: s.column, value: s.count, color: STATUS_COLOR[s.column] }))" />
         <DonutChart title="Work by route" :slices="data.by_tier.map(x => ({ label: x.tier, value: x.count }))" />
         <StackedBars title="Work by assignee" :parts="OUTCOME" :rows="data.by_assignee.map(a => ({ label: `${a.name} (${a.type})`, values: { open: a.open, done: a.done, failed: a.failed } }))" />
         <StackedBars title="Jobs" :parts="OUTCOME" :rows="data.jobs.map(j => ({ label: `${j.job} ${j.title}`, values: { open: j.open, done: j.done, failed: j.failed }, hint: `${j.job}: estimate ${minutes(j.estimate_minutes)}, actual ${minutes(j.actual_minutes)}, cost ${money(j.cost_usd)}` }))" empty="No approved plans yet. Stories made from a plan appear here, one row per plan revision." />
