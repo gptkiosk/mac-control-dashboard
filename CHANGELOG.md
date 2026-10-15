@@ -10,6 +10,14 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-10-15
+
+### Added
+- A standard job envelope on every planned story, the foundation for tracking jobs and their telemetry. A job is one approved plan revision. Each story carries a work kind, size, risk, estimate and a one-sentence reason for its route; the server derives the job and the route tier (free, subscription, api or human) and adds standard tags (`job:`, `kind:`, `size:`, `risk:`, `tier:`, `area:`). A plan without the envelope is refused at approval and the message names the gaps. Cards made by hand are unaffected. The card detail shows the envelope and why the route was chosen. See `docs/configuration/job-envelope.md`.
+- The Delegator role pack now tells the planner how to fill the envelope and when a free route is safe and when to escalate to a foundation model.
+- Tags may contain a colon.
+- Human tasks can name the user they are assigned to (`assignee_user`, empty = unassigned), so work is assigned to a person or to an agent. The card detail shows "Assigned to"; plan stories for a human can carry it too.
+
 ## [0.4.5] - 2026-10-15
 
 ### Added
@@ -290,7 +298,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.6
 [0.4.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.5
 [0.4.4]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.4
 [0.4.3]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.3
