@@ -54,8 +54,9 @@ async function go(action: 'run' | 'restart' | 'remove') {
   </div>
 </template>
 <style scoped>
-.actions { display: grid; gap: var(--gap-xs); min-width: 12rem; }
+.actions { display: grid; gap: var(--gap-xs); min-width: 17rem; }
 .buttons, .confirm { display: flex; flex-direction: row; flex-wrap: wrap; gap: var(--gap-xs); align-items: center; }
 .small { font-size: var(--font-size-sm); margin: 0; }
+.btn { white-space: nowrap; }
 .why pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 14rem; overflow: auto; background: var(--accent-soft); padding: var(--gap-sm); border-radius: var(--radius); }
 </style>

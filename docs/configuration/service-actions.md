@@ -18,11 +18,13 @@ Each row has an **Actions** cell:
   instructions. Only a log inside your home folder is read.
 - **Run now**: starts a job that is not running (a scheduled job early, or one that stopped). Asks you to confirm.
 - **Restart**: stops and starts the job. Asks you to confirm. It will not fix a bad argument or a missing file, so read the log first for a crash loop.
-- **Remove…**: unloads the job for this login. You type the service's label to confirm. The job's plist file is never touched, so it comes back at
-  the next login or when it is loaded again; nothing is deleted.
+- **Remove…**: unloads the job for this login (`launchctl remove`, which also works for jobs started with `launchctl submit` such as update helpers; the
+  newer `bootout` is the fallback). You type the service's label to confirm. The job's plist file is never touched, so it comes back at the next
+  login or when it is loaded again; nothing is deleted.
 
 The dashboard's own service has no Restart or Remove: that would end the page you are using. Update it from Profile, or restart it from a terminal.
-Finished update helpers that stayed loaded, and stale preview services, are the usual things to Remove; **Why** says when a job looks like one.
+Finished update helpers that stayed loaded, and stale preview services, are the usual things to Remove; **Why** says when a job looks like one. Finished
+update helpers are also unloaded automatically (see [Housekeeping](housekeeping.md)).
 
 Every action is written to `services-audit.jsonl` in the data folder with who did it, which service, and whether it worked.
 

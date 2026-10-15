@@ -50,7 +50,9 @@ target_short="$(g rev-parse --short "$target")"
 version="$(g show "$target:apps/api/version.py" | sed -n 's/^__version__ *= *"\(.*\)".*/\1/p' | head -n 1)"
 [ -n "$version" ] || die "$ref has no apps/api/version.py version"
 if [ "$target" = "$previous" ]; then say "already on $ref ($target_short, v$version)"; exit 0; fi
-g show "$target:CHANGELOG.md" 2>/dev/null | grep -Eq "^## \[$version\] - [0-9]{4}-[0-9]{2}-[0-9]{2}" || say "warning: $ref has no dated CHANGELOG section for v$version"
+# `grep -q` would close the pipe at the first match, and under pipefail the writer's SIGPIPE would then report a section that is there as missing, so read
+# everything (`>/dev/null`) instead of stopping at the first line.
+g show "$target:CHANGELOG.md" 2>/dev/null | grep -E "^## \[$version\] - [0-9]{4}-[0-9]{2}-[0-9]{2}" >/dev/null || say "warning: $ref has no dated CHANGELOG section for v$version"
 say "upgrade: v$(g show "$previous:apps/api/version.py" | sed -n 's/^__version__ *= *"\(.*\)".*/\1/p' | head -n 1) ($previous_short) -> v$version ($target_short, $ref)"
 changed() { ! g diff --quiet "$previous" "$target" -- "$1" 2>/dev/null; }
 sync_api=0; sync_mcp=0; sync_web=0
