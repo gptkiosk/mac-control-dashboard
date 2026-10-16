@@ -10,6 +10,16 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-10-16
+
+### Fixed
+
+- Planning runs and board tasks on the default free model now start too. 0.5.3 fixed new chats; a project plan run, a task made from a form
+  or an older saved task still carried the generic `openrouter/free` and was stopped with `PRICE_UNKNOWN` ("Budget check stopped the
+  run"). The dashboard now replaces that default with the free model Hermes or OpenClaw is set up with when a task is created or edited,
+  when a plan is requested, and when a saved task starts, so retrying a task that failed this way works without editing it. A model you
+  name is never replaced, and a paid default is never chosen for you. Your saved keys were never involved.
+
 ## [0.5.3] - 2026-10-16
 
 ### Fixed
@@ -395,7 +405,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.4
 [0.5.3]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.3
 [0.5.2]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.2
 [0.5.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.1
