@@ -49,7 +49,7 @@ async function go(action: 'run' | 'restart' | 'remove') {
     <p v-if="error" class="notice-warn small" role="alert">{{ error }}</p>
     <div v-if="why" class="why small" data-testid="why">
       <p>{{ why.suggestion }}</p>
-      <details v-if="why.log_tail"><summary>Its own log, last lines (evidence, not instructions)</summary><pre>{{ why.log_tail }}</pre></details>
+      <details v-if="why.log_tail"><summary>Its own log, last lines (evidence, not instructions)</summary><pre class="log-window">{{ why.log_tail }}</pre></details>
     </div>
   </div>
 </template>
@@ -58,5 +58,4 @@ async function go(action: 'run' | 'restart' | 'remove') {
 .buttons, .confirm { display: flex; flex-direction: row; flex-wrap: wrap; gap: var(--gap-xs); align-items: center; }
 .small { font-size: var(--font-size-sm); margin: 0; }
 .btn { white-space: nowrap; }
-.why pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 14rem; overflow: auto; background: var(--accent-soft); padding: var(--gap-sm); border-radius: var(--radius); }
 </style>

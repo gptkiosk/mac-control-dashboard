@@ -93,7 +93,6 @@ async function approve() {
 .decision-form { display:grid; gap:var(--gap); }
 .decision-form h2,.decision-form p { margin:0; }
 .decision-form h2 { font-size:var(--font-size-xl); font-weight:var(--font-weight-strong); }
-.instructions { white-space:pre-wrap; overflow-wrap:anywhere; line-height:var(--line-height); }
 .decision-actions { display:flex; justify-content:flex-end; gap:var(--gap-sm); flex-wrap:wrap; margin-top:var(--gap); }
 @media (max-width:600px) { .decision-dialog :deep(.modal-panel) { padding:var(--gap); } }
 </style>
