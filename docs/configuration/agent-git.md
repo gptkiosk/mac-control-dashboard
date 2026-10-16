@@ -50,7 +50,7 @@ clone. It pushes nothing.
 
 ```sh
 scripts/agent-git/setup-clone.sh --repo gptkiosk/mac-control-dashboard \
-  --dest ~/Bamcio-Workspace/work/mac-control-dashboard --project 5 --slug installable-releases \
+  --dest ~/work/mac-control-dashboard --project 5 --slug installable-releases \
   --pre-push-cmd 'cd apps/api && .venv/bin/python -m pytest -q'
 ```
 
