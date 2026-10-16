@@ -16,12 +16,20 @@ const alternatives = computed(() => (task.value?.retry_routes ?? []).filter(r =>
 const limited = computed(() => /session limit|usage limit|quota|rate.?limit|limit reached/i.test(props.card.last_run?.error ?? ''))
 const freeRoutes = computed(() => task.value?.free_retry_routes ?? [])
 const showFree = ref(false), freeModel = ref(''), freeTarget = ref('')
+const lowCost = computed(() => task.value?.low_cost_routes ?? [])
+const paidRoutes = computed(() => task.value?.paid_retry_routes ?? [])
+const showCheap = ref(false), cheapRoute = ref<{ agent: 'claude' | 'codex'; model: string } | null>(null), cheapEdit = ref(false), cheapAck = ref(false)
+const showPaid = ref(false), paidModel = ref(''), paidTarget = ref(''), paidAck = ref(false)
+const paidModels = computed(() => [...new Set(paidRoutes.value.map(r => r.model))])
+const paidTargets = computed(() => [...new Set(paidRoutes.value.map(r => r.agent_target))])
+const cheapLabel = (r: { agent: string; model: string }) => `${agentLabel(r.agent)} · ${r.model}`
+function closePanels() { showFree.value = false; showCheap.value = false; showPaid.value = false }
 const freeModels = computed(() => [...new Set(freeRoutes.value.map(r => r.model))])
 const freeTargets = computed(() => [...new Set(freeRoutes.value.map(r => r.agent_target))])
 let generation = 0
 watch(() => [props.card.id, props.card.project?.id, props.card.column, props.card.last_run?.id], async () => {
   const mine = ++generation
-  project.value = null; error.value = ''; notice.value = ''; showFree.value = false
+  project.value = null; error.value = ''; notice.value = ''; closePanels()
   if (!visible.value) return
   try {
     const p = await getJson<Project>(`/api/projects/${props.card.project!.id}`)
@@ -30,10 +38,53 @@ watch(() => [props.card.id, props.card.project?.id, props.card.column, props.car
 }, { immediate: true })
 
 function chooseFree() {
+  closePanels()
   freeModel.value = freeModels.value[0] ?? ''
   const preferred = props.card.agent_target || (props.card.mode === 'edit' ? 'mm-developer' : 'mm-main')
   freeTarget.value = freeTargets.value.includes(preferred) ? preferred : freeTargets.value[0] ?? ''
   showFree.value = true
+}
+
+function chooseCheap(route: { agent: 'claude' | 'codex'; model: string }) {
+  closePanels(); cheapRoute.value = route; cheapEdit.value = false; cheapAck.value = false; showCheap.value = true
+}
+function choosePaid() {
+  closePanels(); paidModel.value = paidModels.value[0] ?? ''
+  const preferred = props.card.agent_target || (props.card.mode === 'edit' ? 'mm-developer' : 'mm-main')
+  paidTarget.value = paidTargets.value.includes(preferred) ? preferred : paidTargets.value[0] ?? ''
+  paidAck.value = false; showPaid.value = true
+}
+async function current(base: string) {
+  const p = await getJson<Project>(base)
+  const t = p.tasks.find(x => x.card_id === props.card.id && x.role === 'story')
+  if (p.state !== 'active' || t?.column !== 'failed' || t.run_id !== props.card.last_run?.id) throw new Error('The task changed. Refresh before rerunning it.')
+  return { p, t }
+}
+async function goCheap() {
+  if (busy.value || !ready.value || !cheapRoute.value) return
+  busy.value = true; error.value = ''
+  try {
+    const base = `/api/projects/${props.card.project!.id}`
+    const { p, t } = await current(base)
+    if (!t.low_cost_routes?.some(r => r.agent === cheapRoute.value!.agent && r.model === cheapRoute.value!.model)) throw new Error('This subscription route is no longer available. Refresh before choosing it.')
+    await postJson(`${base}/stories/${props.card.id}/low-cost-retry`, { revision: p.revision, run_id: t.run_id, agent: cheapRoute.value.agent, edit_mode: cheapEdit.value, acknowledge: cheapEdit.value && cheapAck.value })
+    closePanels(); notice.value = `Retry queued on ${cheapLabel(cheapRoute.value)} (your subscription). No paid API or Google BYOK route was added.`
+    emit('changed')
+  } catch (e) { error.value = e instanceof Error ? e.message : String(e) }
+  finally { busy.value = false }
+}
+async function goPaid() {
+  if (busy.value || !ready.value || !paidModel.value || !paidTarget.value || !paidAck.value) return
+  busy.value = true; error.value = ''
+  try {
+    const base = `/api/projects/${props.card.project!.id}`
+    const { p, t } = await current(base)
+    if (!t.paid_retry_routes?.some(r => r.model === paidModel.value && r.agent_target === paidTarget.value)) throw new Error('This paid route is no longer configured. Refresh before choosing it.')
+    await postJson(`${base}/stories/${props.card.id}/pay-retry`, { revision: p.revision, run_id: t.run_id, model: paidModel.value, agent_target: paidTarget.value, acknowledge: true })
+    closePanels(); notice.value = 'Paid retry queued for this task only. Price checks and budget caps still apply when it starts.'
+    emit('changed')
+  } catch (e) { error.value = e instanceof Error ? e.message : String(e) }
+  finally { busy.value = false }
 }
 
 async function goFree() {
@@ -79,6 +130,9 @@ async function retry(route?: ProjectNode['routes'][number]) {
     <div class="retry-actions">
       <button type="button" class="btn primary" :disabled="busy || !ready" @click="retry()"><AppIcon name="run" size="sm" />{{ busy ? 'Queueing…' : 'Rerun task' }}</button>
       <button v-for="route in alternatives" :key="`${route.agent}:${route.model}`" type="button" class="btn" :disabled="busy || !ready" @click="retry(route)">Rerun with {{ agentLabel(route.agent) }} · {{ route.model || 'Agent default' }}</button>
+      <button v-if="card.agent === 'openclaw' && freeRoutes.length" type="button" class="btn" :disabled="busy || !ready" @click="chooseFree">Try another free model</button>
+      <button v-for="r in lowCost" :key="`${r.agent}:${r.model}`" type="button" class="btn" :disabled="busy || !ready" @click="chooseCheap(r)">Use {{ cheapLabel(r) }} (subscription)</button>
+      <button v-if="paidRoutes.length" type="button" class="btn" :disabled="busy || !ready" @click="choosePaid">Pay for this task…</button>
       <button v-if="limited && (card.agent === 'claude' || card.agent === 'codex')" type="button" class="btn" :disabled="busy || !ready || !freeRoutes.length" @click="chooseFree">Go Free!</button>
     </div>
     <div v-if="showFree" class="free-choice" aria-label="Choose free retry">
@@ -88,7 +142,22 @@ async function retry(route?: ProjectNode['routes'][number]) {
       <p class="muted small">Approves this model for this task only. No paid-model or Google BYOK fallback. If the free model is unavailable, the task stops for review.</p>
       <div class="retry-actions"><button type="button" class="btn primary" :disabled="busy || !ready || !freeModel || !freeTarget" @click="goFree">{{ busy ? 'Queueing…' : 'Start free retry' }}</button><button type="button" class="btn" :disabled="busy" @click="showFree = false">Cancel</button></div>
     </div>
-    <p class="muted small">Keeps this task’s scope, workspace and dependency order. Earlier runs remain in history.</p>
+    <div v-if="showCheap && cheapRoute" class="free-choice" aria-label="Retry on a subscription model">
+      <p><strong>Retry on {{ cheapLabel(cheapRoute) }}</strong></p>
+      <p class="muted small">Uses your {{ agentLabel(cheapRoute.agent) }} subscription, so there is no per-token charge. Same scope, workspace and dependencies; earlier work stays unverified.</p>
+      <label v-if="card.mode === 'read'" class="check"><input v-model="cheapEdit" type="checkbox" :disabled="busy" />Let it edit files and commit on this project’s branch. This switches the task from read-only to edit mode.</label>
+      <label v-if="cheapEdit" class="check"><input v-model="cheapAck" type="checkbox" :disabled="busy" />I approve the switch from read-only review to workspace execution.</label>
+      <div class="retry-actions"><button type="button" class="btn primary" :disabled="busy || !ready || (cheapEdit && !cheapAck)" @click="goCheap">{{ busy ? 'Queueing…' : 'Start retry' }}</button><button type="button" class="btn" :disabled="busy" @click="showCheap = false">Cancel</button></div>
+    </div>
+    <div v-if="showPaid" class="free-choice" aria-label="Pay for this task">
+      <p><strong>Retry this task on a paid model</strong></p>
+      <label>Model<select v-model="paidModel" :disabled="busy"><option v-for="model in paidModels" :key="model" :value="model">{{ model }}</option></select></label>
+      <label>OpenClaw agent<select v-model="paidTarget" :disabled="busy"><option v-for="target in paidTargets" :key="target" :value="target">{{ target }}</option></select></label>
+      <p class="muted small">Uses API billing for this task only. The price check, budget caps and free-only setting still apply when it starts, and it can stop there with the reason. No Google BYOK route is added.</p>
+      <label class="check"><input v-model="paidAck" type="checkbox" :disabled="busy" />I approve API billing for this task only.</label>
+      <div class="retry-actions"><button type="button" class="btn primary" :disabled="busy || !ready || !paidModel || !paidTarget || !paidAck" @click="goPaid">{{ busy ? 'Queueing…' : 'Start paid retry' }}</button><button type="button" class="btn" :disabled="busy" @click="showPaid = false">Cancel</button></div>
+    </div>
+    <p class="muted small">Keeps this task’s scope, workspace and dependency order. Earlier runs remain in history. If a free model is throttled, <strong>Rerun task</strong> again later also works.</p>
     <p v-if="limited" class="muted small">The same agent may remain limited until its quota resets. Use an approved alternative above when available.</p>
     <p v-if="limited && (card.agent === 'claude' || card.agent === 'codex') && project && !freeRoutes.length" class="muted small">Go Free needs an installed OpenClaw agent with a configured OpenRouter :free model.</p>
     <p v-if="project?.state === 'paused'" class="muted small">Resume project dispatch before rerunning this task.</p>
