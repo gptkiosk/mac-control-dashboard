@@ -140,7 +140,7 @@ def world(tmp_path, monkeypatch):
     w.db = w.data / "data.db"
     con = sqlite3.connect(w.db)
     con.executescript('create table run (id integer, card_id integer, stage text, ended_at integer); create table card (id integer, "column" text, approved_at integer, approval_grant text);'
-                      "create table project (id integer, state text);")
+                      "create table project (id integer, state text); create table project_task (card_id integer, project_id integer);")
     con.commit(); con.close()
     (w.data / ".env").write_text("A=1\n")
     # shims: the "service" records the commit it restarted on and answers /healthz for it
