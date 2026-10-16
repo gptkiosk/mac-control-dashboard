@@ -511,8 +511,14 @@ def proposal(doc, nodes, settings):
     # Human reviews own a bounded decision rather than code paths. Fill only for
     # planner proposals; operator edits and agent execution still require scope.
     normalized = []
+    phases = {n.get('key') for n in nodes if n.get('kind') == 'phase'}
     for node in nodes:
         row = dict(node)
+        # Planners often order phases against each other and make a story depend on its own phase. Order lives in story-to-story
+        # dependencies, so dependencies on a phase (or on itself) and any dependencies of a phase are dropped from planner proposals.
+        # A dependency on a key that does not exist is still refused, and an operator's own edit is validated as written.
+        if isinstance(row.get('depends_on'), list):
+            row['depends_on'] = [] if row.get('kind') == 'phase' else [d for d in row['depends_on'] if d not in phases and d != row.get('key')]
         # Planner fallbacks are limited to native subscription agents. Some
         # models repeat an OpenClaw route here even though it already belongs
         # in the separately validated routes list. Dropping that inapplicable
