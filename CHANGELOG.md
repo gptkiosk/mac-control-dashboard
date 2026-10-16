@@ -22,6 +22,9 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 - A "Delivering a containerized web app, local first" guide and a paragraph in the coordinator context (role pack version 4): a private
   repository created first, a pipeline on Linux runners that builds and tests the image, a local run on Colima, and repository setup
   planned as the first step with the repository creation, first push and secrets left to a person.
+- A Discord alert when a project's planning or story hand-out stops after its run succeeded, for example when the plan is refused for a
+  missing field or a bad dependency. Until now only failed runs alerted, so a plan that came back and then failed validation was
+  silent. One alert per project, revision and reason; turn it off with `[projects] enabled = false` in `alerts.toml`.
 
 ## [0.5.5] - 2026-10-16
 
