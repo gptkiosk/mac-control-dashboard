@@ -166,7 +166,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
         </dl>
         <div>
           <h5>Release notes</h5>
-          <pre class="notes">{{ candidate.notes || 'This release has no notes.' }}</pre>
+          <pre class="notes log-window">{{ candidate.notes || 'This release has no notes.' }}</pre>
           <a v-if="releaseLink" :href="releaseLink" target="_blank" rel="noopener noreferrer">View this release on GitHub</a>
         </div>
         <div v-if="blockers.length">
@@ -204,7 +204,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
       </ol>
       <details v-if="op.log.length">
         <summary>Log</summary>
-        <pre class="notes">{{ op.log.join('\n') }}</pre>
+        <pre class="notes log-window">{{ op.log.join('\n') }}</pre>
       </details>
     </section>
   </section>
@@ -218,23 +218,27 @@ h5 { font-size: var(--font-size-sm); font-weight: var(--font-weight-strong); col
 .lead, .block p, .note { max-width: 72ch; line-height: var(--line-height); }
 .status { font-weight: 600; }
 .small { font-size: var(--font-size-sm); }
-.block { display: grid; gap: var(--gap); padding: var(--gap); border: 1px solid var(--surface-border); border-radius: var(--radius); background: var(--accent-soft); justify-items: start; }
+.block { display: grid; gap: var(--gap); padding: var(--gap-lg); border: 1px solid var(--surface-border); border-radius: var(--radius); background: var(--accent-soft); justify-items: start; }
 .block > * { min-width: 0; max-width: 100%; }
 .confirm { background: transparent; border-color: var(--accent); }
-.actions { display: flex; gap: var(--gap); flex-wrap: wrap; align-items: center; }
+.actions { display: flex; gap: var(--gap-sm); flex-wrap: wrap; align-items: center; }
+.block > .actions { justify-content: flex-end; width: 100%; padding-top: var(--gap); border-top: 1px solid var(--glass-border); }
+.actions .btn { min-height: var(--select-height); }
 .list { list-style: disc; display: grid; gap: var(--gap-sm); margin: 0; padding-left: 1.25rem; line-height: var(--line-height); }
 .facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--gap-sm) var(--gap-lg); margin: 0; font-size: var(--font-size); line-height: var(--line-height); }
 .facts dt { color: var(--text-muted); }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
 .running { padding: 0 var(--gap-xs); }
 .mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--font-size-sm); }
-.notes { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 14rem; overflow: auto; margin: 0 0 var(--gap-sm); width: 100%; box-sizing: border-box; padding: var(--gap-sm) var(--gap); border: 1px solid var(--surface-border); border-radius: var(--radius); font-family: inherit; font-size: var(--font-size-sm); line-height: var(--line-height); background: var(--panel); }
-.steps { list-style: decimal; display: grid; gap: var(--gap-sm); margin: 0; padding-left: 1.25rem; line-height: var(--line-height); }
-.steps .state { margin-left: var(--gap-xs); }
-.steps .detail { display: block; }
+.steps { list-style: decimal; display: grid; gap: var(--gap); margin: 0; padding-left: 1.5rem; line-height: var(--line-height); }
+.steps li::marker { color: var(--text-muted); font-weight: var(--font-weight-strong); }
+.steps .state { margin-left: var(--gap-sm); padding: 0.05rem var(--gap-sm); border-radius: var(--radius-pill); border: 1px solid var(--glass-border); font-size: var(--font-size-xs); color: var(--text-muted); text-transform: lowercase; }
+.steps li[data-state='ok'] .state { color: var(--accent); border-color: var(--accent); }
+.steps .detail { display: block; margin-top: var(--gap-xs); }
 .steps li[data-state='failed'] { color: var(--danger, #ef4f4f); }
-.check { display: flex; align-items: flex-start; gap: var(--gap-sm); line-height: var(--line-height); }
+.check { display: flex; align-items: flex-start; gap: var(--gap-sm); line-height: var(--line-height); padding: var(--gap-xs) 0; }
 .check input { flex: none; margin-top: 0.3rem; accent-color: var(--accent); }
-summary { cursor: pointer; padding: var(--gap-xs) 0; }
+summary { cursor: pointer; padding: var(--gap-sm) 0; }
+details { width: 100%; }
 @media (max-width: 40rem) { .facts { grid-template-columns: minmax(0, 1fr); gap: 0; } .facts dt { margin-top: var(--gap-sm); } }
 </style>
