@@ -10,6 +10,15 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-16
+
+### Fixed
+
+- A submitted plan no longer stops with "Hermes dispatch order does not exactly match the approved stories." Hermes only chooses the order between orders the approved
+  dependencies already allow, so its answer is now advice. A phase key or a repeated key in it is ignored, and an answer that leaves a story out or breaks a dependency
+  is replaced by the approved plan's own dependency order, with a note in the project memory saying so. No story, route or scope changes. A project already stopped as
+  `dispatch_failed` can be submitted again with **Review & submit**.
+
 ## [0.6.2] - 2026-10-16
 
 ### Fixed
@@ -482,7 +491,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.3
 [0.6.2]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.2
 [0.6.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.1
 [0.6.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.0
