@@ -77,3 +77,48 @@ it('Go Free stays hidden for failures unrelated to subscription limits',async()=
   await w.setProps({card:{...failed(),last_run:run({id:51,stage:'failed',error:'test suite failed'})}});await flushPromises()
   expect(w.findAll('button').some(b=>b.text()==='Go Free!')).toBe(false);w.unmount()
 })
+
+const timedOut = () => card({id:50,column:'failed',agent:'openclaw',model:'openrouter/example/code:free',mode:'read',project:{id:2,node_key:'durable',role:'story'},last_run:run({id:51,card_id:50,stage:'timeout',error:'OpenClaw provider timed out'})})
+function setupFree(p: Project) {
+  const f=stubFetch((url,init)=>url==='/api/projects/2' || init?.method==='POST' ? {body:p} : undefined)
+  const w=mount(TaskRetryAction,{props:{card:timedOut()},attachTo:document.body})
+  return {w,f}
+}
+const withWayOut = () => { const p=project(); const t=p.tasks[0]!; t.run_stage='timeout'
+  t.free_retry_routes=[{agent:'openclaw',model:'openrouter/other/model:free',agent_target:'mm-developer'}]
+  t.low_cost_routes=[{agent:'claude',model:'claude-haiku-5-5'},{agent:'codex',model:'gpt-6-luna'}]
+  t.paid_retry_routes=[{agent:'openclaw',model:'openrouter/google/gemini-2.5-flash',agent_target:'mm-developer'}]; return p }
+it('a failed free-model task always offers a way out: wait and rerun, another free model, a subscription model, or paying',async()=>{
+  const {w}=setupFree(withWayOut());await flushPromises()
+  const labels=w.findAll('button').map(b=>b.text())
+  expect(labels).toContain('Rerun task');expect(labels).toContain('Try another free model')
+  expect(labels).toContain('Use Claude · claude-haiku-5-5 (subscription)');expect(labels).toContain('Use Codex · gpt-6-luna (subscription)');expect(labels).toContain('Pay for this task…')
+  expect(w.text()).toContain('Rerun task</strong> again later'.replace('</strong>','')) ;w.unmount()
+})
+it('a subscription retry can switch a read-only task to edit mode only with an explicit acknowledgement',async()=>{
+  const {w,f}=setupFree(withWayOut());await flushPromises()
+  await w.findAll('button').find(b=>b.text().startsWith('Use Codex'))!.trigger('click')
+  const boxes=()=>w.findAll('.free-choice input[type=checkbox]')
+  expect(boxes()).toHaveLength(1);await boxes()[0]!.setValue(true)
+  expect(boxes()).toHaveLength(2)
+  expect(w.findAll('button').find(b=>b.text()==='Start retry')!.attributes('disabled')).toBeDefined()
+  await boxes()[1]!.setValue(true)
+  await w.findAll('button').find(b=>b.text()==='Start retry')!.trigger('click');await flushPromises()
+  const writes=calls(f,'POST','/api/');expect(writes).toHaveLength(1)
+  expect(writes[0]![0]).toBe('/api/projects/2/stories/50/low-cost-retry')
+  expect(JSON.parse(String(writes[0]![1]?.body))).toEqual({revision:2,run_id:51,agent:'codex',edit_mode:true,acknowledge:true})
+  expect(w.text()).toContain('your subscription');w.unmount()
+})
+it('paying needs an acknowledgement, names the limits, and grants only this run',async()=>{
+  const {w,f}=setupFree(withWayOut());await flushPromises()
+  await w.findAll('button').find(b=>b.text()==='Pay for this task…')!.trigger('click')
+  expect(w.text()).toContain('API billing for this task only');expect(w.text()).toContain('budget caps')
+  const start=()=>w.findAll('button').find(b=>b.text()==='Start paid retry')!
+  expect(start().attributes('disabled')).toBeDefined()
+  await w.get('.free-choice input[type=checkbox]').setValue(true)
+  await start().trigger('click');await flushPromises()
+  const writes=calls(f,'POST','/api/');expect(writes).toHaveLength(1)
+  expect(writes[0]![0]).toBe('/api/projects/2/stories/50/pay-retry')
+  expect(JSON.parse(String(writes[0]![1]?.body))).toEqual({revision:2,run_id:51,model:'openrouter/google/gemini-2.5-flash',agent_target:'mm-developer',acknowledge:true})
+  w.unmount()
+})
