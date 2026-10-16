@@ -294,9 +294,9 @@ it('closes an unfinished project only with a reason and shows it as Closed, neve
  expect(w.findAll('button').some(b=>b.text()==='Close project…')).toBe(false);w.unmount()
 })
 
-it('can close a project and remove its tasks in one step, and remove them later from a closed project',async()=>{
+it('can close a project and remove its tasks in one step',async()=>{
  vi.spyOn(window,'prompt').mockReturnValue('Replanned as a new project')
- const confirm=vi.spyOn(window,'confirm').mockReturnValue(true)
+ const confirm=vi.spyOn(window,'confirm').mockReturnValue(true);confirm.mockClear()
  const {w,f}=await setup('active')
  await w.findAll('button').find(b=>b.text()==='Close project…')!.trigger('click');await flushPromises()
  const write=f.mock.calls.find(([url])=>url==='/api/projects/1/close')!

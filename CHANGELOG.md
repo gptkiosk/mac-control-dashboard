@@ -10,6 +10,15 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-16
+
+### Fixed
+
+- Closing a project no longer leaves its tasks behind on the board. Closing offers to remove the project's tasks in the same step, a Closed project has
+  **Remove tasks from the board** for later, and each queued, Backlog, Review or failed task of a Closed project can be deleted on its own (before, only failed
+  ones could). The ledger keeps the handoff, incident and decision entries; the tasks' run history is deleted.
+- Leftover queued tasks of a Closed or Complete project no longer block an in-app update.
+
 ### Changed
 
 - The planner is told what a sandboxed coding agent cannot run. A Codex story cannot reach the local container engine, so the plan no longer asks an edit story to
@@ -517,7 +526,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.6
 [0.6.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.5
 [0.6.4]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.4
 [0.6.3]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.3
