@@ -39,6 +39,22 @@ def capabilities(request: Request):
     return _caps(request)
 
 
+@router.get("/intake")
+def intake(request: Request):
+    """The accepted reports that became tasks, the ones waiting for a maintainer's label, and when GitHub was last read."""
+    operator(request)
+    return request.app.state.bug_intake.status()
+
+
+@router.post("/intake/refresh")
+def intake_refresh(request: Request):
+    operator(request)
+    service = request.app.state.bug_intake
+    if not service.enabled():
+        raise HTTPException(409, "Bug report intake is off on this install.")
+    return service.poll()
+
+
 @router.post("/preview")
 def preview(request: Request, body: ReportIn):
     """Exactly what would be sent, with what was scrubbed. Sends nothing."""

@@ -31,6 +31,7 @@ Start with [Getting started](getting-started.md), then open the [Setup wizard](S
 - [LaunchAgent installation](configuration/launchd.md)
 - [One-click update of a source checkout](configuration/source-update.md)
 - [Housekeeping: findings Hermes can propose and you approve](configuration/housekeeping.md)
+- [Bug reports: the header icon, GitHub moderation and tasks](configuration/bug-reports.md)
 - [The standard job envelope](configuration/job-envelope.md)
 - [Jobs and telemetry](configuration/telemetry.md)
 - [Repository standards](configuration/standards.md)

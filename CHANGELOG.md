@@ -10,6 +10,19 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+### Added
+
+- A bug icon in the header. It opens a short form, shows the exact issue that would be sent (with paths, emails, addresses and
+  key-shaped text removed and listed), and then either files it on the product's official GitHub repository as your signed-in account
+  (through the same guarded GitHub action as other writes, after you confirm) or opens a prefilled GitHub page for you to submit under
+  your own account. No token, relay or hosted service is involved. See `docs/configuration/bug-reports.md`.
+- Bug intake (off by default, `MAC_CONTROL_BUG_INTAKE_ENABLED`). Issues a maintainer has labelled `bug-report` and `accepted` become one
+  read-only triage task each, tagged `release-blocker` (label `break-fix`) or `release-queued`, with the report quoted as untrusted
+  evidence. A Profile panel lists new tasks and the reports still waiting for a maintainer's label.
+- A "Delivering a containerized web app, local first" guide and a paragraph in the coordinator context (role pack version 4): a private
+  repository created first, a pipeline on Linux runners that builds and tests the image, a local run on Colima, and repository setup
+  planned as the first step with the repository creation, first push and secrets left to a person.
+
 ## [0.5.5] - 2026-10-16
 
 ### Fixed
