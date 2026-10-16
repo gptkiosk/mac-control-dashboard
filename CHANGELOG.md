@@ -10,6 +10,16 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-10-16
+
+### Fixed
+
+- Chats with Hermes or OpenClaw on the default model now start. The default, `openrouter/free`, is a generic name that neither agent
+  lists, so the dashboard refused every new chat with `PRICE_UNKNOWN` (0.5.2 made that refusal readable; this removes the cause). A new
+  chat on that default now uses the free model the agent is set up with (its own default, for example the one `hermes setup` chose),
+  shown on the chat as the model in use. A model you pick by name is never replaced, and a paid default is never chosen for you. A
+  chat created earlier that has not run yet is corrected the same way when you send its first message.
+
 ## [0.5.2] - 2026-10-16
 
 ### Fixed
@@ -385,7 +395,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.3
 [0.5.2]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.2
 [0.5.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.1
 [0.5.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.0
