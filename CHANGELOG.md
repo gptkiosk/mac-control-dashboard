@@ -10,6 +10,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-16
+
+New in 0.6.0: a bug icon in the header, repository bootstrap for projects that need a new private GitHub repository, and an opt-in parallel build. Bug
+intake, Hermes repository proposals and the parallel auto-accept gate are all off until you turn them on, and a project builds serially unless you switch parallel on.
+
 ### Added
 
 - A bug icon in the header. It opens a short form, shows the exact issue that would be sent (with paths, emails, addresses and
@@ -448,7 +453,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.0
 [0.5.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.5
 [0.5.4]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.4
 [0.5.3]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.5.3
