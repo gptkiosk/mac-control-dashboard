@@ -12,6 +12,7 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ### Changed
 
+- A Done story can be rerun (**Rerun same story**) while nothing that depends on it has started, so a story that was accepted wrongly, such as art that never got embedded, no longer forces a new project revision. Once a dependent has run, reopening is refused as before because its handoff would be invalidated.
 - The coordinator's planning prompt now treats anything judged by looking (pages, art, themes, layout) as needing proof: a file-level verification story (promised files exist, are not empty, are referenced), then a localhost preview checkpoint with a clickable URL per page and state, then the human decision. A requested change returns to the producing story and the same checks, and the preview is stopped only when the operator records approval. The plan reviewer asks for these steps when a plan lacks them. Prompt pack version 9.
 
 ## [0.6.11] - 2026-10-16
