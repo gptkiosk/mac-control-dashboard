@@ -182,6 +182,11 @@ MCD grants these in its own launch arguments, not in an agent's own configuratio
 | Hermes | writes files and runs shell commands; told its task folder first because its terminal starts in its own configured folder |
 | OpenClaw | writes files and runs `node` and `python3` through the configured developer agent |
 
+**Defaults work; security is configured.** The default (`MAC_CONTROL_AGENT_PERMISSIONS=working`) lets an Edit story run test and syntax runners, harmless helpers and package installs
+(`npm ci`, `npm install`, `pip install`), and gives Codex the package indexes and GitHub in its sandbox, so a project can finish out of the box. Set `MAC_CONTROL_AGENT_PERMISSIONS=strict` to allow only
+the commands you list in `MAC_CONTROL_AGENT_EXTRA_COMMANDS` (for example `["Bash(make test:*)"]`) and give Codex its plain workspace sandbox. `MAC_CONTROL_AGENT_EXTRA_NETWORK_DOMAINS`
+(for example `["cdn.example.org"]`) adds hosts Codex may reach. Git grants, `git push` and merge denials, and the branch rules apply in either mode. Restart MCD after changing them.
+
 After upgrading an agent runtime, run `python3 scripts/probe-agent-capabilities.py claude codex hermes openclaw`. It uses a few model requests and removes its throwaway folders.
 
 ### Retrying after a timeout

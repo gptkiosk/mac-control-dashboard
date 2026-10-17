@@ -24,6 +24,9 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
   can now run test and syntax runners (`pytest`, `unittest`, `py_compile`, `json.tool`, `node --check`, `npm run test/type-check/build`, `vitest`, `bash -n`, `shasum`); git, the network tools and
   arbitrary shell stay denied, and a Read-mode story still gets no shell. The harmless helpers models add to compound commands (`echo`, `printf`, `ls`, `cat`, `wc`, `head`, `tail`, `diff`, `sort`, `test`)
   are allowed too, because a compound command is refused as a whole when any part needs approval.
+- The defaults work and security is configured. `MAC_CONTROL_AGENT_PERMISSIONS` (default `working`) lets an Edit story run checks, harmless helpers and package installs (`npm ci`, `npm install`,
+  `pip install`) and gives a Codex Edit story the package indexes and GitHub in its sandbox even without a git grant, so a project can finish out of the box. `strict` allows only the commands in
+  `MAC_CONTROL_AGENT_EXTRA_COMMANDS` and gives Codex its plain sandbox; `MAC_CONTROL_AGENT_EXTRA_NETWORK_DOMAINS` adds hosts Codex may reach. Git grants and the push and merge denials apply either way.
 - A Hermes Edit story is told its task folder first. Hermes' terminal starts in the folder set in its own config, not in the folder MCD points it at, so files written with relative paths could land
   in the wrong place. Verified on Claude, Codex, Hermes and OpenClaw: each writes its files into the task folder and runs its checks.
 

@@ -354,8 +354,34 @@ def test_dispatcher_claude_story_gets_exact_git_allows(app, tmp_path):
 
 def test_dispatcher_without_a_grant_keeps_the_no_push_rule(app):
     pid, cid, cmd, checkpoint, ctx = claim_edit_story(app, [node("a")])
-    assert "agent_git" not in checkpoint and not any("agentgit" in a for a in cmd) and "workspace-write" in cmd
+    assert "agent_git" not in checkpoint and not any("agentgit" in a for a in cmd)
+    assert 'default_permissions="agentwork"' in cmd and "-s" not in cmd              # the working default: workspace sandbox plus the package indexes and GitHub
+    assert not any("filesystem" in a for a in cmd)                                      # no .git rule without a grant
     assert agent_git.NO_PUSH_SENTENCE in ctx and "GIT ACCESS FOR THIS PROJECT" not in ctx
+
+
+def test_strict_permissions_give_codex_its_plain_sandbox_and_claude_only_the_operators_commands(app, monkeypatch):
+    c, s, wd, settings = app
+    monkeypatch.setattr(settings, "agent_permissions", "strict")
+    pid, cid, cmd, checkpoint, ctx = claim_edit_story(app, [node("a")])
+    assert "workspace-write" in cmd and not any("agentwork" in a or "agentgit" in a for a in cmd)
+
+
+def test_strict_permissions_give_claude_only_the_operators_own_commands(app, monkeypatch):
+    c, s, wd, settings = app
+    monkeypatch.setattr(settings, "agent_permissions", "strict")
+    pid, cid, cmd, checkpoint, ctx = claim_edit_story(app, [dict(node("b"), assignee="claude", model="claude-haiku-5-5")])
+    assert not any(a.startswith("Bash(node") or a.startswith("Bash(python3") or a.startswith("Bash(npm") for a in cmd) and "Bash(git push:*)" in cmd
+
+
+def test_operator_extra_commands_and_domains_are_validated_and_added(app, monkeypatch):
+    c, s, wd, settings = app
+    monkeypatch.setattr(settings, "agent_extra_commands", ("Bash(make test:*)", "rm -rf /", "Bash(curl $(x))"))
+    monkeypatch.setattr(settings, "agent_extra_network_domains", ("cdn.example.org", "bad domain", "localhost"))
+    assert "Bash(make test:*)" in agent_git.allowed_commands(settings) and not any("rm -rf" in x or "curl" in x for x in agent_git.allowed_commands(settings))
+    assert "cdn.example.org" in agent_git.network_domains(settings) and "bad domain" not in agent_git.network_domains(settings) and "localhost" not in agent_git.network_domains(settings)
+    pid, cid, cmd, checkpoint, ctx = claim_edit_story(app, [dict(node("a"), assignee="claude", model="claude-haiku-5-5")])
+    assert "Bash(make test:*)" in cmd and "Bash(npm ci:*)" in cmd and "Bash(git push:*)" in cmd      # extras and installs added, push still denied
 
 
 def test_dispatcher_ignores_a_grant_for_another_project(app, tmp_path):

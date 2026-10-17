@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
 from urllib.parse import urlsplit
@@ -111,6 +112,15 @@ class Settings(BaseSettings):
         default=DEFAULT_DATA_DIR / "agent-git" / "grants.json",
         description="Operator-owned branch-scoped git grants for project stories (see agent_git.py).",
     )
+    agent_permissions: Literal["working", "strict"] = Field(
+        default="working",
+        description="What agents may run in a project's working folder. working (the default) lets an Edit story run test and syntax runners, harmless helpers and package installs, and gives Codex the package "
+                    "indexes and GitHub, so a project can finish out of the box. strict allows only agent_extra_commands and gives Codex its plain sandbox. Git grants and branch rules apply either way.",
+    )
+    agent_extra_commands: tuple[str, ...] = Field(
+        default=(), description="Extra Claude command rules, each written Bash(command:*), allowed in every Edit story in either mode.")
+    agent_extra_network_domains: tuple[str, ...] = Field(
+        default=(), description="Extra hostnames a Codex Edit story may reach, beyond GitHub and the package indexes (working mode and git grants).")
     dispatch_route_classes: dict[str, str] = Field(
         default_factory=dict,
         description="Reviewed exact agent|target|model routes: free, subscription or paid. Unknown denies.",
