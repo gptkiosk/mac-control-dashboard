@@ -10,6 +10,15 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.13] - 2026-10-17
+
+### Added
+
+- **Keys and access** guide at the top of Profile, Private credentials: every key with its level (required for basic use, recommended, optional), what it is for, whether it is in place and where to get it. Basic use needs only an agent signed in on this Mac.
+- A **key check before a project is created**: if the project's name or brief suggests a key that is not saved (generated video or images), a dialog says what, why and where to get it, lets you paste the key there, and lets you continue without it. Only having no agent at all blocks. `GET /api/keys` and `POST /api/keys/check`. See `docs/configuration/keys-and-access.md`.
+- **Media models (fal.ai)** in Agents, Billing & rates: a catalog of the image and video models used for site art and motion, with endpoint id, billing unit, quality tier (draft, standard, premium), notes and fal's listed price where it has one. You can enter your own price per model; blank means fal's pricing page does not list it. It records facts only and limits nothing. `GET /api/media/models` returns it.
+- A **fal.ai key** can be saved in Profile, Private credentials (encrypted, write-only, never given to agents). The catalog shows whether one is saved and the key settings to use at fal: the API preset and a list of allowed models. See `docs/configuration/media-models.md`.
+
 ## [0.6.12] - 2026-10-17
 
 ### Changed
@@ -610,7 +619,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.12...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.13...HEAD
+[0.6.13]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.13
 [0.6.12]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.12
 [0.6.11]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.11
 [0.6.10]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.10
