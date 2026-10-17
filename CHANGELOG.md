@@ -10,6 +10,17 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.11] - 2026-10-16
+
+### Changed
+
+- Spending limits are off by default. The $1 default run budget and host cap are gone, a run no longer needs a reviewed price, and paid routes on Codex, Hermes and OpenClaw start like any other. Paid and unpriced runs record a plain
+  disclaimer that MCD does not limit spending and that you should set a credit limit with your provider.
+
+### Added
+
+- **Spending & limits** in Agents, Billing & rates: one place, stored in the app, to turn on a reviewed-price requirement, a per-run dollar cap, or the Claude-only rule for paid runs. See `docs/configuration/dispatch-policy.md`.
+
 ## [0.6.10] - 2026-10-16
 
 ### Added
@@ -592,7 +603,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.10...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.11...HEAD
+[0.6.11]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.11
 [0.6.10]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.10
 [0.6.9]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.9
 [0.6.8]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.8

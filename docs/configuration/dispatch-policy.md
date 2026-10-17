@@ -1,5 +1,27 @@
 # Pre-dispatch pricing and budget policy (SEC-013)
 
+## Spending & limits are off by default
+
+MCD ships with no spending limits. A paid route spends against your own provider
+account or key, and MCD says so on the run instead of stopping it. Set a credit
+limit with your provider as well (for example a key limit on your OpenRouter key).
+
+Turn limits on in one place: **Agents, then Billing & rates, then Spending &
+limits**. They are stored in the app and apply to every project and chat:
+
+| Limit | Default | Effect when on |
+| --- | --- | --- |
+| Require a reviewed price before a run starts | off | A route with no reviewed class fails at once with `PRICE_UNKNOWN`. |
+| Cap per run (USD) | none | A run whose budget is above the cap, or has none, is refused (`BUDGET_EXCEEDED`). Claude also gets `--max-budget-usd`. |
+| Only start paid runs on agents with a built-in dollar limit | off | Paid Codex, Hermes and OpenClaw routes are refused; only Claude can enforce a dollar limit itself. |
+
+`MAC_CONTROL_DISPATCH_MAX_BUDGET_USD` and `MAC_CONTROL_DEFAULT_BUDGET_USD` now
+default to `0` (none). An explicit host cap in the environment is used as the
+per-run cap until you save one in the panel. `MAC_CONTROL_DISPATCH_FREE_ONLY`
+is separate and still refuses every non-free route when set.
+
+The rest of this page describes what each rule does once it is turned on.
+
 Task and chat launches pass the same `dispatch_gate.admit` policy immediately
 before the dispatcher spawns a process (MCD) or calls adapter.start (RCD).
 Claude, Codex, Hermes and OpenClaw all use this boundary. Admission or denial is
@@ -41,11 +63,12 @@ classes are operator-owned declarations; they must reflect actual provider and
 runtime configuration. Synthetic tests demonstrate prevention of process starts,
 not current provider pricing, CLI conformance or live billing enforcement.
 
-MCD retains its subscription-capable default with a $1 default and host run cap.
+MCD has no default or host run cap; set one in Spending & limits if you want it.
 
 ## Troubleshooting: a run fails at once with `PRICE_UNKNOWN`
 
-`PRICE_UNKNOWN: route has no reviewed pricing class` means the gate found no
+This applies only when **Require a reviewed price** is on in Spending & limits (or
+`MAC_CONTROL_DISPATCH_FREE_ONLY` is set). `PRICE_UNKNOWN: route has no reviewed pricing class` means the gate found no
 reviewed class for the exact route, so the run failed before any agent started.
 Failed runs keep the class they froze at claim time; fix the cause, then rerun
 the task (a rerun takes a fresh claim).
