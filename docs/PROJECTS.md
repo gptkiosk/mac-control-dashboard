@@ -162,6 +162,12 @@ decision in shared memory. The API rejects unapproved routes, stale revisions, d
 retries, retired OpenClaw targets and newly unapproved API billing. A timeout never selects
 one of these routes automatically. A successful retry still waits for handoff review.
 
+### Choosing the working directory
+
+A plain folder under an allowed root is the simplest working directory for a demo or prototype: every story shares that one folder in order, and there is no branch,
+branch grant, hook or commit rule to set up. Agents write files there and you review and keep them. Use a git repository as the working directory when the work must be
+committed on a branch; then the project needs a branch grant (`project-<id>/<slug>`) before agents can commit, and the checkout must stay on the approved branch.
+
 ### Retrying after a timeout
 
 After a run times out MCD cannot tell what the attempt changed or whether the provider is still working on it, so the dispatcher refuses every new attempt on that

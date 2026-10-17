@@ -1275,3 +1275,31 @@ def test_an_unacknowledged_timeout_still_fails_closed_in_the_dispatcher_and_ever
     # with the acknowledgement a route change goes through and is recorded
     ok=c.post(f'/api/projects/1/stories/{cid}/low-cost-retry',json={**bodies['low-cost-retry'],'acknowledge_timeout':True})
     assert ok.status_code==200,ok.text
+
+
+def test_a_returned_plan_cannot_leave_an_implementation_story_read_only(app):
+    """2026-10-16: a free planner marked every story Read, including the ones that write and commit files; none of them could ever commit."""
+    p=new(app);c=app[0]
+    p=c.post('/api/projects/1/plan',json={'revision':1,'approve_coordination':True}).json()
+    selected=next(v for v in p['pipeline']['choices'] if v['agent']=='codex')
+    finish(app,p['pipeline']['card_id'],json.dumps({**selected,'rationale':'Fit'}));advance(app)
+    p=c.get('/api/projects/1').json()
+    nodes=[dict(node('impl'),work_kind='implement',mode='read'),dict(node('docs',depends_on=['impl']),work_kind='docs',mode='read'),
+           dict(node('check',depends_on=['docs']),work_kind='review',mode='read')]
+    finish(app,p['pipeline']['card_id'],json.dumps({'nodes':nodes}));advance(app)
+    p=c.get('/api/projects/1').json()
+    finish(app,p['pipeline']['card_id'],json.dumps({'nodes':nodes}));advance(app)
+    p=c.get('/api/projects/1').json();assert p['state']=='review'
+    modes={n['key']:n['mode'] for n in p['document']['nodes'] if n['kind']=='story'}
+    assert modes=={'impl':'edit','docs':'edit','check':'read'}                                           # only the review story stays read-only
+    assert any(m['kind']=='checkpoint' and 'from Read to Edit' in m['text'] for m in p['memory'])
+
+
+def test_fix_implement_modes_leaves_human_review_and_edit_stories_alone():
+    doc={'nodes':[{'kind':'phase','key':'p','mode':'read','work_kind':'implement'},
+        {'kind':'story','key':'h','assignee':'human','mode':'read','work_kind':'implement','title':'Human'},
+        {'kind':'story','key':'r','assignee':'codex','mode':'read','work_kind':'research','title':'Research'},
+        {'kind':'story','key':'e','assignee':'codex','mode':'edit','work_kind':'implement','title':'Done'},
+        {'kind':'story','key':'i','assignee':'claude','mode':'read','work_kind':'implement','title':'Build it'}]}
+    assert projects.fix_implement_modes(doc)==['Build it']
+    assert [n['mode'] for n in doc['nodes']]==['read','read','read','edit','edit']
