@@ -12,6 +12,8 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ### Added
 
+- **Keys and access** guide at the top of Profile, Private credentials: every key with its level (required for basic use, recommended, optional), what it is for, whether it is in place and where to get it. Basic use needs only an agent signed in on this Mac.
+- A **key check before a project is created**: if the project's name or brief suggests a key that is not saved (generated video or images), a dialog says what, why and where to get it, lets you paste the key there, and lets you continue without it. Only having no agent at all blocks. `GET /api/keys` and `POST /api/keys/check`. See `docs/configuration/keys-and-access.md`.
 - **Media models (fal.ai)** in Agents, Billing & rates: a catalog of the image and video models used for site art and motion, with endpoint id, billing unit, quality tier (draft, standard, premium), notes and fal's listed price where it has one. You can enter your own price per model; blank means fal's pricing page does not list it. It records facts only and limits nothing. `GET /api/media/models` returns it.
 - A **fal.ai key** can be saved in Profile, Private credentials (encrypted, write-only, never given to agents). The catalog shows whether one is saved and the key settings to use at fal: the API preset and a list of allowed models. See `docs/configuration/media-models.md`.
 

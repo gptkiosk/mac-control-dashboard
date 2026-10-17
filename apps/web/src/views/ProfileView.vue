@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import RolesPanel from '@/components/RolesPanel.vue'
+import KeysGuide from '@/components/KeysGuide.vue'
 import ReportStoragePanel from '@/components/ReportStoragePanel.vue'
 import GithubSettingsPanel from '@/components/GithubSettingsPanel.vue'
 import AgentToolsPanel from '@/components/AgentToolsPanel.vue'
@@ -18,6 +19,7 @@ import { useThemeStore } from '@/stores/theme'
 const profile = ref<Profile | null>(null), preferences = ref<Preferences | null>(null)
 const workdirs = ref<{ path: string; branch: string | null }[]>([]), origins = ref<string[]>([])
 const error = ref(''), notice = ref(''), busy = ref(false), pairing = ref('')
+const guide = ref<InstanceType<typeof KeysGuide> | null>(null)
 const secrets = ref<Record<string,string>>({ openrouter: '', discord: '', fal: '' })
 const spending = ref<Record<string, number | string | boolean | null> | null>(null)
 const theme = useThemeStore()
@@ -42,9 +44,11 @@ async function saveKey(provider: string) { await action(async () => {
   try { profile.value = await putJson<Profile>(`/api/profile/credentials/${provider}`, { value: key }) }
   finally { secrets.value[provider] = '' }
   notice.value = 'Credential saved privately. Its value cannot be read back.'
+  void guide.value?.load()
 }) }
 async function removeKey(provider: string) { await action(async () => {
   profile.value = await deleteJson<Profile>(`/api/profile/credentials/${provider}`); spending.value = null; notice.value = 'Credential removed.'
+  void guide.value?.load()
 }) }
 async function pair() { await action(async () => {
   // Save the displayed channel before generating a code for that channel.
@@ -114,6 +118,7 @@ async function importPreferences(event: Event) { await action(async () => {
           <p class="muted small">Ask Hermes to plan a project. It collects missing information, uses your preference and posts an editable map. It asks whether you need a diagram before sending an image.</p>
         </section>
         <section id="credentials-profile" class="card" aria-labelledby="credentials-title"><h2 id="credentials-title">Private credentials</h2>
+          <KeysGuide ref="guide" />
           <p class="muted small">Write-only values are encrypted in your local profile. They stay out of browser storage, source code, exports and agent prompts.</p>
           <div v-for="provider in ['openrouter','discord','fal']" :key="provider" class="credential">
             <label>{{ provider === 'openrouter' ? 'OpenRouter key' : provider === 'fal' ? 'fal.ai key (image and video generation, optional)' : 'Discord bot token (optional)' }}<input v-model="secrets[provider]" class="input" type="password" autocomplete="new-password" :aria-label="provider + ' credential'" placeholder="Enter a new credential" /></label>
