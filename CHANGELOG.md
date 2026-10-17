@@ -10,6 +10,17 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-10-16
+
+### Fixed
+
+- A story whose run timed out can be retried again. After a timeout the dispatcher refuses every new attempt (MCD cannot tell what the attempt changed or whether the
+  provider is still working), and nothing let you authorize one: Rerun, another free model, Haiku or Luna and Pay all queued the story and the dispatcher failed it
+  again with no run and no message. A timed-out task now shows **I reviewed the partial work and want a new attempt**. Ticking it is required for every retry,
+  is recorded on the timed-out run and in the project ledger, and covers that run only. Without it the dispatcher still fails closed.
+- The project page no longer fails with an error when a task depends on a task that has been deleted at the same moment (for example while a closed project's tasks are
+  being removed).
+
 ## [0.6.7] - 2026-10-16
 
 ### Added
@@ -541,7 +552,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.7...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.8...HEAD
+[0.6.8]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.8
 [0.6.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.7
 [0.6.6]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.6
 [0.6.5]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.5

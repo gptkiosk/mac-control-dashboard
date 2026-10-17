@@ -162,6 +162,14 @@ decision in shared memory. The API rejects unapproved routes, stale revisions, d
 retries, retired OpenClaw targets and newly unapproved API billing. A timeout never selects
 one of these routes automatically. A successful retry still waits for handoff review.
 
+### Retrying after a timeout
+
+After a run times out MCD cannot tell what the attempt changed or whether the provider is still working on it, so the dispatcher refuses every new attempt on that
+story until you confirm you reviewed the partial work. Rerun, **Try another free model**, **Use Claude Haiku / Codex Luna** and **Pay for this task** all show
+**I reviewed the partial work and want a new attempt** for a timed-out task, and stay off until it is ticked. The confirmation is recorded on the timed-out run
+(`RETRY_AUTHORIZED`) and in the project ledger, covers that run only, and can be given only from the operator pages (agents cannot reach them). Without it the
+dispatcher still fails closed and starts nothing.
+
 ### A way out when a free model is throttled or failing
 
 A free model can time out, be rate limited or be unavailable. A failed task (Tasks, the task panel) always keeps these ways out, and a rerun never
