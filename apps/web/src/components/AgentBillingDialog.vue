@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import MembershipPrerequisites from '@/components/MembershipPrerequisites.vue'
 import AppSelect from '@/components/AppSelect.vue'
+import MediaGeneratePanel from '@/components/MediaGeneratePanel.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import ModalShell from '@/components/ModalShell.vue'
 import { getJson, patchJson, type Agent, type BillingSettings, type MediaCatalog, type ModelRate } from '@/lib/api'
@@ -202,6 +203,7 @@ async function save() {
               :aria-label="`${m.label} price per ${m.unit}`"
           /></label>
         </div>
+        <MediaGeneratePanel :key-saved="media.fal_key_saved" />
         <p class="muted small">
           Create the fal key with the <strong>{{ media.key_rules.preset }}</strong> preset and restrict its allowed models to:
           <code>{{ media.key_rules.allowed_models.join('  ') }}</code>

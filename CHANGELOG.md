@@ -10,6 +10,12 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.14] - 2026-10-17
+
+### Added
+
+- **Generate media from MCD** (Agents, Billing & rates, Media models): pick a project folder with `media/slots.json`, a tier and a count, acknowledge the spend, and MCD calls fal.ai with your saved key and saves the results as candidates in the folder. The key never leaves MCD and no code from the project folder is run; every run is recorded in a ledger with its estimate. See `docs/configuration/media-models.md`.
+
 ## [0.6.13] - 2026-10-17
 
 ### Added
@@ -619,7 +625,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.13...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.14...HEAD
+[0.6.14]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.14
 [0.6.13]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.13
 [0.6.12]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.12
 [0.6.11]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.11

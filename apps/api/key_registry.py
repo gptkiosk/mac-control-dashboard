@@ -21,7 +21,7 @@ KEYS = [
      "purpose": "Reads actual spending, can be shared with Hermes and OpenClaw (off by default), and is the automated route for generating still images through your Google AI Studio key when bring-your-own-key is set up at OpenRouter.",
      "obtain": "https://openrouter.ai/keys", "scope": "Set a credit limit on the key at OpenRouter."},
     {"id": "fal", "label": "fal.ai key", "storage": "saved", "provider": "fal", "level": "optional",
-     "purpose": "Video generation (the only automated route) and image generation as a fallback, for site art and motion backgrounds. Projects without generated media never need it.",
+     "purpose": "Video generation (the only automated route) and image generation as a fallback, for site art and motion backgrounds. MCD uses the saved key itself when you press Generate (Agents, Billing & rates, Media models); agents never see it. Projects without generated media never need it.",
      "obtain": "https://fal.ai/dashboard/keys", "scope": "Create it with the API preset, restrict its allowed models (listed in Agents, Billing & rates, Media models) and set a credit limit at fal."},
     {"id": "discord", "label": "Discord bot token", "storage": "saved", "provider": "discord", "level": "optional",
      "purpose": "Project notifications from your own bot. Leave empty to use this installation's Hermes bot.",
