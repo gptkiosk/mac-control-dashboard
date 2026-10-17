@@ -12,6 +12,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [0.6.10] - 2026-10-16
 
+### Added
+
+- `scripts/probe-agent-capabilities.py` checks what each installed agent can really do in an Edit-mode scratch folder (write files, run a syntax check and a unit test, try git), using MCD's own launch
+  arguments, and cleans up after itself. Run it after upgrading an agent runtime or MCD; a CLI change that quietly removes a permission shows up there, not in the middle of a project.
+
 ### Fixed
 
 - A Claude story in a scratch-folder project can run its own checks. In Edit mode Claude could write files but was allowed no shell commands unless the project had a repository grant, so a story

@@ -299,6 +299,12 @@ class HermesParser(Parser):
 
 def build_hermes(card, prompt: str, model: str | None, budget: float, binary: str,
                  session_id: str | None = None) -> list[str]:
+    # Hermes' terminal tool starts in the folder set in its own config, not in --in, so files written with relative paths would land there.
+    # Tell it the task folder first, for an Edit story that writes files.
+    folder = getattr(card, "working_dir", "") or ""
+    if folder and getattr(card, "mode", "read") != "read" and not session_id:
+        prompt = (f"Task folder: {folder}\nYour terminal may start in a different folder. Begin every shell command with `cd {folder} &&` "
+                  f"and keep every file you create or change inside that folder.\n\n{prompt}")
     argv = [binary, "chat", "-q", prompt, "--oneshot", "--format", "stream-json",
             "--in", card.working_dir, "--max-turns", "25", "--run-budget", str(card.timeout_s)]
     if model:

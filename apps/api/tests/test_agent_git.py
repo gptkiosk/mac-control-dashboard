@@ -414,3 +414,13 @@ def test_an_edit_claude_story_without_a_grant_can_run_checks_but_never_git_and_a
     assert not any(a.startswith("Bash(") for a in build_claude(read, "p", "m", 1.0, "claude")[build_claude(read, "p", "m", 1.0, "claude").index("--allowedTools"):])
     out = SimpleNamespace(mode="read", agent="claude", agent_git_grant=None, output_only=True, subscription_billing=True, timeout_s=60)
     assert "--allowedTools" not in build_claude(out, "p", "m", 1.0, "claude")
+
+
+def test_hermes_edit_stories_are_told_the_task_folder_because_its_terminal_starts_elsewhere():
+    from agents import build_hermes
+    edit = SimpleNamespace(agent="hermes", mode="edit", working_dir="/work/scratch-demo", timeout_s=60)
+    prompt = build_hermes(edit, "do the story", "m", 1.0, "hermes")[3]
+    assert prompt.startswith("Task folder: /work/scratch-demo") and "cd /work/scratch-demo &&" in prompt and prompt.endswith("do the story")
+    read = SimpleNamespace(agent="hermes", mode="read", working_dir="/work/scratch-demo", timeout_s=60)
+    assert build_hermes(read, "plan it", "m", 1.0, "hermes")[3] == "plan it"
+    assert "echo" in " ".join(agent_git.CHECK_COMMANDS)

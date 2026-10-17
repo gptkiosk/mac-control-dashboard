@@ -67,6 +67,9 @@ CHECK_COMMANDS = DEFAULT_COMMANDS + (
     "Bash(python3 -I -m unittest:*)",
     "Bash(python3 -I -m py_compile:*)",
     "Bash(python3 -I -m json.tool:*)",
+    # Harmless helpers. A compound command (a && b; echo $?) is refused as a whole when any part needs approval, and these are the parts models add.
+    "Bash(echo:*)", "Bash(printf:*)", "Bash(pwd)", "Bash(ls:*)", "Bash(cat:*)", "Bash(wc:*)", "Bash(head:*)", "Bash(tail:*)",
+    "Bash(diff:*)", "Bash(sort:*)", "Bash(test:*)", "Bash(true)", "Bash(node --version)", "Bash(python3 --version)",
 )
 CODEX_DOMAINS = ("github.com", "api.github.com", "codeload.github.com", "objects.githubusercontent.com",
                  "pypi.org", "files.pythonhosted.org", "registry.npmjs.org")
