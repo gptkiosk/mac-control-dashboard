@@ -10,6 +10,10 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+### Added
+
+- **Generate media from MCD** (Agents, Billing & rates, Media models): pick a project folder with `media/slots.json`, a tier and a count, acknowledge the spend, and MCD calls fal.ai with your saved key and saves the results as candidates in the folder. The key never leaves MCD and no code from the project folder is run; every run is recorded in a ledger with its estimate. See `docs/configuration/media-models.md`.
+
 ## [0.6.13] - 2026-10-17
 
 ### Added

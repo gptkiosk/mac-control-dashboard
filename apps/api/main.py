@@ -20,6 +20,7 @@ from urllib.parse import urlencode
 from auth import AuthService, PUBLIC
 from routes import authentication, operations, projects as project_routes, tool_installs, roles
 from routes import keys as key_routes
+from routes import media as media_routes
 from github_read import GithubReader
 from github_config import GithubConfigStore
 from github_actions import GithubActionGuard
@@ -241,6 +242,7 @@ def create_app() -> FastAPI:
     app.include_router(tasks.router)
     app.include_router(billing_routes.router)
     app.include_router(key_routes.router)
+    app.include_router(media_routes.router)
     app.include_router(chat.router)
     app.include_router(mcp_routes.router)
     app.include_router(operations.router)

@@ -10,7 +10,18 @@ Each model shows its fal endpoint id, its billing unit (per image or per second 
 
 Save the key in **Profile, Private credentials, fal.ai key**. It is encrypted, write-only and never shown again, and agents never receive it. Create it at fal with the **API** preset (model execution and storage) and restrict its allowed models to the patterns the panel shows, so a mistake or a leaked key cannot call other models. Set a credit limit at fal as well: MCD does not cap media spending.
 
-The media tool in a project (`tools/media/media.py`) reads `FAL_KEY` from your own shell for now; it cannot read the saved key. Saving it here records the key for future MCD-run generation and shows its status in the catalog.
+## Generating media from MCD
+
+Under **Media models**, **Generate media with your saved fal key** lists the slots in a project folder's `media/slots.json`. For each slot choose a tier (draft is the cheapest model, standard the default, premium the best) and how many to make, tick the spending acknowledgement, and press Generate. MCD calls fal itself with your saved key, shows progress, and saves each result as a candidate in the folder's `media/candidates/`. **Use this one** copies a candidate into `media/inbox/`; then run the project's own `python3 tools/media/media.py ingest <slot>` to validate, convert and record it.
+
+How the key is protected:
+
+- MCD never runs code from the project folder with the key. Agents can edit that folder, so the folder only supplies data (prompts, file names, reference images). The fal calls are made by MCD's own code.
+- The key goes only to fal hosts, never in a response, ledger entry, log line or file, and is not sent with the file download.
+- The API is operator-only; agents and the project bridge are refused.
+- Reference images and approved stills must be real image files inside the folder (links and `..` that leave the folder are refused). Only models in the catalog can be named.
+
+Every run is explicit and recorded in `media/ledger.jsonl` under MCD's data directory (slot, model, estimate, fal request id, result). Estimates use listed or your own prices and are not invoices; fal's billing page is the truth. Video needs the approved still published first (`assets/img/<name>.jpg`). MCD does not limit spending; set a credit limit at fal. A restart of MCD loses jobs still in flight, and the ledger keeps the fal request id so you can find them in your fal dashboard.
 
 ## Changing the catalog
 
