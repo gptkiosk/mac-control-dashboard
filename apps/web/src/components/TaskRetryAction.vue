@@ -11,7 +11,11 @@ const project = ref<Project | null>(null)
 const busy = ref(false), error = ref(''), notice = ref('')
 const visible = computed(() => props.card.project?.role === 'story' && props.card.assignee_type !== 'human' && props.card.column === 'failed')
 const task = computed(() => project.value?.tasks.find(t => t.card_id === props.card.id && t.role === 'story'))
-const ready = computed(() => visible.value && !notice.value && project.value?.state === 'active' && task.value?.column === 'failed' && task.value.run_id === props.card.last_run?.id)
+const timedOut = computed(() => props.card.last_run?.stage === 'timeout')
+const timeoutAck = ref(false)
+// After a timeout MCD cannot tell what the attempt changed or whether it is still running, so a new attempt needs the operator's word that the partial work was reviewed.
+const ack = () => (timedOut.value ? { acknowledge_timeout: true } : {})
+const ready = computed(() => visible.value && !notice.value && project.value?.state === 'active' && task.value?.column === 'failed' && task.value.run_id === props.card.last_run?.id && (!timedOut.value || timeoutAck.value))
 const alternatives = computed(() => (task.value?.retry_routes ?? []).filter(r => r.agent !== props.card.agent || r.model !== (props.card.model ?? '')))
 const limited = computed(() => /session limit|usage limit|quota|rate.?limit|limit reached/i.test(props.card.last_run?.error ?? ''))
 const freeRoutes = computed(() => task.value?.free_retry_routes ?? [])
@@ -29,7 +33,7 @@ const freeTargets = computed(() => [...new Set(freeRoutes.value.map(r => r.agent
 let generation = 0
 watch(() => [props.card.id, props.card.project?.id, props.card.column, props.card.last_run?.id], async () => {
   const mine = ++generation
-  project.value = null; error.value = ''; notice.value = ''; closePanels()
+  project.value = null; error.value = ''; notice.value = ''; timeoutAck.value = false; closePanels()
   if (!visible.value) return
   try {
     const p = await getJson<Project>(`/api/projects/${props.card.project!.id}`)
@@ -67,7 +71,7 @@ async function goCheap() {
     const base = `/api/projects/${props.card.project!.id}`
     const { p, t } = await current(base)
     if (!t.low_cost_routes?.some(r => r.agent === cheapRoute.value!.agent && r.model === cheapRoute.value!.model)) throw new Error('This subscription route is no longer available. Refresh before choosing it.')
-    await postJson(`${base}/stories/${props.card.id}/low-cost-retry`, { revision: p.revision, run_id: t.run_id, agent: cheapRoute.value.agent, edit_mode: cheapEdit.value, acknowledge: cheapEdit.value && cheapAck.value })
+    await postJson(`${base}/stories/${props.card.id}/low-cost-retry`, { revision: p.revision, run_id: t.run_id, agent: cheapRoute.value.agent, edit_mode: cheapEdit.value, acknowledge: cheapEdit.value && cheapAck.value, ...ack() })
     closePanels(); notice.value = `Retry queued on ${cheapLabel(cheapRoute.value)} (your subscription). No paid API or Google BYOK route was added.`
     emit('changed')
   } catch (e) { error.value = e instanceof Error ? e.message : String(e) }
@@ -80,7 +84,7 @@ async function goPaid() {
     const base = `/api/projects/${props.card.project!.id}`
     const { p, t } = await current(base)
     if (!t.paid_retry_routes?.some(r => r.model === paidModel.value && r.agent_target === paidTarget.value)) throw new Error('This paid route is no longer configured. Refresh before choosing it.')
-    await postJson(`${base}/stories/${props.card.id}/pay-retry`, { revision: p.revision, run_id: t.run_id, model: paidModel.value, agent_target: paidTarget.value, acknowledge: true })
+    await postJson(`${base}/stories/${props.card.id}/pay-retry`, { revision: p.revision, run_id: t.run_id, model: paidModel.value, agent_target: paidTarget.value, acknowledge: true, ...ack() })
     closePanels(); notice.value = 'Paid retry queued for this task only. Price checks and budget caps still apply when it starts.'
     emit('changed')
   } catch (e) { error.value = e instanceof Error ? e.message : String(e) }
@@ -98,7 +102,7 @@ async function goFree() {
       throw new Error('The task changed. Refresh before rerunning it.')
     if (!current.free_retry_routes?.some(r => r.model === freeModel.value && r.agent_target === freeTarget.value))
       throw new Error('This free route is no longer configured. Refresh before selecting a model.')
-    await postJson(`${base}/stories/${props.card.id}/go-free`, { revision: p.revision, run_id: current.run_id, model: freeModel.value, agent_target: freeTarget.value })
+    await postJson(`${base}/stories/${props.card.id}/go-free`, { revision: p.revision, run_id: current.run_id, model: freeModel.value, agent_target: freeTarget.value, ...ack() })
     showFree.value = false
     notice.value = 'Free-model retry queued for this task. Google BYOK and paid-model fallback are excluded.'
     emit('changed')
@@ -117,7 +121,7 @@ async function retry(route?: ProjectNode['routes'][number]) {
       throw new Error('The task changed. Refresh before rerunning it.')
     if (route && !current.retry_routes?.some(r => r.agent === route.agent && r.model === route.model))
       throw new Error('This route is no longer approved. Review the project.')
-    await postJson(`${base}/stories/${props.card.id}/retry`, { revision: p.revision, ...(route ? { route } : {}) })
+    await postJson(`${base}/stories/${props.card.id}/retry`, { revision: p.revision, ...(route ? { route } : {}), ...ack() })
     notice.value = 'Rerun queued. It will start when its dependencies and execution slot are ready.'
     emit('changed')
   } catch (e) { error.value = e instanceof Error ? e.message : String(e) }
@@ -127,6 +131,10 @@ async function retry(route?: ProjectNode['routes'][number]) {
 
 <template>
   <section v-if="visible" class="task-retry" aria-label="Rerun failed task">
+    <div v-if="timedOut" class="timeout-ack notice-warn" role="group" aria-label="Timed-out attempt">
+      <p>The last attempt timed out. MCD cannot tell what it changed or whether the provider is still working on it, so a new attempt needs your confirmation.</p>
+      <label class="check"><input v-model="timeoutAck" type="checkbox" :disabled="busy" />I reviewed the partial work and want a new attempt.</label>
+    </div>
     <div class="retry-actions">
       <button type="button" class="btn primary" :disabled="busy || !ready" @click="retry()"><AppIcon name="run" size="sm" />{{ busy ? 'Queueing…' : 'Rerun task' }}</button>
       <button v-for="route in alternatives" :key="`${route.agent}:${route.model}`" type="button" class="btn" :disabled="busy || !ready" @click="retry(route)">Rerun with {{ agentLabel(route.agent) }} · {{ route.model || 'Agent default' }}</button>
@@ -169,6 +177,7 @@ async function retry(route?: ProjectNode['routes'][number]) {
 <style scoped>
 .task-retry { display:grid; gap:var(--gap-sm); padding:var(--gap); border:1px solid var(--panel-border); border-radius:var(--radius); background:var(--panel-raised); }
 .task-retry p { margin:0; overflow-wrap:anywhere; }
+.timeout-ack { display:grid; gap:var(--gap-sm); }
 .retry-actions { display:flex; flex-wrap:wrap; gap:var(--gap-sm); }
 .retry-actions .btn { display:inline-flex; gap:var(--gap-xs); align-items:center; white-space:normal; overflow-wrap:anywhere; max-width:100%; }
 .free-choice { display:grid; gap:var(--gap-sm); border-top:1px solid var(--panel-border); padding-top:var(--gap); }

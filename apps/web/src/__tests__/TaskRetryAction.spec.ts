@@ -78,13 +78,13 @@ it('Go Free stays hidden for failures unrelated to subscription limits',async()=
   expect(w.findAll('button').some(b=>b.text()==='Go Free!')).toBe(false);w.unmount()
 })
 
-const timedOut = () => card({id:50,column:'failed',agent:'openclaw',model:'openrouter/example/code:free',mode:'read',project:{id:2,node_key:'durable',role:'story'},last_run:run({id:51,card_id:50,stage:'timeout',error:'OpenClaw provider timed out'})})
+const timedOut = () => card({id:50,column:'failed',agent:'openclaw',model:'openrouter/example/code:free',mode:'read',project:{id:2,node_key:'durable',role:'story'},last_run:run({id:51,card_id:50,stage:'failed',error:'OpenClaw provider timed out'})})
 function setupFree(p: Project) {
   const f=stubFetch((url,init)=>url==='/api/projects/2' || init?.method==='POST' ? {body:p} : undefined)
   const w=mount(TaskRetryAction,{props:{card:timedOut()},attachTo:document.body})
   return {w,f}
 }
-const withWayOut = () => { const p=project(); const t=p.tasks[0]!; t.run_stage='timeout'
+const withWayOut = () => { const p=project(); const t=p.tasks[0]!; t.run_stage='failed'
   t.free_retry_routes=[{agent:'openclaw',model:'openrouter/other/model:free',agent_target:'mm-developer'}]
   t.low_cost_routes=[{agent:'claude',model:'claude-haiku-5-5'},{agent:'codex',model:'gpt-6-luna'}]
   t.paid_retry_routes=[{agent:'openclaw',model:'openrouter/google/gemini-2.5-flash',agent_target:'mm-developer'}]; return p }
@@ -121,4 +121,20 @@ it('paying needs an acknowledgement, names the limits, and grants only this run'
   expect(writes[0]![0]).toBe('/api/projects/2/stories/50/pay-retry')
   expect(JSON.parse(String(writes[0]![1]?.body))).toEqual({revision:2,run_id:51,model:'openrouter/google/gemini-2.5-flash',agent_target:'mm-developer',acknowledge:true})
   w.unmount()
+})
+
+it('after a timeout every retry stays off until the timeout is acknowledged, and the acknowledgement travels with the request',async()=>{
+  const p=withWayOut();p.tasks[0]!.run_stage='timeout'
+  const f=stubFetch((url,init)=>url==='/api/projects/2' || init?.method==='POST' ? {body:p} : undefined)
+  const card=timedOut();card.last_run!.stage='timeout'
+  const w=mount(TaskRetryAction,{props:{card},attachTo:document.body});await flushPromises()
+  expect(w.text()).toContain('timed out')
+  const rerun=()=>w.findAll('button').find(b=>b.text()==='Rerun task')!
+  expect(rerun().attributes('disabled')).toBeDefined()
+  expect(w.findAll('button').find(b=>b.text()==='Pay for this task…')!.attributes('disabled')).toBeDefined()
+  await w.get('.timeout-ack input[type=checkbox]').setValue(true)
+  expect(rerun().attributes('disabled')).toBeUndefined()
+  await rerun().trigger('click');await flushPromises()
+  const writes=calls(f,'POST','/api/');expect(writes).toHaveLength(1)
+  expect(JSON.parse(String(writes[0]![1]?.body))).toEqual({revision:2,acknowledge_timeout:true});w.unmount()
 })

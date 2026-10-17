@@ -88,12 +88,14 @@ class Close(Strict):
 
 class Retry(Action):
     route: Route | None = None
+    acknowledge_timeout: bool = False
 
 class GoFree(Strict):
     revision: int = Field(ge=1)
     run_id: int = Field(ge=1)
     model: str = Field(min_length=1, max_length=120)
     agent_target: str = Field(min_length=1, max_length=80)
+    acknowledge_timeout: bool = False
 
 class ContinueOutput(Strict):
     revision: int = Field(ge=1)
@@ -137,6 +139,7 @@ class PayRetry(Strict):
     model: str = Field(min_length=3, max_length=200)
     agent_target: str = Field(min_length=1, max_length=80)
     acknowledge: bool = False
+    acknowledge_timeout: bool = False
 
 
 class LowCostRetry(Strict):
@@ -145,6 +148,7 @@ class LowCostRetry(Strict):
     agent: Literal['claude', 'codex']
     edit_mode: bool = False
     acknowledge: bool = False
+    acknowledge_timeout: bool = False
 
 
 class ModelLock(Strict):
