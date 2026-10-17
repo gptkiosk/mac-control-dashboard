@@ -171,6 +171,19 @@ committed on a branch; then the project needs a branch grant (`project-<id>/<slu
 
 An Edit-mode Claude story in a scratch folder can run test and syntax runners (`pytest`, `unittest`, `py_compile`, `json.tool`, `node --check`, `npm run test`/`type-check`/`build`, `vitest`, `bash -n`, `shasum`) so it can verify its own work; git, network tools and arbitrary shell stay denied, and a Read-mode story gets no shell.
 
+### What each agent can do in a project folder
+
+MCD grants these in its own launch arguments, not in an agent's own configuration, so installing or upgrading an agent does not remove them. Verified with `scripts/probe-agent-capabilities.py`:
+
+| Agent | In an Edit story, in a scratch folder |
+|---|---|
+| Claude | writes files; runs test and syntax runners and harmless helpers (see above); git is read-only and `git push`/merge stay denied |
+| Codex | writes files in its workspace sandbox and runs `node`, `python3` and tests there; no network except the package indexes and GitHub; no container engine |
+| Hermes | writes files and runs shell commands; told its task folder first because its terminal starts in its own configured folder |
+| OpenClaw | writes files and runs `node` and `python3` through the configured developer agent |
+
+After upgrading an agent runtime, run `python3 scripts/probe-agent-capabilities.py claude codex hermes openclaw`. It uses a few model requests and removes its throwaway folders.
+
 ### Retrying after a timeout
 
 After a run times out MCD cannot tell what the attempt changed or whether the provider is still working on it, so the dispatcher refuses every new attempt on that

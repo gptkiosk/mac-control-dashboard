@@ -22,7 +22,10 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 - A Claude story in a scratch-folder project can run its own checks. In Edit mode Claude could write files but was allowed no shell commands unless the project had a repository grant, so a story
   wrote its files and then could not run `node --check` or its tests, and reported itself unfinished (the first story of a scratch project did exactly this). An Edit-mode Claude story without a grant
   can now run test and syntax runners (`pytest`, `unittest`, `py_compile`, `json.tool`, `node --check`, `npm run test/type-check/build`, `vitest`, `bash -n`, `shasum`); git, the network tools and
-  arbitrary shell stay denied, and a Read-mode story still gets no shell.
+  arbitrary shell stay denied, and a Read-mode story still gets no shell. The harmless helpers models add to compound commands (`echo`, `printf`, `ls`, `cat`, `wc`, `head`, `tail`, `diff`, `sort`, `test`)
+  are allowed too, because a compound command is refused as a whole when any part needs approval.
+- A Hermes Edit story is told its task folder first. Hermes' terminal starts in the folder set in its own config, not in the folder MCD points it at, so files written with relative paths could land
+  in the wrong place. Verified on Claude, Codex, Hermes and OpenClaw: each writes its files into the task folder and runs its checks.
 
 ## [0.6.9] - 2026-10-16
 
