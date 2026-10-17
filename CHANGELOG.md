@@ -10,6 +10,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+### Added
+
+- **Media models (fal.ai)** in Agents, Billing & rates: a catalog of the image and video models used for site art and motion, with endpoint id, billing unit, quality tier (draft, standard, premium), notes and fal's listed price where it has one. You can enter your own price per model; blank means fal's pricing page does not list it. It records facts only and limits nothing. `GET /api/media/models` returns it.
+- A **fal.ai key** can be saved in Profile, Private credentials (encrypted, write-only, never given to agents). The catalog shows whether one is saved and the key settings to use at fal: the API preset and a list of allowed models. See `docs/configuration/media-models.md`.
+
 ## [0.6.12] - 2026-10-17
 
 ### Changed
