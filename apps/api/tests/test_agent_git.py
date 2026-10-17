@@ -402,3 +402,15 @@ def test_real_codex_sandbox_lets_a_story_cut_its_branch_but_not_touch_hooks(tmp_
     argv = ["codex", "sandbox", *[a for o in agent_git.codex_overrides() for a in ("-c", o)], "--", sys.executable, "-c", probe]
     out = subprocess.run(argv, cwd=tmp_path, capture_output=True, text=True, timeout=60).stdout
     assert "ok .git/refs/heads/x" in out and "denied .git/hooks/x" in out and "denied .git/config" in out, out
+
+
+def test_an_edit_claude_story_without_a_grant_can_run_checks_but_never_git_and_a_read_story_gets_no_shell():
+    plain = SimpleNamespace(mode="edit", agent="claude", agent_git_grant=None, output_only=False, subscription_billing=True, timeout_s=60)
+    argv = build_claude(plain, "p", "claude-haiku-5-5", 1.0, "claude")
+    allowed = argv[argv.index("--allowedTools") + 1:]
+    assert "Bash(node --check:*)" in allowed and "Bash(python3 -I -m pytest:*)" in allowed and "Bash(python3 -I -m unittest:*)" in allowed
+    assert not any(a.startswith("Bash(git") or "curl" in a or a in ("Bash", "Bash(*)") for a in allowed) and "Bash(git push:*)" in argv   # git stays denied
+    read = SimpleNamespace(mode="read", agent="claude", agent_git_grant=None, output_only=False, subscription_billing=True, timeout_s=60)
+    assert not any(a.startswith("Bash(") for a in build_claude(read, "p", "m", 1.0, "claude")[build_claude(read, "p", "m", 1.0, "claude").index("--allowedTools"):])
+    out = SimpleNamespace(mode="read", agent="claude", agent_git_grant=None, output_only=True, subscription_billing=True, timeout_s=60)
+    assert "--allowedTools" not in build_claude(out, "p", "m", 1.0, "claude")

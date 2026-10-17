@@ -60,6 +60,14 @@ DEFAULT_COMMANDS = (
     "Bash(bash -n:*)",
     "Bash(shasum:*)",
 )
+# Local check commands an Edit-mode Claude story may run in a project that has no repository grant (a scratch folder). Without them the story can write its files but
+# cannot run its own checks, and honestly reports itself unfinished. Test and syntax runners only: no git, no network tools, no shell, no arbitrary interpreter.
+CHECK_COMMANDS = DEFAULT_COMMANDS + (
+    "Bash(node --check:*)",
+    "Bash(python3 -I -m unittest:*)",
+    "Bash(python3 -I -m py_compile:*)",
+    "Bash(python3 -I -m json.tool:*)",
+)
 CODEX_DOMAINS = ("github.com", "api.github.com", "codeload.github.com", "objects.githubusercontent.com",
                  "pypi.org", "files.pythonhosted.org", "registry.npmjs.org")
 

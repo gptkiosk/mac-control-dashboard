@@ -10,6 +10,15 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.10] - 2026-10-16
+
+### Fixed
+
+- A Claude story in a scratch-folder project can run its own checks. In Edit mode Claude could write files but was allowed no shell commands unless the project had a repository grant, so a story
+  wrote its files and then could not run `node --check` or its tests, and reported itself unfinished (the first story of a scratch project did exactly this). An Edit-mode Claude story without a grant
+  can now run test and syntax runners (`pytest`, `unittest`, `py_compile`, `json.tool`, `node --check`, `npm run test/type-check/build`, `vitest`, `bash -n`, `shasum`); git, the network tools and
+  arbitrary shell stay denied, and a Read-mode story still gets no shell.
+
 ## [0.6.9] - 2026-10-16
 
 ### Changed
@@ -572,7 +581,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.9...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.10...HEAD
+[0.6.10]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.10
 [0.6.9]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.9
 [0.6.8]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.8
 [0.6.7]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.7

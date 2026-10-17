@@ -135,6 +135,8 @@ def build_claude(card, prompt: str, model: str | None, budget: float, binary: st
         argv += ["--allowedTools", "WebSearch", "WebFetch"]
         if grant:
             argv += agent_git.claude_allowed(grant)
+        elif mode != "plan":
+            argv += list(agent_git.CHECK_COMMANDS)     # an Edit story in a scratch folder can still run its tests and syntax checks
     if not getattr(card,"subscription_billing",False):
         argv += ["--max-budget-usd", f"{budget:.2f}"]
     if model:
