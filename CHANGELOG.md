@@ -10,6 +10,8 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.13] - 2026-10-17
+
 ### Added
 
 - **Keys and access** guide at the top of Profile, Private credentials: every key with its level (required for basic use, recommended, optional), what it is for, whether it is in place and where to get it. Basic use needs only an agent signed in on this Mac.
@@ -617,7 +619,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.12...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.13...HEAD
+[0.6.13]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.13
 [0.6.12]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.12
 [0.6.11]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.11
 [0.6.10]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.10
