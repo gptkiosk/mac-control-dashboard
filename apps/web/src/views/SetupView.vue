@@ -127,9 +127,11 @@ onBeforeUnmount(() => { key.value = '' })
         <template v-if="progress.step === 0">
           <p>MCD runs locally on a Mac. You can use its browser interface from another computer or your phone; the agents and their sign-ins belong on the Mac hosting MCD.</p>
           <ol class="instructions"><li>Use a macOS host with Git, Python 3.12 and Node/npm compatible with MCD and your agents. Follow each agent’s current installation requirements.</li><li>From your local MCD checkout, build and install dependencies with <code>bash scripts/bootstrap.sh</code>. Start the API from <code>apps/api</code> with <code>.venv/bin/python serve.py</code>; install the background service with <code>bash scripts/install-launchagent.sh</code> when ready.</li><li>Keep installation settings in the private <code>~/.mac-control/.env</code>. Configure allowed workspace roots and agent executable paths there, then restart MCD when no jobs are running.</li></ol>
-          <label for="setup-workdir">Default working directory</label><AppSelect id="setup-workdir" v-model="workingDir" aria-label="Setup working directory"><option value="">Choose an allowed workspace…</option><option v-for="w in workdirs" :key="w.path" :value="w.path" :data-description="directoryDetail(w.path,w.branch)">{{ directoryName(w.path) }}</option></AppSelect>
-          <button class="btn" :disabled="busy || !workingDir" @click="saveWorkspace">Save workspace</button>
-          <p v-if="!workdirs.length" class="small muted">No workspace detected. Ask the Mac administrator to configure MAC_CONTROL_WORKDIR_ROOTS, then refresh checks.</p>
+          <div class="field-group">
+            <label for="setup-workdir">Default working directory</label><AppSelect id="setup-workdir" v-model="workingDir" aria-label="Setup working directory"><option value="">Choose an allowed workspace…</option><option v-for="w in workdirs" :key="w.path" :value="w.path" :data-description="directoryDetail(w.path,w.branch)">{{ directoryName(w.path) }}</option></AppSelect>
+            <button class="btn" :disabled="busy || !workingDir" @click="saveWorkspace">Save workspace</button>
+            <p v-if="!workdirs.length" class="small muted">No workspace detected. Ask the Mac administrator to configure MAC_CONTROL_WORKDIR_ROOTS, then refresh checks.</p>
+          </div>
           <HostReadinessPanel @changed="refresh" />
           <label class="check"><input type="checkbox" :checked="confirmed('host')" :disabled="busy" @change="confirm('host',$event)" />I have checked the Mac’s local installation and prerequisites.</label>
         </template>
@@ -210,6 +212,8 @@ onBeforeUnmount(() => { key.value = '' })
 .agent-checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--tile-min-width)),1fr)); gap:var(--gap); }
 .agent-checks article { display:grid; gap:var(--gap-sm); align-content:start; padding:var(--gap); border:1px solid var(--surface-border); border-radius:var(--radius); min-width:0; }
 .key-form { display:grid; gap:var(--gap-sm); }
+.field-group { display:grid; gap:var(--gap-xs); }
+.field-group > .btn { justify-self:start; margin-top:var(--gap-xs); }
 .actions,.tour-actions,.wizard-footer { display:flex; flex-wrap:wrap; gap:var(--gap-sm); align-items:center; }
 .wizard-footer { border-top:1px solid var(--surface-border); padding-top:var(--gap); margin-top:var(--gap); }
 .wizard-footer .primary { margin-left:auto; }
