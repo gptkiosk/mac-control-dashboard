@@ -10,6 +10,16 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.19] - 2026-10-18
+
+### Added
+
+- **Candidates are shown in the media panel**: each generated image is a thumbnail that opens full size, and each clip is a small video player, so a visual choice can be made where the **Use this one** button is. Served by an operator-only viewer (`GET /api/media/candidate`) that returns only real `<slot>-<number>` media files in the project's `media/candidates` folder.
+
+### Fixed
+
+- A slot no longer claims another slot's candidates. `hero-light` (a video slot) was listing the candidates of `hero-light-still`, and **Use this one** could copy a still into the video slot. A candidate now has to be exactly `<slot>-<number>.<media extension>`, a regular file directly in `media/candidates` (links are refused), for listing, viewing and picking.
+
 ## [0.6.18] - 2026-10-17
 
 ### Fixed
@@ -667,7 +677,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.18...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.19...HEAD
+[0.6.19]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.19
 [0.6.18]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.18
 [0.6.17]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.17
 [0.6.16]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.16
