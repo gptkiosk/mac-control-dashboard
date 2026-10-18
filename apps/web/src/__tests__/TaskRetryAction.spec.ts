@@ -138,3 +138,20 @@ it('after a timeout every retry stays off until the timeout is acknowledged, and
   const writes=calls(f,'POST','/api/');expect(writes).toHaveLength(1)
   expect(JSON.parse(String(writes[0]![1]?.body))).toEqual({revision:2,acknowledge_timeout:true});w.unmount()
 })
+it('offers Accept anyway on the board for a story whose run reported unfinished work, and records the operator’s reason',async()=>{
+  const p=project();p.tasks[0]!.run_id=51;p.tasks[0]!.incomplete_reason='The agent explicitly reported unfinished work.'
+  const {w,f}=setup(p);await flushPromises()
+  const btn=w.find('[data-testid=accept-anyway]');expect(btn.exists()).toBe(true)
+  const ask=vi.spyOn(window,'prompt').mockReturnValueOnce('short').mockReturnValueOnce('The missing files are made by the media step, not this story.')
+  await btn.trigger('click');await flushPromises()
+  expect(calls(f,'POST','/api/')).toHaveLength(0)                                            // a reason under ten characters sends nothing
+  await btn.trigger('click');await flushPromises()
+  const writes=calls(f,'POST','/api/');expect(writes).toHaveLength(1)
+  expect(writes[0]![0]).toBe('/api/projects/2/stories/50/accept-despite-report')
+  expect(JSON.parse(String(writes[0]![1]?.body))).toEqual({revision:2,run_id:51,reason:'The missing files are made by the media step, not this story.'})
+  expect(w.text()).toContain('Accepted');expect(w.emitted('changed')).toHaveLength(1);ask.mockRestore();w.unmount()
+})
+it('does not offer Accept anyway for a crash or timeout, which left no report to accept',async()=>{
+  const {w}=setup();await flushPromises()
+  expect(w.find('[data-testid=accept-anyway]').exists()).toBe(false);w.unmount()
+})

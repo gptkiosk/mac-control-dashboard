@@ -11,6 +11,8 @@ const project = ref<Project | null>(null)
 const busy = ref(false), error = ref(''), notice = ref('')
 const visible = computed(() => props.card.project?.role === 'story' && props.card.assignee_type !== 'human' && props.card.column === 'failed')
 const task = computed(() => project.value?.tasks.find(t => t.card_id === props.card.id && t.role === 'story'))
+// A run that finished and reported unfinished work can be accepted on the operator's say-so; a crash or timeout cannot (there is no report to accept).
+const acceptable = computed(() => !!task.value?.incomplete_reason && !!task.value.run_id && task.value.run_id === props.card.last_run?.id && ['active', 'paused'].includes(project.value?.state ?? '') && !notice.value)
 const timedOut = computed(() => props.card.last_run?.stage === 'timeout')
 const timeoutAck = ref(false)
 // After a timeout MCD cannot tell what the attempt changed or whether it is still running, so a new attempt needs the operator's word that the partial work was reviewed.
@@ -30,6 +32,21 @@ const cheapLabel = (r: { agent: string; model: string }) => `${agentLabel(r.agen
 function closePanels() { showFree.value = false; showCheap.value = false; showPaid.value = false }
 const freeModels = computed(() => [...new Set(freeRoutes.value.map(r => r.model))])
 const freeTargets = computed(() => [...new Set(freeRoutes.value.map(r => r.agent_target))])
+async function acceptAnyway() {
+  if (busy.value || !acceptable.value || !task.value) return
+  const reason = window.prompt(`The agent reported "${props.card.title}" unfinished:\n\n${(task.value.incomplete_reason || '').slice(0, 300)}\n\nAccept it anyway? Its report and your reason are recorded as the handoff, the run stays failed in the history, and dependent stories are released. Why is this acceptable?`, '')
+  if (!reason || reason.trim().length < 10) return
+  busy.value = true; error.value = ''
+  try {
+    const base = `/api/projects/${props.card.project!.id}`
+    const fresh = await getJson<Project>(base)
+    const t = fresh.tasks.find(x => x.card_id === props.card.id && x.role === 'story')
+    if (t?.column !== 'failed' || t.run_id !== props.card.last_run?.id) throw new Error('The task changed. Refresh before accepting it.')
+    await postJson(`${base}/stories/${props.card.id}/accept-despite-report`, { revision: fresh.revision, run_id: t.run_id, reason: reason.trim() })
+    notice.value = 'Accepted. Its report and your reason are recorded as the handoff, and the stories that wait on it are released.'
+    emit('changed')
+  } catch (e) { error.value = e instanceof Error ? e.message : String(e) } finally { busy.value = false }
+}
 let generation = 0
 watch(() => [props.card.id, props.card.project?.id, props.card.column, props.card.last_run?.id], async () => {
   const mine = ++generation
@@ -142,6 +159,7 @@ async function retry(route?: ProjectNode['routes'][number]) {
       <button v-for="r in lowCost" :key="`${r.agent}:${r.model}`" type="button" class="btn" :disabled="busy || !ready" @click="chooseCheap(r)">Use {{ cheapLabel(r) }} (subscription)</button>
       <button v-if="paidRoutes.length" type="button" class="btn" :disabled="busy || !ready" @click="choosePaid">Pay for this task…</button>
       <button v-if="limited && (card.agent === 'claude' || card.agent === 'codex')" type="button" class="btn" :disabled="busy || !ready || !freeRoutes.length" @click="chooseFree">Go Free!</button>
+      <button v-if="acceptable" type="button" class="btn" :disabled="busy" data-testid="accept-anyway" @click="acceptAnyway">Accept anyway…</button>
     </div>
     <div v-if="showFree" class="free-choice" aria-label="Choose free retry">
       <p><strong>Continue this task with OpenClaw</strong></p>
@@ -168,6 +186,7 @@ async function retry(route?: ProjectNode['routes'][number]) {
     <p class="muted small">Keeps this task’s scope, workspace and dependency order. Earlier runs remain in history. If a free model is throttled, <strong>Rerun task</strong> again later also works.</p>
     <p v-if="limited" class="muted small">The same agent may remain limited until its quota resets. Use an approved alternative above when available.</p>
     <p v-if="limited && (card.agent === 'claude' || card.agent === 'codex') && project && !freeRoutes.length" class="muted small">Go Free needs an installed OpenClaw agent with a configured OpenRouter :free model.</p>
+    <p v-if="acceptable" class="muted small"><strong>Accept anyway</strong> is for a run that finished and reported unfinished work you are content to live with. You give a reason; the report stays on record.</p>
     <p v-if="project?.state === 'paused'" class="muted small">Resume project dispatch before rerunning this task.</p>
     <p v-if="error" class="error-text" role="alert">{{ error }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>
