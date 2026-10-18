@@ -10,6 +10,10 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+### Added
+
+- Help, the help chat and the docs now cover project types (picking one, plan checks, the website guides), making media with fal (tiers, progress, Another take, accepting and publishing), media spend (estimates are an upper bound, repeats and unpriced runs are shown), creating or replacing the fal key (fal fixes its model list at creation), and Accept anyway. Five new how-tos; the project consultant chat is told the project types and the media rules.
+
 ### Fixed
 
 - The media panel's Generate buttons no longer sit dimmed and silent until the spending box is ticked: pressing one without it says what is missing and takes you to the box.
