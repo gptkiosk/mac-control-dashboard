@@ -168,3 +168,11 @@ def test_every_type_asks_for_delivery_to_the_remote_repository_and_says_why():
         assert "delivery-to-remote" in ids(pt.check(type_id, none))
         done = [story("a", "Code and tests"), story("b", "Push the project branch and open a pull request", ["a"])]
         assert "delivery-to-remote" not in ids(pt.check(type_id, done))
+
+
+def test_each_type_says_whether_its_repository_is_public_or_private():
+    load = pt.load()
+    assert "The repository is public" in load["packaged-app"]["planner_text"] and "MIT" in load["packaged-app"]["planner_text"]
+    for type_id in ("web-app", "website-property"):
+        assert "The repository is private" in load[type_id]["planner_text"] and "proprietary" in load[type_id]["planner_text"]
+    assert "public for an MIT-licensed project" in load["other"]["planner_text"] and "private for anything proprietary" in load["other"]["planner_text"]
