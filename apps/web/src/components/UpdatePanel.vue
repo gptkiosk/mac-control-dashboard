@@ -254,9 +254,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
           <summary>Update by hand instead</summary>
           <ol class="updates"><li v-for="step in status.manual_instructions" :key="step">{{ step }}</li></ol>
         </details>
-        <ul v-else-if="status.manual_instructions.length" class="updates">
-          <li v-for="step in status.manual_instructions" :key="step">{{ step }}</li>
-        </ul>
+        <details v-else-if="status.manual_instructions.length" class="manual"><summary>Update by hand</summary><ol class="updates"><li v-for="step in status.manual_instructions" :key="step">{{ step }}</li></ol></details>
         <p v-for="problem in status.problems" :key="problem" class="muted small">{{ problem }}</p>
       </template>
       <template v-else>
