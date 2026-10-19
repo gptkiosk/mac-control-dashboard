@@ -1034,3 +1034,38 @@ def test_the_github_cli_installs_removes_and_reports_like_any_other_tool_without
     assert ti.managed_bin(cfg.root, "gh") == str(cfg.bin / "gh")                    # the app finds it without a restart
     run(cfg, catalog, "gh", "remove")
     assert not (cfg.bin / "gh").exists()
+
+
+def test_helper_reads_a_native_version_before_the_sandbox_hides_the_home_folder(cfg, catalog, tmp_path, monkeypatch, capsys):
+    """Hermes and gh upgrades were refused as "native version could not be verified": the helper planned inside the macOS sandbox, where the tool cannot run."""
+    import tool_install_helper as helper
+    native = tmp_path / "native-codex"
+    native.write_text('#!/bin/sh\necho "codex-cli 0.100.0"\n')
+    native.chmod(0o700)
+    host = facts(elsewhere={"codex": str(native)})
+    sandboxed = {"on": False}
+    real_run = ti.subprocess.run
+
+    def run_in_sandbox(argv, *a, **kw):
+        if sandboxed["on"] and str(argv[0]) == str(native):
+            raise PermissionError("denied by the sandbox")
+        return real_run(argv, *a, **kw)
+
+    def harden(_cfg):
+        sandboxed["on"] = True
+        return True
+
+    seen = {}
+
+    def plan_only(c, cat, cid, action, **kw):
+        seen["plan"] = ti.build_plan(c, cat, ti.detect_host(c.root, ti._tool_commands(cat)), cid, action)
+        return {}
+
+    monkeypatch.setattr(helper, "build_config", lambda root: (cfg, catalog))
+    monkeypatch.setattr(ti, "detect_host", lambda *a, **k: host)
+    monkeypatch.setattr(ti, "harden_process", harden)
+    monkeypatch.setattr(ti.subprocess, "run", run_in_sandbox)
+    monkeypatch.setattr(ti, "run_action", plan_only)
+    ti._NATIVE_VERSIONS.clear()
+    assert helper.main(["--root", str(cfg.root), "run", "codex", "update", "--plan-sha256", "a" * 64]) == 0
+    assert seen["plan"]["from"] == "0.100.0" and seen["plan"]["refusals"] == []
