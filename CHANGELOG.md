@@ -8,6 +8,24 @@ the section of the version being released, and a release cannot be built without
 
 Internal operator notes, private hostnames and personal identifiers are omitted by policy.
 
+## [Unreleased]
+
+## [0.6.31] - 2026-10-19
+
+### Added
+
+- **Coordinator setup kickoff:** Profile checks that Hermes is installed, assigned as Coordinator, guided and has a default model. When ready, it creates and opens a reviewable agent-platform setup project draft from the saved preferences; it does not start model work or alter platform configuration.
+
+### Changed
+
+- **Agent setup guidance:** Hermes is shown as the fixed Coordinator, while worker, reviewer and security labels remain configurable for other installed platforms.
+- **Packaged Hermes guidance** now explains the in-app setup-draft flow, platform readiness checks, preservation of existing agent files, and human-only setup steps.
+- **Optional tool versions:** Check latest versions shows the current Homebrew version beside each installed component and uses the verified Agent tools catalog for managed tools.
+
+### Fixed
+
+- **MCP diagnostics:** Failed server-list checks now show a short, redacted CLI error instead of only the exit code.
+
 ## [0.6.30] - 2026-10-19
 
 ### Changed
@@ -866,4 +884,5 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.4.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.1
 [0.4.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.4.0
 [0.3.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.1
+[0.6.31]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.31
 [0.6.30]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.30

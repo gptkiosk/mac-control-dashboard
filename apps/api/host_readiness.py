@@ -486,11 +486,11 @@ def colima_start(settings):
 
 # The system tools panel in Settings: every optional tool with its version, Install (All) and Upgrade (All), and a health check. Homebrew formulae per tool on a Mac.
 SYSTEM_TOOLS = {"python3": ("python",), "node": (), "ffmpeg": ("ffmpeg",), "docker": ("colima", "docker", "docker-compose"), "colima": ("colima",), "gh": ("gh",)}
+LATEST_FORMULAE = {"python3": "python", "node": "node", "ffmpeg": "ffmpeg", "docker": "docker", "colima": "colima", "gh": "gh"}
 SYSTEM_TOOL_NOTES = {"python3": "tests and scripts", "node": "JavaScript tests and the Playwright screenshot script", "ffmpeg": "publishing generated media",
                      "docker": "building and running container images", "colima": "the Docker engine on a Mac", "gh": "pull requests from this host"}
 APT_PACKAGES = {"python3": "python3", "ffmpeg": "ffmpeg", "docker": "docker.io docker-compose"}
 VERSION_ARGS = {"ffmpeg": ("-version",)}
-PRIMARY_FORMULA = {"python3": "python", "docker": "docker"}          # the formula whose version is the tool's own; docker also pulls colima and docker-compose
 VERSION_RE = re.compile(r"(?<![\w.])v?(\d+(?:\.\d+){1,3})")
 
 
@@ -511,10 +511,62 @@ def _outdated(brew):
         return None
 
 
+def _latest_versions(brew, formulae):
+    """Return Homebrew's current stable versions for the requested formulae."""
+    if not formulae:
+        return {}
+    code, out = _run([brew, "info", "--json=v2", "--formula", *sorted(set(formulae))], timeout=60, env=_job_env())
+    if code != 0:
+        return None
+    try:
+        return {item["name"]: item.get("versions", {}).get("stable")
+                for item in json.loads(out).get("formulae", []) if isinstance(item, dict) and item.get("name")}
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
+def _agent_tool_version(tool):
+    """The Agent tools catalog is the verified version source for managed CLIs such as gh."""
+    try:
+        catalog = json.loads((Path(__file__).parent / "tool_catalog.json").read_text("utf-8"))
+        item = catalog.get("tools", {}).get(tool) or catalog.get("runtimes", {}).get(tool) or {}
+        return item.get("version")
+    except (OSError, ValueError, AttributeError, TypeError):
+        return None
+
+
+def _managed_tool_path(path, settings):
+    if not path:
+        return False
+    root = os.path.realpath(_managed_root(settings))
+    candidate = os.path.realpath(path)
+    try:
+        return os.path.commonpath((root, candidate)) == root
+    except ValueError:
+        return False
+
+
+def _brew_formula_for_tool(tool, path):
+    """Find the formula that supplied an installed Homebrew executable, including versioned Node."""
+    real = os.path.realpath(path) if path else ""
+    match = re.search(r"/Cellar/([^/]+)/", real)
+    if match:
+        return match.group(1)
+    match = re.search(r"/opt/([^/]+)(?:/|$)", path or "")
+    if match:
+        return match.group(1)
+    if path and path.startswith(("/opt/homebrew/", "/usr/local/")):
+        return LATEST_FORMULAE.get(tool)
+    return None
+
+
 def system_tools(settings=None, check_updates=False):
     mac = _is_mac()
     brew = _tool("brew") if mac else None
     outdated = _outdated(brew) if (brew and check_updates) else None
+    formula_for = {tid: _brew_formula_for_tool(tid, _tool(tid, settings)) for tid in SYSTEM_TOOLS}
+    formulae = {formula for formula in formula_for.values() if formula}
+    latest_versions = _latest_versions(brew, formulae) if (brew and check_updates) else None
     rows = []
     for tid, formulae in SYSTEM_TOOLS.items():
         if tid == "colima" and not mac:
@@ -523,15 +575,22 @@ def system_tools(settings=None, check_updates=False):
         row = {"id": tid, "label": tid, "needed_for": SYSTEM_TOOL_NOTES[tid], "installed": bool(path), "version": _version_of(path, VERSION_ARGS.get(tid, ("--version",))) if path else None,
                "path": path, "latest": None, "outdated": None, "formulae": list(formulae) if mac else [],
                "stopped": bool(tid == "colima" and path and not _colima_running())}
-        if outdated is not None and path:
-            primary = PRIMARY_FORMULA.get(tid, tid)
-            row["outdated"] = primary in outdated if formulae else None
-            row["latest"] = outdated.get(primary) or row["version"] if formulae else None
+        if check_updates and path:
+            if _managed_tool_path(path, settings):
+                # Managed agent CLIs update from the verified Agent tools catalog, not Homebrew.
+                row["latest"] = _agent_tool_version(tid)
+                row["outdated"] = bool(row["latest"] and row["version"] and row["version"] != row["latest"])
+            elif outdated is not None and latest_versions is not None:
+                formula = formula_for.get(tid)
+                if formula:
+                    row["outdated"] = formula in outdated
+                    row["latest"] = latest_versions.get(formula)
         rows.append(row)
     missing = [r["id"] for r in rows if not r["installed"]]
     have = [r["id"] for r in rows if r["installed"]]
     brewable = lambda ids: [i for i in ids if SYSTEM_TOOLS[i]]                 # node arrives with an agent tool, not Homebrew
-    body = {"platform": "mac" if mac else "linux", "tools": rows, "missing": missing, "updates_checked": outdated is not None,
+    body = {"platform": "mac" if mac else "linux", "tools": rows, "missing": missing,
+            "updates_checked": outdated is not None and latest_versions is not None,
             "outdated": [r["id"] for r in rows if r["outdated"]], "job": current_job()}
     if mac:
         body["brew"] = {"installed": bool(brew), "path": brew, "version": _version_of(brew) if brew else None, "install_command": BREW_INSTALL,

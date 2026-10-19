@@ -20,7 +20,7 @@ The summary line says whether the machine is **ready to build** (workspace, git,
 
 ## Later: Settings, Updates & installs
 
-After the wizard, the same cards live in **Settings, Updates & installs**: the dashboard, each agent tool and the optional system tools, each with its version, an Install or Upgrade button, a progress bar, the log and a health check. **Optional system tools** adds **Install (All)** and **Upgrade (All)** (Homebrew on a Mac, with the Homebrew install command shown first when it is missing; one `apt` command to copy on Linux), **Check for updates**, **Start Colima** and a health check.
+After the wizard, the same cards live in **Settings, Updates & installs**: the dashboard, each agent tool and the optional system tools, each with its version, an Install or Upgrade button, a progress bar, the log and a health check. **Optional system tools** adds **Install (All)** and **Upgrade (All)** (Homebrew on a Mac, with the Homebrew install command shown first when it is missing; one `apt` command to copy on Linux), **Check for updates** to show installed-versus-current Homebrew versions, **Start Colima** and a health check. Managed Agent tools use their verified catalog version.
 
 ## The GitHub key
 
