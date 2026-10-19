@@ -241,7 +241,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
 </script>
 <template>
   <section id="updates" class="card update-panel" aria-labelledby="updates-title">
-    <header class="head"><h3 id="updates-title" class="section-title">Dashboard</h3><RouterLink to="/help?topic=app-updates" class="small">How-to</RouterLink></header>
+    <header class="head"><h3 id="updates-title" class="section-title">Dashboard updates</h3><RouterLink to="/help?topic=app-updates" class="small">How-to</RouterLink></header>
     <p class="muted small">Never automatic. Checking only reads GitHub's release list; every download, install and rollback asks you first.</p>
     <p v-if="error" class="notice-warn" role="alert">{{ error }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>
@@ -261,12 +261,12 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
       </template>
       <template v-else>
         <ul class="items">
-          <ManagedItem name="Dashboard" data-test="dashboard" :mark="healthRow && !healthRow.ok ? 'warn' : candidate ? 'warn' : 'ok'" :word="busyNow ? 'working' : candidate ? 'update available' : 'up to date'"
+          <ManagedItem name="Running release" data-test="dashboard" :mark="healthRow && !healthRow.ok ? 'warn' : candidate ? 'warn' : 'ok'" :word="busyNow ? 'working' : candidate ? 'update available' : 'up to date'"
             :version="label(install?.current)" :latest="candidate?.version ?? null" :detail="summary" :busy="busyNow" :progress="progressLine" :health="healthRow" @health="read">
             <label class="channel">Channel<AppSelect v-model="channel" aria-label="Update channel"><option value="stable">Stable</option><option value="prerelease">Prerelease</option></AppSelect></label>
             <button class="btn primary" :disabled="busy || !!operation" @click="check">Check for updates</button>
             <span v-if="checkedAt" class="muted small">Checked GitHub {{ when(checkedAt / 1000) }}</span>
-            <template #more><span class="muted small installed">Installed <strong>{{ label(install?.current) }}</strong> · Previous: {{ install?.previous ? label(install.previous) : 'none kept' }}<template v-if="found"> · Installed version: {{ found.installed ?? 'none recorded' }}</template></span></template>
+            <template #more><span class="muted small current">Installed <strong>{{ label(install?.current) }}</strong> · Previous: {{ install?.previous ? label(install.previous) : 'none kept' }}<template v-if="found"> · Installed version: {{ found.installed ?? 'none recorded' }}</template></span></template>
           </ManagedItem>
         </ul>
 

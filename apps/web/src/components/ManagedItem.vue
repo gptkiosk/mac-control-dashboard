@@ -44,8 +44,8 @@ const marks = { ok: '✓', warn: '!', missing: '✗', info: 'i' }
     <div v-if="health || healthBusy" class="health" :class="health && !health.ok ? 'bad' : 'good'" data-test="health" aria-live="polite">
       <p class="small">
         <strong>Health check</strong>
-        <template v-if="healthBusy"> checking…</template>
-        <template v-else-if="health"> {{ health.ok ? '✓ passed' : '! needs attention' }}<template v-if="health.version"> · {{ health.version }}</template></template>
+        <span v-if="healthBusy" class="res">checking…</span>
+        <span v-else-if="health" class="res">{{ health.ok ? '✓ passed' : '! needs attention' }}<template v-if="health.version"> · {{ health.version }}</template></span>
       </p>
       <ul v-if="health && health.next.length" class="next small"><li v-for="n in health.next" :key="n">{{ n }}</li></ul>
     </div>
@@ -84,6 +84,7 @@ const marks = { ok: '✓', warn: '!', missing: '✗', info: 'i' }
 .health.good { border-color: var(--ok); }
 .health.bad { border-color: var(--warn); }
 .health p { margin: 0; }
+.res { margin-left: var(--gap-xs); }
 .next { margin: 0; padding-left: 1.2rem; display: grid; gap: var(--gap-xs); }
 .foot { padding-top: var(--gap-xs); border-top: 1px solid var(--surface-border); }
 </style>
