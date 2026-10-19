@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AppSelect from '@/components/AppSelect.vue'
+import ManagedItem, { type Health } from '@/components/ManagedItem.vue'
 import SourceUpdatePanel from '@/components/SourceUpdatePanel.vue'
 import { ApiError, getJson, postJson } from '@/lib/api'
 
@@ -64,6 +65,15 @@ const progressText = computed(() => {
   return tx ? PHASES[tx.phase] ?? 'Working' : 'Waiting for the update helper to start…'
 })
 
+// The updater checks the new version's health itself and records the result; this shows it, and re-reads the state on request.
+const healthRow = computed<Health | null>(() => {
+  const last = install.value?.last
+  if (!managed.value || !last || !['committed', 'rolled_back', 'failed'].includes(last.outcome)) return null
+  const ok = last.outcome === 'committed'
+  return { ok, version: label(install.value?.current), next: ok ? [] : [last.detail, 'The previous version is still the one to trust. See helper.log on the host, or run update_recovery.py status.'] }
+})
+const busyNow = computed(() => !!operation.value || downloading.value)
+const progressLine = computed(() => downloading.value ? 'Downloading and verifying. Nothing is installed yet.' : operation.value ? progressText.value : '')
 const candidate = computed(() => found.value?.candidate ?? null)
 const refused = computed(() => {
   const c = candidate.value
@@ -231,13 +241,13 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
 </script>
 <template>
   <section id="updates" class="card update-panel" aria-labelledby="updates-title">
-    <h2 id="updates-title" class="section-title">Updates</h2>
-    <p class="muted lead">Updates are never automatic. Checking reads the public GitHub release list only: it downloads nothing and changes nothing. Downloading, installing and rolling back each need your confirmation.</p>
+    <header class="head"><h3 id="updates-title" class="section-title">Dashboard</h3><RouterLink to="/help?topic=app-updates" class="small">How-to</RouterLink></header>
+    <p class="muted small">Never automatic. Checking only reads GitHub's release list; every download, install and rollback asks you first.</p>
     <p v-if="error" class="notice-warn" role="alert">{{ error }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="reconnecting" class="muted" role="status">Reconnecting to the service. It is restarting, so this can take a minute. Nothing is started again from here.</p>
     <template v-if="status">
-      <p class="status" role="status">{{ summary }}</p>
+      <p v-if="!managed" class="status" role="status">{{ summary }}</p>
       <template v-if="!managed">
         <SourceUpdatePanel v-if="status.source" :inspection="status.source" />
         <details v-if="status.manual_instructions.length && status.source?.eligible" class="manual">
@@ -250,12 +260,15 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
         <p v-for="problem in status.problems" :key="problem" class="muted small">{{ problem }}</p>
       </template>
       <template v-else>
-        <div class="actions">
-          <label>Channel<AppSelect v-model="channel" aria-label="Update channel"><option value="stable">Stable</option><option value="prerelease">Prerelease</option></AppSelect></label>
-          <button class="btn" :disabled="busy || !!operation" @click="check">Check for updates</button>
-          <span v-if="checkedAt" class="muted small">Checked GitHub {{ when(checkedAt / 1000) }}</span>
-        </div>
-        <p v-if="found" class="muted small">Installed version: {{ found.installed ?? 'none recorded' }}</p>
+        <ul class="items">
+          <ManagedItem name="Dashboard" data-test="dashboard" :mark="healthRow && !healthRow.ok ? 'warn' : candidate ? 'warn' : 'ok'" :word="busyNow ? 'working' : candidate ? 'update available' : 'up to date'"
+            :version="label(install?.current)" :latest="candidate?.version ?? null" :detail="summary" :busy="busyNow" :progress="progressLine" :health="healthRow" @health="read">
+            <label class="channel">Channel<AppSelect v-model="channel" aria-label="Update channel"><option value="stable">Stable</option><option value="prerelease">Prerelease</option></AppSelect></label>
+            <button class="btn primary" :disabled="busy || !!operation" @click="check">Check for updates</button>
+            <span v-if="checkedAt" class="muted small">Checked GitHub {{ when(checkedAt / 1000) }}</span>
+            <template #more><span class="muted small installed">Installed <strong>{{ label(install?.current) }}</strong> · Previous: {{ install?.previous ? label(install.previous) : 'none kept' }}<template v-if="found"> · Installed version: {{ found.installed ?? 'none recorded' }}</template></span></template>
+          </ManagedItem>
+        </ul>
 
         <article v-if="candidate" class="release">
           <h3>{{ candidate.change === 'upgrade' ? 'Update' : 'Install' }} available: {{ candidate.version }}</h3>
@@ -288,9 +301,6 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
           </div>
         </section>
 
-        <p v-if="downloading" class="status" role="status">Downloading and verifying. Nothing is installed yet.</p>
-
-        <p class="installed">Installed <strong>{{ label(install?.current) }}</strong> <span class="sep" aria-hidden="true">·</span> Previous: {{ install?.previous ? label(install.previous) : 'none kept' }}</p>
         <ul v-if="blockers.length" class="updates" aria-label="Work that must finish first">
           <li v-for="b in blockers" :key="b">{{ b }}</li>
         </ul>
@@ -348,14 +358,15 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
           </div>
         </section>
 
-        <p v-if="operation" class="status" role="status">{{ progressText }}</p>
       </template>
     </template>
   </section>
 </template>
 <style scoped>
 .update-panel { margin: var(--gap-lg) 0; display: grid; gap: var(--gap-lg); padding: var(--gap-lg); }
-.lead { max-width: 72ch; line-height: var(--line-height); margin: 0; }
+.head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--gap); }
+.items { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--gap-sm); }
+.channel { display: flex; align-items: center; gap: var(--gap-sm); margin: 0; }
 .manual summary { cursor: pointer; padding: var(--gap-sm) 0; }
 .manual .updates { list-style: decimal; margin: var(--gap-sm) 0 0; line-height: var(--line-height); }
 h2, h3, h4 { margin: 0; }

@@ -1864,14 +1864,14 @@ def run_action(cfg: ToolsConfig, catalog: Catalog, cid: str, action: str, *, exp
 # --- status ----------------------------------------------------------------------------
 
 
-def health(cfg: ToolsConfig, catalog: Catalog, facts: HostFacts | None = None) -> list[dict]:
+def health(cfg: ToolsConfig, catalog: Catalog, facts: HostFacts | None = None, only: str | None = None) -> list[dict]:
     """A follow-up check for every installed tool: does it run, which version answers, does the name in a new terminal reach it, and what to do next.
     Read-only; it only asks each tool for its version, never signs in and never passes a key."""
     facts = facts or detect_host(cfg.root, _tool_commands(catalog))
     rows = inspect(cfg, catalog, facts)["tools"]
     out = []
     for row in rows:
-        if not row["installed"]:
+        if not row["installed"] or (only and row["id"] != only):
             continue
         comp = catalog.component(row["id"])
         name, path = comp["bins"][0]["name"], row["path"]

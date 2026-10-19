@@ -521,7 +521,8 @@ def system_tools(settings=None, check_updates=False):
             continue
         path = _tool(tid, settings)
         row = {"id": tid, "label": tid, "needed_for": SYSTEM_TOOL_NOTES[tid], "installed": bool(path), "version": _version_of(path, VERSION_ARGS.get(tid, ("--version",))) if path else None,
-               "path": path, "latest": None, "outdated": None, "formulae": list(formulae) if mac else []}
+               "path": path, "latest": None, "outdated": None, "formulae": list(formulae) if mac else [],
+               "stopped": bool(tid == "colima" and path and not _colima_running())}
         if outdated is not None and path:
             primary = PRIMARY_FORMULA.get(tid, tid)
             row["outdated"] = primary in outdated if formulae else None
