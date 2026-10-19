@@ -129,7 +129,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
   <section class="source-update" aria-labelledby="source-update-title">
     <header class="head">
       <h3 id="source-update-title" class="section-title">Update this checkout</h3>
-      <p class="lead muted">This copy runs from a source checkout. One click updates it to the newest official stable release, after you confirm the exact version. Nothing runs on a timer.</p>
+      <p class="lead muted">Source checkout: one click updates it to the newest official release once you confirm the version.</p>
     </header>
 
     <p v-if="error" class="notice-warn" role="alert">{{ error }}</p>

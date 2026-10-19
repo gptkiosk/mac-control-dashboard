@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
+import PageHead from '@/components/PageHead.vue'
 import TimeSeriesChart, { type ChartLine } from '@/components/TimeSeriesChart.vue'
 import ChipTag from '@/components/ChipTag.vue'
 import { usePolledJson } from '@/composables/usePolledJson'
@@ -134,8 +135,7 @@ function lastSeen(iso: string | null): string {
 
 <template>
   <section class="page" aria-labelledby="mac-title">
-    <div class="heading">
-      <h1 id="mac-title" class="page-title has-icon"><AppIcon :name="navIcon('mac')" size="lg" />Mac</h1>
+    <PageHead id="mac-title" title="Mac" :icon="navIcon('mac')" sub="CPU, GPU, memory, network and the apps using them." help="hardware">
       <div class="ranges" role="group" aria-label="Time range">
         <button
           v-for="r in RANGES"
@@ -148,7 +148,7 @@ function lastSeen(iso: string | null): string {
           {{ r }}
         </button>
       </div>
-    </div>
+    </PageHead>
 
     <p v-if="series.error.value" class="error" role="alert">Could not load history: {{ series.error.value }}</p>
     <p v-else-if="series.pending.value" class="muted" role="status">Collecting first samples…</p>
