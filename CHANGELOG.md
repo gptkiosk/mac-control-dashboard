@@ -19,6 +19,7 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 - **Settings is reorganised into three tabs**: *Settings* (preferences, Hermes on Discord, private credentials), *Updates & installs* (dashboard, agent tools, optional system tools) and *Maintenance & access* (housekeeping, report storage, bug reports, roles, GitHub). Old links such as `/profile#agent-tools` or `#github-settings` open the right tab. Explanations moved out to How-to links, hover text and the docs; controls are switches, a segmented appearance control and one compact row per credential instead of paragraphs and checkboxes.
 - **One card for every installable thing**, the same one the setup checklist uses: a status mark, the version (`installed → latest`), one line of state, the buttons, a progress bar while it works, the log, and a **health check** with next steps. The dashboard update, each agent tool and each optional system tool use it.
 - **Private credentials** are one list of cards (signed-in agent, OpenRouter, fal.ai, Discord bot, GitHub) merging the old key guide and the input fields: saved or not, one line on what it is for, a Get a key link, and Save, Remove, share and spending controls on the same card.
+- **Tasks lanes are cards**: each status (In progress, Needs approval, Queued, Backlog, Failed, Done) is its own bordered card with a coloured edge, the status pill, a count badge and a one-line description, so the lanes are easy to tell apart. An empty lane drops its column header.
 
 ### Added
 
