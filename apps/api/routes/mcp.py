@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 import mcp
 from agents import REGISTRY
+from collector import run_command
 from deps import get_session
 from models import McpChange
 from settings import get_settings
