@@ -76,6 +76,17 @@ def status(request: Request):
     return body
 
 
+@router.get("/health")
+def health(request: Request):
+    """Read-only follow-up check of every installed tool: runs, which version answers, reachable by name, next steps."""
+    operator(request)
+    cfg, catalog, facts = _context()
+    try:
+        return {"checks": ti.health(cfg, catalog, facts)}
+    except ti.ToolError as exc:
+        raise HTTPException(409, {"message": "Install state is unreadable.", "problems": exc.problems}) from None
+
+
 @router.post("/plan")
 def plan(request: Request, body: PlanIn):
     """Read-only: exactly what the helper would do, with the versions, sources, disk and memory it would see."""

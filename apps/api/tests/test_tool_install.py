@@ -1069,3 +1069,19 @@ def test_helper_reads_a_native_version_before_the_sandbox_hides_the_home_folder(
     ti._NATIVE_VERSIONS.clear()
     assert helper.main(["--root", str(cfg.root), "run", "codex", "update", "--plan-sha256", "a" * 64]) == 0
     assert seen["plan"]["from"] == "0.100.0" and seen["plan"]["refusals"] == []
+
+
+def test_health_runs_each_installed_tool_and_says_what_to_do_next(cfg, catalog, tmp_path, monkeypatch):
+    native = tmp_path / "native-codex"
+    native.write_text('#!/bin/sh\necho "codex-cli 0.100.0"\n')
+    native.chmod(0o700)
+    host = facts(elsewhere={"codex": str(native)})
+    rows = {r["id"]: r for r in ti.health(cfg, catalog, host)}
+    assert list(rows) == ["codex"]                                   # only installed tools are checked
+    row = rows["codex"]
+    assert row["ok"] and row["version"] == "0.100.0" and row["source"] == "native"
+    assert any(step.startswith("Upgrade to 0.162.1") for step in row["next"])
+    native.write_text("#!/bin/sh\nexit 3\n")
+    ti._NATIVE_VERSIONS.clear()
+    broken = ti.health(cfg, catalog, host)
+    assert [(r["id"], r["ok"]) for r in broken] == [("codex", False)] and broken[0]["next"][0].startswith("It did not run")
