@@ -28,7 +28,9 @@ import { useGuideAction } from '@/composables/useGuideAction'
 
 const route = useRoute()
 const router = useRouter()
-const { data, error, loaded, refresh } = usePolledJson<CardsPayload>('/api/cards', 3000)
+const { data, error, loaded, refresh } = usePolledJson<CardsPayload>('/api/cards', 3000, {
+  match: (e) => e.type !== 'project',
+})
 const prefs = reactive(loadPrefs())
 watch(prefs, savePrefs, { deep: true })
 const cards = computed(() => data.value?.cards ?? [])

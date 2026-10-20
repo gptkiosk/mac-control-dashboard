@@ -29,7 +29,7 @@ import { directoryLabel, directoryDetailFor } from '@/lib/selectLabels'
 import type { Profile } from '@/lib/profile'
 import { agentLabel } from '@/lib/cards'
 const route = useRoute(), router = useRouter()
-const { data: listing, error: listError, refresh: refreshList } = usePolledJson<{ projects: ProjectSummary[] }>('/api/projects', 5000)
+const { data: listing, error: listError, refresh: refreshList } = usePolledJson<{ projects: ProjectSummary[] }>('/api/projects', 5000, { match: e => e.type !== 'run_event' })
 const { data: workdirs } = usePolledJson<{ workdirs: { path: string; branch: string | null }[]; scratch_root?: string | null }>('/api/workdirs', 60000)
 // A project is a button push: the working directory defaults to the scratch area (a new private folder), and a repository is a choice.
 const defaultDir = () => workdirs.value?.scratch_root || profile.value?.preferences.working_dir || workdirs.value?.workdirs[0]?.path || ''
@@ -43,7 +43,7 @@ const planningSteps = ['coordinate', 'plan', 'return']
 const currentStep = computed(() => planningSteps.indexOf(project.value?.pipeline?.step || ''))
 const selectedId = computed(() => Number(route.query.project) || null)
 const detailPath = computed(() => selectedId.value ? `/api/projects/${selectedId.value}` : '/api/projects')
-const { data: remote, error: detailError, refresh: refreshDetail } = usePolledJson<Project | { projects: ProjectSummary[] }>(detailPath, 3000)
+const { data: remote, error: detailError, refresh: refreshDetail } = usePolledJson<Project | { projects: ProjectSummary[] }>(detailPath, 3000, { match: () => true })
 const project = ref<Project | null>(null), draft = ref<ProjectDocument>(emptyProject()), baseline = ref(''), selectedNode = ref('')
 const error = ref(''), busy = ref(false), tab = ref<'map' | 'memory' | 'work' | 'media'>(route.query.view === 'work' ? 'work' : route.query.view === 'media' ? 'media' : 'map'), zoom = ref(1)
 // Parallel build is a switch chosen when the project is built. Off (the default) builds one story at a time in dependency order.

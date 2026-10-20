@@ -10,6 +10,10 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+### Added
+
+- **Live status, same as RCD**: Tasks, Projects and the task panel now refresh within a moment of a card, run or project changing, over a small `GET /api/events/stream` feed, and poll less often (every 15 seconds) while it is connected. Polling stays the fallback when the stream is down or busy. The feed carries only ids and short state names, never run text, and its memory is fixed (one shared ring of 256 events, at most 16 open streams). Changes made by another process still show at the next poll.
+
 ### Changed
 
 - **Same as RCD, from the congruency pass**: a missing agent CLI on the MCP page is a quiet "Not available on this host" note instead of an error, and a failing list command still shows its own redacted message. Optional system tools refresh their rows after a health check and show a newer version only beside an outdated tool. The task editor gains Maximum attempts and Retry backoff, so a failing task can retry by itself. The project review's Spending and billing note says failed planning steps move to the next approved route and the project stays open to revise and retry. Smaller alignments: Service actions width, Housekeeping spacing, the Profile readiness link to Agent roles. Overview explains a stopped or missing macmon in a plain sentence instead of `macmon disabled`.

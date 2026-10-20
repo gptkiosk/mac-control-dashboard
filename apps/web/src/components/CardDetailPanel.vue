@@ -66,7 +66,10 @@ const {
   error,
   loaded,
   refresh,
-} = usePolledJson<CardDetail>(() => `/api/cards/${props.cardId}`, 3000)
+} = usePolledJson<CardDetail>(() => `/api/cards/${props.cardId}`, 3000, {
+  // run_event carries only the run id; any run's note may be this card's.
+  match: (e) => e.card_id === props.cardId || e.type === 'run_event' || e.type === 'bulk',
+})
 
 interface Message {
   tone: 'ok' | 'warn' | 'danger'
