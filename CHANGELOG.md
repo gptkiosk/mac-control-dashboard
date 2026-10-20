@@ -10,6 +10,8 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.39] - 2026-10-20
+
 ### Added
 
 - **One-click packaged updates, as on RCD**: on a packaged install with release-signature trust, **Check for updates** then **Update to X.Y.Z** is one confirmation. The server downloads the release, verifies its signature against the key pinned on this Mac, stages it and installs it with the usual drain check, data snapshot, health check and automatic rollback. A page reload or leaving the page during staging carries on with the update you confirmed. Without signature trust the pasted manifest SHA-256 and the separate install confirmation stay as before, and the panel says how to switch.
@@ -883,7 +885,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.30...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.39...HEAD
 [0.6.29]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.29
 [0.6.28]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.28
 [0.6.27]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.27
@@ -954,3 +956,4 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.6.30]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.30
 
 [0.6.38]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.37...v0.6.38
+[0.6.39]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.38...v0.6.39
