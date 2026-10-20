@@ -70,6 +70,8 @@ def update_status(request: Request):
     cfg, problems = _helper(root)
     body = {"kind": kind, "detail": detail, "configured": cfg is not None, "problems": problems,
             "manual_instructions": ue.manual_instructions(kind, _product(cfg))}
+    if cfg is not None:
+        body["trust"] = cfg.trust["kind"]   # "ssh-signature": one confirmation verifies the release signature; "pinned-digest": the operator pastes a digest
     if kind == "dev":
         body["source"] = _source_inspection()   # local git state only; nothing is fetched
     if cfg is None:
@@ -90,6 +92,16 @@ def _source_inspection() -> dict:
 def _refused(exc: su.SourceUpdateError, status: int = 409):
     first, rest = (exc.problems or ["Refused."])[0], (exc.problems or [])[1:]
     return HTTPException(status, {"message": first, "problems": rest, "blockers": exc.blockers})
+
+
+@router.get("/operation")
+def operation(request: Request):
+    """The latest update operation: ordered steps, their state and a log tail. Read-only; survives the service restart."""
+    operator(request)
+    cfg, problems = _helper(get_settings().update_root)    # not _managed(): that refuses while an update runs, which is when this is needed
+    if cfg is None:
+        return {"operation": None, "active": False, "log": [], "problems": problems}
+    return ue.operation_status(cfg)
 
 
 @router.get("/source")

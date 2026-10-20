@@ -76,8 +76,13 @@ before trusting the new key.
   list, downloads only the signed manifest and signature, verifies them, shows the exact tag, commit and notes, and updates only
   after a separate confirmation. A detached helper (its own launchd job) runs `scripts/upgrade-driver.sh` so the restart cannot
   stop it. Forks and other remotes are never updated this way. See `docs/configuration/source-update.md`.
-- **Packaged install:** the signed-package updater verifies the same manifest signature, stages the archive, and switches
-  versions with a drain check, data snapshot, health check and automatic rollback.
+- **Packaged install:** **Profile, Updates**, the same panel and flow as RCD. With release-signature trust enabled
+  (`enable-signed-updates`), **Check for updates** then **Update to X.Y.Z** is one confirmation: the server downloads the three
+  allowlisted assets, verifies the manifest signature against `<root>/helper/allowed_signers`, stages the package and installs
+  it with the drain check, data snapshot, health check and automatic rollback. A page reload or leaving the page during
+  staging carries on with the confirmed update (this tab, 30 minutes, that version only). Without signature trust the user
+  pins the manifest SHA-256 from the release page and confirms the install separately. The panel shows numbered steps and a
+  log from `<root>/state/operation.json`.
 - By hand: `scripts/upgrade-driver.sh --ref vX.Y.Z --dry-run`, then without `--dry-run`.
 
 What an update keeps, replaces and never touches is described in [What survives an update](../configuration/upgrades-and-your-data.md). Updates are never automatic and never run while work is in flight. The user sees each step, the log and the result, and a
@@ -95,6 +100,16 @@ the fix.
 
 - Platform `darwin-arm64`, packaged Python 3.12, service managed by a LaunchAgent. The checkout updater refuses unless the host
   is Apple silicon macOS with `git`, `npm` and `uv` present and the LaunchAgent loaded.
+- **The updater is pinned.** Updates never replace the helper under `<root>/helper`. When a release changes `update_engine.py`
+  or the helper, installed Macs keep the old behavior until the user runs `refresh-helper` once from the current version
+  (`python3 -I <root>/current/apps/api/update_helper.py --config <root>/helper/helper.json refresh-helper`). Say so in the
+  release notes whenever the update path changed.
+- **Switching a packaged install to signature trust** is an explicit operator step, run once on the Mac after checking the
+  release key's fingerprint in `packaging/release-signing.md`:
+  `python3 -I <root>/helper/update_helper.py --config <root>/helper/helper.json enable-signed-updates --fingerprint SHA256:<fp> --allowed-signers <file>`.
+  It refuses unless the file holds exactly one `dashboard-release` key limited to that namespace with that fingerprint, and
+  while an update is in progress. The MCD package does not ship the key yet, so `--allowed-signers` is required and the
+  bootstrap still writes `pinned-digest`. To go back, set `"trust": {"kind": "pinned-digest"}` in `helper.json`.
 - A plain release made without `--package` has notes but no package and cannot be installed by the in-app updater; use
   `--package` for every real release.
 - The footer shows `vX.Y.Z`, the environment and the API and web commits. After a release, the maintainer's own copy should
