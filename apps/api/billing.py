@@ -43,7 +43,7 @@ DEFAULT_ACCOUNTS = {
 
 
 # Spending limits are off unless the operator turns them on, in one place: Agents, Billing & rates, Spending & limits. Without a limit MCD only discloses that a route can cost money.
-DEFAULT_LIMITS = {"require_reviewed_pricing": False, "per_run_cap_usd": None, "paid_needs_runtime_limit": False}
+DEFAULT_LIMITS = {"require_reviewed_pricing": False, "per_run_cap_usd": None, "paid_needs_runtime_limit": False, "allow_subscription_in_free_only": False, "allow_paid_in_free_only": False}
 
 
 def limits(s, settings=None):
@@ -53,7 +53,7 @@ def limits(s, settings=None):
     out = dict(DEFAULT_LIMITS)
     if settings is not None and "dispatch_max_budget_usd" in getattr(settings, "model_fields_set", set()) and (settings.dispatch_max_budget_usd or 0) > 0:
         out["per_run_cap_usd"] = float(settings.dispatch_max_budget_usd)
-    for key in ("require_reviewed_pricing", "paid_needs_runtime_limit"):
+    for key in ("require_reviewed_pricing", "paid_needs_runtime_limit", "allow_subscription_in_free_only", "allow_paid_in_free_only"):
         if isinstance(saved.get(key), bool):
             out[key] = saved[key]
     if "per_run_cap_usd" in saved:
@@ -78,8 +78,8 @@ FREE_SUFFIX = ":free"
 
 
 def is_free(model):
-    """An OpenRouter ':free' model costs nothing whatever the token counts are."""
-    return (model or "").endswith(FREE_SUFFIX)
+    """OpenRouter free variants and the exact free router aliases have zero list price."""
+    return (model or "").endswith(FREE_SUFFIX) or model in {"openrouter/free", "openrouter/openrouter/free"}
 
 
 def find_rate(model, rates):
@@ -234,16 +234,22 @@ def dashboard(s, period="month", agent=None, target=None, now=None):
         )
     ]
     rows = [r for r in rows if r.get("model") != "delivery-mirror"]
-    native_sessions = set(
-        s.execute(select(UsageRecord.agent, UsageRecord.session_id).distinct())
-    )
+    native_sessions = {
+        (r.agent, r.session_id) for r in s.scalars(select(UsageRecord))
+        if json.loads(r.payload).get("source") != "retained accounting"
+    }
+    # A late native scan supersedes a deletion-time accounting snapshot too.
+    rows = [r for r in rows if r.get("source") != "retained accounting"
+            or ((r["agent"], r["session_id"]) not in native_sessions
+                and (r["agent"], r.get("receipt_session_id")) not in native_sessions)]
     for run in s.scalars(
         select(Run).where(Run.started_at >= min(start, month), Run.started_at <= now)
     ):
         # A usage record means a model was used. Monitor jobs never call one, and a run that recorded
         # no tokens and no cost (refused at the price gate, turned away at a usage limit, cut off before
         # the model answered) has no usage to price, so it is not a record at all, priced or unpriced.
-        if run.agent not in cfg["accounts"] or (run.agent, run.session_id) in native_sessions or run.stage == "running":
+        if (run.agent not in cfg["accounts"] or (run.agent, run.session_id) in native_sessions
+                or (run.agent, f"mcd-run-{run.id}") in native_sessions or run.stage == "running"):
             continue
         if run.input_tokens is None and run.output_tokens is None and run.cost_usd is None:
             continue

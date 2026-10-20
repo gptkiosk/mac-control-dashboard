@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import RouteRecoveryNotice from './RouteRecoveryNotice.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { getJson, postJson, type Card } from '@/lib/api'
 import { agentLabel } from '@/lib/cards'
@@ -61,7 +62,7 @@ watch(() => [props.card.id, props.card.project?.id, props.card.column, props.car
 function chooseFree() {
   closePanels()
   freeModel.value = freeModels.value[0] ?? ''
-  const preferred = props.card.agent_target || (props.card.mode === 'edit' ? 'mm-developer' : 'mm-main')
+  const preferred = props.card.agent_target || (freeTargets.value.find(t => /developer$/.test(t)) || freeTargets.value[0] || '')
   freeTarget.value = freeTargets.value.includes(preferred) ? preferred : freeTargets.value[0] ?? ''
   showFree.value = true
 }
@@ -71,7 +72,7 @@ function chooseCheap(route: { agent: 'claude' | 'codex'; model: string }) {
 }
 function choosePaid() {
   closePanels(); paidModel.value = paidModels.value[0] ?? ''
-  const preferred = props.card.agent_target || (props.card.mode === 'edit' ? 'mm-developer' : 'mm-main')
+  const preferred = props.card.agent_target || (paidTargets.value.find(t => /developer$/.test(t)) || paidTargets.value[0] || '')
   paidTarget.value = paidTargets.value.includes(preferred) ? preferred : paidTargets.value[0] ?? ''
   paidAck.value = false; showPaid.value = true
 }
@@ -148,6 +149,7 @@ async function retry(route?: ProjectNode['routes'][number]) {
 
 <template>
   <section v-if="visible" class="task-retry" aria-label="Rerun failed task">
+    <RouteRecoveryNotice :info="project?.route_reliability" :agent="card.agent" :model="card.model" failed />
     <div v-if="timedOut" class="timeout-ack notice-warn" role="group" aria-label="Timed-out attempt">
       <p>The last attempt timed out. MCD cannot tell what it changed or whether the provider is still working on it, so a new attempt needs your confirmation.</p>
       <label class="check"><input v-model="timeoutAck" type="checkbox" :disabled="busy" />I reviewed the partial work and want a new attempt.</label>
@@ -170,7 +172,7 @@ async function retry(route?: ProjectNode['routes'][number]) {
     </div>
     <div v-if="showCheap && cheapRoute" class="free-choice" aria-label="Retry on a subscription model">
       <p><strong>Retry on {{ cheapLabel(cheapRoute) }}</strong></p>
-      <p class="muted small">Uses your {{ agentLabel(cheapRoute.agent) }} subscription, so there is no per-token charge. Same scope, workspace and dependencies; earlier work stays unverified.</p>
+      <p class="muted small">Uses your {{ agentLabel(cheapRoute.agent) }} membership and its shared quota; provider settings may enable overage charges. Same scope, workspace and dependencies; earlier work stays unverified.</p>
       <label v-if="card.mode === 'read'" class="check"><input v-model="cheapEdit" type="checkbox" :disabled="busy" />Let it edit files and commit on this project’s branch. This switches the task from read-only to edit mode.</label>
       <label v-if="cheapEdit" class="check"><input v-model="cheapAck" type="checkbox" :disabled="busy" />I approve the switch from read-only review to workspace execution.</label>
       <div class="retry-actions"><button type="button" class="btn primary" :disabled="busy || !ready || (cheapEdit && !cheapAck)" @click="goCheap">{{ busy ? 'Queueing…' : 'Start retry' }}</button><button type="button" class="btn" :disabled="busy" @click="showCheap = false">Cancel</button></div>
