@@ -10,6 +10,10 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+### Fixed
+
+- **Project planning recovery** retries failed coordinator, planner and plan-review runs on the next approved route, including reviewed-free Hermes routes when free-only dispatch is enabled. Planning retries never start project stories.
+
 ## [0.6.32] - 2026-10-19
 
 ### Fixed

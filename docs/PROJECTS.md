@@ -45,8 +45,12 @@ stories still require explicit scope; errors name the affected story and missing
 Invalid JSON, a failed run, or a changed revision cannot use this shortcut. The parser
 accepts no arbitrary trailing content; one redundant closing brace after a complete `nodes`
 object is tolerated, and the original run output remains available. **Retry planning**
-starts a new planning pipeline after its coordination review. Recovery never starts story
-execution or authorizes publication.
+starts a new planning pipeline after its coordination review. If coordination, planning or
+plan review fails, times out or is interrupted, MCD automatically retries that read-only
+planning step on the next configured, approved route that has not already been tried. With
+free-only dispatch enabled, recovery is limited to reviewed-free Hermes routes. If all
+eligible routes fail, the project and brief remain available to edit and retry. Recovery
+never starts story execution or authorizes publication.
 
 ## Story assignment preference
 
