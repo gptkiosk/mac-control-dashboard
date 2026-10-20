@@ -10,6 +10,12 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+### Added
+
+- **One-click packaged updates, as on RCD**: on a packaged install with release-signature trust, **Check for updates** then **Update to X.Y.Z** is one confirmation. The server downloads the release, verifies its signature against the key pinned on this Mac, stages it and installs it with the usual drain check, data snapshot, health check and automatic rollback. A page reload or leaving the page during staging carries on with the update you confirmed. Without signature trust the pasted manifest SHA-256 and the separate install confirmation stay as before, and the panel says how to switch.
+- The packaged Updates panel shows each step of an update (download, verify, prepare, safety checks, backup, switch, restart and health check, finish), how it ended and a log, recorded by the helper in `<root>/state/operation.json`. It survives the service restart and reports a helper that stopped without a result.
+- `update_helper.py enable-signed-updates --fingerprint SHA256:... --allowed-signers FILE` switches an existing install to signature trust after you name the key, and `update_helper.py refresh-helper` brings an older pinned helper up to the current version. The update path changed: run `refresh-helper` once after installing this release so the helper writes the step record and knows `enable-signed-updates`.
+
 ### Changed
 
 - **Same as RCD, from the congruency pass**: a missing agent CLI on the MCP page is a quiet "Not available on this host" note instead of an error, and a failing list command still shows its own redacted message. Optional system tools refresh their rows after a health check and show a newer version only beside an outdated tool. The task editor gains Maximum attempts and Retry backoff, so a failing task can retry by itself. The project review's Spending and billing note says failed planning steps move to the next approved route and the project stays open to revise and retry. Smaller alignments: Service actions width, Housekeeping spacing, the Profile readiness link to Agent roles. Overview explains a stopped or missing macmon in a plain sentence instead of `macmon disabled`.
