@@ -10,9 +10,11 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.33] - 2026-10-19
+
 ### Fixed
 
-- **Project planning recovery** retries failed coordinator, planner and plan-review runs on the next approved route, including reviewed-free Hermes routes when free-only dispatch is enabled. Planning retries never start project stories.
+- **Project planning recovery** retries coordinator, planner and plan-review failures, timeouts and interruptions on the next approved route, including reviewed-free Hermes routes when free-only dispatch is enabled. Exhausted planning routes leave the project editable and retryable; recovery never starts project stories.
 
 ## [0.6.32] - 2026-10-19
 
@@ -896,4 +898,5 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.3.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.1
 [0.6.31]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.31
 [0.6.32]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.32
+[0.6.33]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.33
 [0.6.30]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.30
