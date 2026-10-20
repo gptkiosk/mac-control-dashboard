@@ -42,7 +42,7 @@ const reviewCard = (): CardDetail => ({
 })
 
 describe('CardDetailPanel', () => {
-  it('shows the job envelope and why this route, only when the card has them', async () => {
+  it('shows the job envelope, who it is assigned to and why this route, only when the card has them', async () => {
     const withEnvelope = { ...card({ id: 7 }), runs: [], kind: 'implement', size: 'm', risk: 'low', area: 'web', route_tier: 'free', route_reason: 'Reversible and low risk: free is enough.' } as unknown as CardDetail
     const { w } = mountPanel(withEnvelope)
     await flushPromises()
@@ -308,6 +308,20 @@ describe('CardDetailPanel', () => {
     const patch = calls(f, 'PATCH', '/api/cards/9')[0]!
     expect(JSON.parse(String(patch[1]?.body))).toEqual({ body: 'new prompt' })
     expect(w.get('[data-testid="panel-message"]').text()).toContain('cleared the approval')
+    w.unmount()
+  })
+
+  it('edits the retry policy so a failing task can try again on its own', async () => {
+    const { w, f } = mountPanel({ ...card({ id: 11 }), runs: [] }, (u, init) =>
+      u === '/api/cards/11' && init?.method === 'PATCH' ? { body: card({ id: 11, max_attempts: 3, retry_backoff_s: 60 }) } : undefined)
+    await flushPromises()
+    await w.findAll('button').find((b) => b.text() === 'Edit')!.trigger('click')
+    await flushPromises()
+    await w.get('#ed-max-attempts').setValue('3')
+    await w.get('#ed-retry-backoff').setValue('60')
+    await w.get('form[aria-label="Edit card"]').trigger('submit')
+    await flushPromises()
+    expect(JSON.parse(String(calls(f, 'PATCH', '/api/cards/11')[0]![1]?.body))).toEqual({ max_attempts: 3, retry_backoff_s: 60 })
     w.unmount()
   })
 

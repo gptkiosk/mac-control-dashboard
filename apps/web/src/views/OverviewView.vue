@@ -63,6 +63,13 @@ function usedOf(used: number | null | undefined, total: number | null | undefine
   if (used == null || total == null) return DASH
   return `${formatBytes(used)} of ${formatBytes(total)}`
 }
+// macmon supplies the GPU, power and temperature readings; say what its state means for the tiles.
+const MACMON_TEXT: Record<string, string> = {
+  starting: 'Starting the GPU and power sensor (macmon)…',
+  restarting: 'The GPU and power sensor (macmon) is restarting; those tiles may lag.',
+  missing: 'GPU, power and temperature need macmon, which is not installed.',
+  disabled: 'Live sampling is off, so these are the last saved readings.',
+}
 </script>
 
 <template>
@@ -76,7 +83,7 @@ function usedOf(used: number | null | undefined, total: number | null | undefine
       Could not load metrics: {{ current.error.value }}
     </p>
     <p v-if="m && m.macmon_status !== 'running'" class="muted small" data-testid="macmon-status">
-      macmon {{ m.macmon_status }}
+      {{ MACMON_TEXT[m.macmon_status] ?? `macmon ${m.macmon_status}` }}
     </p>
 
     <div v-if="m" class="grid">

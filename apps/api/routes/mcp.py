@@ -78,22 +78,23 @@ async def list_for(agent: str, refresh: bool = False) -> dict:
         return cached[1]
     args, parse = mcp.LIST_COMMANDS[agent]
     code, out = await _run_list_command(spec.binary(get_settings()), *args, timeout=90)
-    if code != 0:
+    now = int(time.time())
+    if code == 127:
+        # The command is not on this host: an agent the operator does not use here. That is a state, not a failure.
+        result = {"agent": agent, "servers": [], "error": None, "installed": False, "checked_at": now}
+    elif code != 0:
         error = f"list failed (exit {code})"
-        if code == 127:
-            error += ": command not found"
-        elif code == 124:
+        if code == 124:
             error += ": command timed out after 90 seconds"
         elif out:
             error += f": {out}"
-        result = {"agent": agent, "servers": [], "error": error,
-                  "checked_at": int(time.time())}
+        result = {"agent": agent, "servers": [], "error": error, "installed": True, "checked_at": now}
     else:
         try:
-            result = {"agent": agent, "servers": parse(out), "error": None, "checked_at": int(time.time())}
+            result = {"agent": agent, "servers": parse(out), "error": None, "installed": True, "checked_at": now}
         except ValueError:
-            result = {"agent": agent, "servers": [], "error": "could not parse the list output",
-                      "checked_at": int(time.time())}
+            result = {"agent": agent, "servers": [], "error": "could not parse the list output", "installed": True,
+                      "checked_at": now}
     _CACHE[agent] = (time.time(), result)
     return result
 

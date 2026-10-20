@@ -64,6 +64,7 @@ async function save() { await action(async () => {
   notice.value = tab.value === 'coordinator' ? 'Coordinator bootstrap preferences saved.' : 'Profile saved. New projects use these defaults.'
 }) }
 async function startCoordinatorBootstrap() { await action(async () => {
+  // Persist the current choices before the server snapshots them into the setup brief.
   apply(await putJson<Profile>('/api/profile', preferences.value))
   const result = await postJson<{project_id:number}>('/api/profile/coordinator-bootstrap/start')
   notice.value = 'Setup plan ready. Review and submit its built-in stories in Projects; Hermes has not started work.'
@@ -197,7 +198,9 @@ async function importPreferences(event: Event) { await action(async () => {
       <label class="row bootstrap-model"><span class="name">Security review</span><AppSelect v-model="preferences.coordinator_bootstrap.security_review" aria-label="Security review policy"><option value="risk_based">Include for security-sensitive or high-risk work</option><option value="every_project">Include in every project</option><option value="by_request">Include when I request it</option></AppSelect></label>
       <aside class="bootstrap-note"><strong>Ready to configure?</strong> Check that Hermes is installed, assigned as Coordinator, has its guidance and a default model. Starting setup prepares a built-in editable plan without a model call. Review and submit it before agent work begins.</aside>
       <ul v-if="bootstrapReadiness" class="readiness-list" aria-label="Hermes readiness">
-        <li v-for="check in bootstrapReadiness.checks" :key="check.id" :class="check.ready ? 'ready' : 'missing'"><span aria-hidden="true">{{ check.ready ? '✓' : '!' }}</span><span>{{ check.label }}</span><RouterLink v-if="!check.ready" :to="check.link">{{ check.id === 'guidance' ? 'Open Agent roles' : 'Fix' }}</RouterLink></li>
+        <li v-for="check in bootstrapReadiness.checks" :key="check.id" :class="check.ready ? 'ready' : 'missing'">
+          <span aria-hidden="true">{{ check.ready ? '✓' : '!' }}</span><span>{{ check.label }}</span><RouterLink v-if="!check.ready" :to="check.link">{{ check.id === 'guidance' ? 'Open Agent roles' : 'Fix' }}</RouterLink>
+        </li>
       </ul>
       <div class="actions"><button class="btn primary" type="button" :disabled="busy || !bootstrapReadiness?.ready" @click="startCoordinatorBootstrap">{{ busy ? 'Checking…' : 'Start agent setup' }}</button><button class="btn" type="button" :disabled="busy" @click="refreshCoordinatorReadiness">Recheck readiness</button><button class="btn" :disabled="busy">Save coordinator setup</button><RouterLink to="/agents" class="btn">Review installed agents</RouterLink></div>
     </form>

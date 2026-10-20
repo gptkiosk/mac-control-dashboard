@@ -4,7 +4,7 @@ import { nextTick } from 'vue'
 import UpdatePanel from '@/components/UpdatePanel.vue'
 import { stubFetch, calls, headerOf } from './helpers'
 
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers() })
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); sessionStorage.clear() })
 
 const REPO = 'gptkiosk/mac-control-dashboard'
 const names: Record<string, string> = { v0: '0.9', v1: '1.0', v2: '1.1', v3: '1.2', v4: '1.3', v5: '1.4' }
@@ -42,7 +42,7 @@ it('says what is available on an unmanaged host and offers no GitHub check, down
 it('does not contact GitHub on mount: only the local status is read', async () => {
   const f = stubFetch(url => url === '/api/app-updates' ? { body: managed() } : undefined)
   const w = mount(UpdatePanel); await flushPromises()
-  expect(f.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${url}`)).toEqual(['GET /api/app-updates'])
+  expect(f.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${url}`)).toEqual(['GET /api/app-updates', 'GET /api/app-updates/operation'])   // both local; nothing contacts GitHub
   expect(w.text()).not.toContain('Checked GitHub')
   w.unmount()
 })
@@ -219,6 +219,252 @@ it('follows progress through a service restart and reports the health result', a
   await tick(2000)
   expect(w.text()).toContain('Now running 1.1. Health check: ready')
   expect(w.text()).not.toContain('Reconnecting')
+  w.unmount()
+})
+
+const signed = (over: Record<string, unknown> = {}, install: Record<string, unknown> = {}) => managed({ trust: 'ssh-signature', ...over }, install)
+
+it('with release-signature trust there is no digest box: one confirmation downloads, verifies and installs, in that order', async () => {
+  let staged = false, applied = false
+  const f = stubFetch((url, init) => {
+    if (url === '/api/app-updates') {
+      const versions = [version('v1', { change: 'install' }), ...(staged ? [version('v2', { version: '1.1', repository: REPO })] : [])]
+      return { body: signed({}, { versions, ...(applied ? { current: 'v2', previous: 'v1', last: { tx: 't2', kind: 'apply', outcome: 'committed', detail: 'version 1.1 healthy', target: 'v2', from: 'v1', at: 1 } } : {}) }) }
+    }
+    if (url.startsWith('/api/app-updates/check')) return { body: { available: true, candidate: candidate(), installed: '1.0' } }
+    if (url === '/api/app-updates/fetch' && init?.method === 'POST') { staged = true; return { status: 202, body: { started: 'fetch', poll: '/api/app-updates' } } }
+    if (url === '/api/app-updates/apply' && init?.method === 'POST') { applied = true; return { status: 202, body: { started: 'apply', poll: '/api/app-updates' } } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  expect(w.text()).toContain('verified by their signature')
+  await button(w, 'Check for updates').trigger('click'); await flushPromises()
+  expect(button(w, 'Download and verify 1.1')).toBeUndefined()
+  await button(w, 'Update to 1.1').trigger('click'); await flushPromises()
+  expect(w.find('input[maxlength="64"]').exists()).toBe(false)
+  const go = w.get('.confirm').findAll('button')[0]!
+  expect(go.attributes('disabled')).toBeDefined()
+  expect(calls(f, 'POST', '/api/app-updates/fetch')).toHaveLength(0)
+  await w.get('.confirm input[type="checkbox"]').setValue(true)
+  vi.useFakeTimers()
+  await w.get('.confirm').findAll('button')[0]!.trigger('click'); await tick(0)
+  const [, init] = calls(f, 'POST', '/api/app-updates/fetch')[0]!
+  expect(JSON.parse(init!.body as string)).toEqual({ version: '1.1', channel: 'stable', confirm: true })   // no digest is sent
+  await tick(2000)
+  const apply = calls(f, 'POST', '/api/app-updates/apply')
+  expect(apply).toHaveLength(1)
+  expect(JSON.parse(apply[0]![1]!.body as string)).toEqual({ version_id: 'v2' })
+  await tick(2000)
+  expect(w.text()).toContain('Now running 1.1')
+  w.unmount()
+})
+
+it('with release-signature trust, work in progress refuses the install, says so, and leaves the verified package staged', async () => {
+  vi.useFakeTimers()
+  let staged = false
+  const f = stubFetch((url, init) => {
+    if (url === '/api/app-updates') return { body: signed({}, { versions: [version('v1', { change: 'install' }), ...(staged ? [version('v2', { version: '1.1', repository: REPO })] : [])] }) }
+    if (url.startsWith('/api/app-updates/check')) return { body: { available: true, candidate: candidate(), installed: '1.0' } }
+    if (url === '/api/app-updates/fetch' && init?.method === 'POST') { staged = true; return { status: 202, body: { started: 'fetch' } } }
+    if (url === '/api/app-updates/apply' && init?.method === 'POST') return { status: 409, body: { detail: { message: 'Drain first. Nothing was stopped.', blockers: ['1 run(s) still running'] } } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  await button(w, 'Check for updates').trigger('click'); await flushPromises()
+  await button(w, 'Update to 1.1').trigger('click'); await flushPromises()
+  await w.get('.confirm input[type="checkbox"]').setValue(true)
+  await w.get('.confirm').findAll('button')[0]!.trigger('click'); await tick(0); await tick(2000); await flushPromises()
+  expect(calls(f, 'POST', '/api/app-updates/apply')).toHaveLength(1)
+  expect(w.get('[role="alert"]').text()).toContain('Drain first')
+  expect(w.get('[role="alert"]').text()).toContain('still running')
+  expect(w.get('[role="alert"]').text()).toContain('stays staged')
+  w.unmount()
+})
+
+it('with a pinned digest the old two-step flow is unchanged and says how to switch to signature trust', async () => {
+  stubFetch(url => url === '/api/app-updates' ? { body: managed({ trust: 'pinned-digest' }) } : undefined)
+  const w = mount(UpdatePanel); await flushPromises()
+  expect(w.text()).toContain('enable-signed-updates')
+  expect(w.text()).not.toContain('verified by their signature')
+  w.unmount()
+})
+
+it('never offers an older staged version as an install: it is listed under older versions and only the rollback button reverses', async () => {
+  stubFetch(url => url === '/api/app-updates'
+    ? { body: managed({}, { current: 'v3', previous: 'v1', versions: [version('v1'), version('v2', { version: '1.1' }), version('v3', { version: '1.2' }), version('v4', { version: '1.3' })] }) }
+    : undefined)
+  const w = mount(UpdatePanel); await flushPromises()
+  expect(button(w, 'Install 1.3')).toBeDefined()                                  // newer: offered
+  expect(button(w, 'Install 1.0')).toBeUndefined()                                // older: not offered
+  expect(button(w, 'Install 1.1')).toBeUndefined()
+  expect(w.get('details.older summary').text()).toContain('Older versions kept on this host (2)')
+  expect(w.get('details.older').text()).toContain('Use Rollback')
+  expect(button(w, 'Roll back to 1.0')).toBeDefined()
+  expect(w.text()).toContain('1 staged update is ready')
+  w.unmount()
+})
+
+const intent = (over: Record<string, unknown> = {}) => sessionStorage.setItem('mcd-update-intent', JSON.stringify({ version: '1.1', channel: 'stable', at: Date.now(), ...over }))
+const withStaged = (extra: Record<string, unknown> = {}) => signed({}, { versions: [version('v1', { change: 'install' }), version('v2', { version: '1.1', repository: REPO })], ...extra })
+
+it('carries on with a confirmed update after a reload once the package is staged, without asking again', async () => {
+  vi.useFakeTimers()
+  intent()
+  const f = stubFetch((url, init) => {
+    if (url === '/api/app-updates') return { body: withStaged() }
+    if (url === '/api/app-updates/apply' && init?.method === 'POST') return { status: 202, body: { started: 'apply' } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await tick(0); await flushPromises(); await tick(2000)
+  expect(calls(f, 'POST', '/api/app-updates/fetch')).toHaveLength(0)           // already staged: no second download
+  const apply = calls(f, 'POST', '/api/app-updates/apply')
+  expect(apply).toHaveLength(1)
+  expect(JSON.parse(apply[0]![1]!.body as string)).toEqual({ version_id: 'v2' })
+  expect(sessionStorage.getItem('mcd-update-intent')).toBeNull()
+  w.unmount()
+})
+
+it('waits for staging that is still running on the host after a reload, then installs', async () => {
+  vi.useFakeTimers()
+  intent()
+  let done = false
+  const f = stubFetch((url, init) => {
+    if (url === '/api/app-updates') return { body: done ? withStaged() : signed({}, { tx: { id: 't', kind: 'stage', phase: 'staging', target: 'x' }, needs_recovery: true }) }
+    if (url === '/api/app-updates/apply' && init?.method === 'POST') return { status: 202, body: { started: 'apply' } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await tick(0); await flushPromises()
+  expect(w.text()).toContain('Staging the package')
+  expect(w.text()).toContain('reload this page and it will carry on')
+  expect(calls(f, 'POST', '/api/app-updates/apply')).toHaveLength(0)
+  done = true
+  await tick(2000); await tick(2000)
+  expect(calls(f, 'POST', '/api/app-updates/apply')).toHaveLength(1)
+  w.unmount()
+})
+
+it('ignores an old, finished, unrelated or unsigned intent and never installs on its own', async () => {
+  for (const [stored, body] of [
+    [{ at: Date.now() - 31 * 60 * 1000 }, withStaged()],                                  // older than 30 minutes
+    [{ version: '1.0' }, withStaged()],                                                  // already the running version
+    [{ version: '9.9' }, withStaged()],                                                  // nothing of that version staged or staging
+    [{}, managed({ trust: 'pinned-digest' }, { versions: [version('v1', { change: 'install' }), version('v2', { version: '1.1', repository: REPO })] })],
+  ] as const) {
+    sessionStorage.clear(); intent(stored)
+    const f = stubFetch(url => url === '/api/app-updates' ? { body } : undefined)
+    const w = mount(UpdatePanel); await flushPromises()
+    expect(calls(f, 'POST', '/api/app-updates/apply')).toHaveLength(0)
+    expect(calls(f, 'POST', '/api/app-updates/fetch')).toHaveLength(0)
+    w.unmount()
+  }
+})
+
+it('says why when staging fails on the host instead of waiting out the clock', async () => {
+  vi.useFakeTimers()
+  let failed = false
+  stubFetch((url, init) => {
+    if (url === '/api/app-updates') return { body: signed({}, { versions: [version('v1', { change: 'install' })], ...(failed ? { last: { tx: 'tf', kind: 'stage', outcome: 'failed', detail: 'staging failed: byte compilation failed', target: null, from: null, at: 1 } } : {}) }) }
+    if (url.startsWith('/api/app-updates/check')) return { body: { available: true, candidate: candidate(), installed: '1.0' } }
+    if (url === '/api/app-updates/fetch' && init?.method === 'POST') { failed = true; return { status: 202, body: { started: 'fetch' } } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  await button(w, 'Check for updates').trigger('click'); await flushPromises()
+  await button(w, 'Update to 1.1').trigger('click'); await flushPromises()
+  await w.get('.confirm input[type="checkbox"]').setValue(true)
+  await w.get('.confirm').findAll('button')[0]!.trigger('click'); await tick(0)
+  await tick(2000); await flushPromises()
+  expect(w.get('[role="alert"]').text()).toContain('Staging reported: staging failed: byte compilation failed')
+  expect(sessionStorage.getItem('mcd-update-intent')).toBeNull()
+  w.unmount()
+})
+
+const operationBody = (state: string, over: Record<string, unknown> = {}) => ({
+  operation: { id: 'abcd1234', state, version: '1.1', message: state === 'succeeded' ? 'version 1.1 healthy' : 'Updating.', steps: [
+    { name: 'fetch', state: 'ok', detail: 'downloaded the manifest, signature and package' },
+    { name: 'verify', state: 'ok', detail: 'ssh-signature (dashboard-release)' },
+    { name: 'stage', state: 'ok', detail: 'prepared' },
+    { name: 'safety', state: 'ok', detail: 'nothing running or waiting' },
+    { name: 'snapshot', state: 'ok', detail: 'saved data-abc.db' },
+    { name: 'switch', state: 'ok', detail: 'the new version is in place' },
+    { name: 'health', state: state === 'succeeded' ? 'ok' : 'running', detail: 'waiting for healthy' }], ...over },
+  active: state === 'running', log: ['10:00:01  fetch: ok', '10:00:09  stage: ok', '10:01:00  result: succeeded - version 1.1 healthy'],
+})
+
+it('shows each step of the update, what it is doing, how it ended and the log, like the checkout updater', async () => {
+  stubFetch(url => {
+    if (url === '/api/app-updates') return { body: signed() }
+    if (url === '/api/app-updates/operation') return { body: operationBody('succeeded') }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  const block = w.get('[aria-label="Update progress"]')
+  expect(block.get('h4').text()).toBe('Update to v1.1: succeeded')
+  expect(block.findAll('ol.steps li').map(li => li.find('strong').text())).toEqual([
+    'Download the release from GitHub', 'Verify the release signature', 'Prepare it on this host', 'Safety checks', 'Back up your data', 'Switch versions', 'Restart and check health'])
+  expect(block.text()).toContain('ssh-signature (dashboard-release)')
+  expect(block.text()).toContain('version 1.1 healthy')
+  expect(block.get('details summary').text()).toBe('Log')
+  expect(block.get('details pre').text()).toContain('result: succeeded')
+  w.unmount()
+})
+
+it('shows a rollback and a refused update as problems with their reason, not as success', async () => {
+  stubFetch(url => {
+    if (url === '/api/app-updates') return { body: signed() }
+    if (url === '/api/app-updates/operation') return { body: operationBody('rolled_back', { message: 'The new version did not pass its health check and the previous version was restored.', steps: [{ name: 'health', state: 'failed', detail: 'health reports version 1.0' }] }) }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  const block = w.get('[aria-label="Update progress"]')
+  expect(block.get('h4').text()).toBe('Update to v1.1: rolled back')
+  expect(block.get('[role="alert"]').text()).toContain('previous version was restored')
+  expect(block.get('li[data-state="failed"]').text()).toContain('health reports version 1.0')
+  w.unmount()
+})
+
+it('works with an older helper that keeps no operation record', async () => {
+  stubFetch(url => url === '/api/app-updates' ? { body: signed() } : undefined)   // the operation route answers 404
+  const w = mount(UpdatePanel); await flushPromises()
+  expect(w.find('[aria-label="Update progress"]').exists()).toBe(false)
+  expect(w.text()).toContain('Running 1.0')
+  w.unmount()
+})
+
+it('does not call an update in progress interrupted, and does not list the folder being built or removed as a broken version', async () => {
+  const tx = { id: 't', kind: 'stage', phase: 'staging', target: 'v4' }
+  stubFetch(url => {
+    if (url === '/api/app-updates') return { body: managed({}, { tx, needs_recovery: true }) }
+    if (url === '/api/app-updates/operation') return { body: { operation: { id: 'abcd1234', state: 'running', version: '1.3', message: 'Staging', steps: [{ name: 'stage', state: 'running', detail: 'building' }] }, active: true, log: [] } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  expect(w.text()).not.toContain('An earlier update was interrupted')
+  expect(w.text()).not.toContain('partly staged')
+  w.unmount()
+  // the same state with no helper holding the lock is a real interruption and still says so, with the leftover listed
+  stubFetch(url => {
+    if (url === '/api/app-updates') return { body: managed({}, { tx, needs_recovery: true }) }
+    if (url === '/api/app-updates/operation') return { body: { operation: null, active: false, log: [] } }
+    return undefined
+  })
+  const v = mount(UpdatePanel); await flushPromises()
+  expect(v.text()).toContain('An earlier update was interrupted')
+  expect(v.text()).toContain('partly staged')
+  v.unmount()
+})
+
+it('stops offering the release once it is the installed version', async () => {
+  stubFetch(url => {
+    if (url === '/api/app-updates') return { body: managed() }
+    if (url === '/api/app-updates/operation') return { body: { operation: null, active: false, log: [] } }
+    if (url.startsWith('/api/app-updates/check')) return { body: { available: false, candidate: candidate({ version: '1.0', tag: 'v1.0' }), installed: '1.0' } }
+    return undefined
+  })
+  const w = mount(UpdatePanel); await flushPromises()
+  await button(w, 'Check for updates').trigger('click'); await flushPromises()
+  expect(w.find('article.release').exists()).toBe(false)
+  expect(w.text()).not.toContain('Update to 1.0')
   w.unmount()
 })
 

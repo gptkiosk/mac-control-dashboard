@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ApiError, getJson, postJson } from '@/lib/api'
+import ManagedItem from '@/components/ManagedItem.vue'
+import UpdateProgress, { type UpdateOperation } from '@/components/UpdateProgress.vue'
 
 // One-click update of a source checkout (the "driver"). Nothing here runs by itself: checking reads the public
 // release list and one signed manifest, and starting needs the operator to confirm this exact tag and commit.
@@ -42,6 +44,12 @@ const releaseLink = computed(() => {
   const url = candidate.value?.html_url
   return url && url.startsWith(`https://github.com/${REPOSITORY}/`) ? url : null
 })
+// The shared progress view (the same one the packaged updater on RCD uses) names the version and treats "starting" as running.
+const progress = computed<UpdateOperation | null>(() => {
+  const o = op.value?.operation
+  return o ? { id: o.id, state: o.state === 'starting' ? 'running' : o.state, version: o.tag, message: o.message, steps: o.steps } : null
+})
+const word = computed(() => running.value ? 'working' : candidate.value && verified.value ? 'update available' : checkedAt.value ? 'up to date' : 'source checkout')
 const canStart = computed(() => !!candidate.value && !!verified.value && candidate.value.repository === REPOSITORY && blockers.value.length === 0 && !busy.value && !running.value)
 
 function message(e: unknown, fallback: string) {
@@ -126,64 +134,55 @@ onMounted(async () => {
 onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
 </script>
 <template>
-  <section class="source-update" aria-labelledby="source-update-title">
-    <header class="head">
-      <h3 id="source-update-title" class="section-title">Update this checkout</h3>
-      <p class="lead muted">Source checkout: one click updates it to the newest official release once you confirm the version.</p>
-    </header>
-
+  <section class="source-update" aria-label="Update this checkout">
     <p v-if="error" class="notice-warn" role="alert">{{ error }}</p>
     <p v-if="notice" class="note" role="status">{{ notice }}</p>
     <p v-if="reconnecting" class="note muted" role="status">Reconnecting to the service. It is restarting, so this can take a minute. Nothing is started again from here.</p>
 
     <template v-if="!inspection.eligible">
-      <div class="block">
-        <p class="status" role="status">One-click update is not available here.</p>
-        <ul class="list"><li v-for="p in inspection.problems" :key="p">{{ p }}</li></ul>
-      </div>
+      <ul class="items">
+        <ManagedItem name="Running release" data-test="dashboard" mark="info" word="update by hand" :version="inspection.version ?? null" detail="One-click update is not available here." health-disabled />
+      </ul>
+      <ul class="list"><li v-for="p in inspection.problems" :key="p">{{ p }}</li></ul>
     </template>
     <template v-else>
-      <dl class="facts running">
-        <dt>Running</dt><dd>{{ inspection.version }} <span class="muted">(commit {{ inspection.short }}{{ inspection.tag ? `, ${inspection.tag}` : '' }})</span></dd>
-        <dt>Checkout</dt><dd class="mono">{{ inspection.checkout }}</dd>
-        <dt>Updates from</dt><dd>{{ inspection.remote ?? `the official repository (${REPOSITORY})` }}</dd>
-      </dl>
-      <div class="actions">
-        <button class="btn" :disabled="busy || running" @click="check">Check for updates</button>
-        <span v-if="checkedAt" class="muted small">Checked GitHub {{ new Date(checkedAt).toLocaleString() }}</span>
-      </div>
+      <ul class="items">
+        <ManagedItem name="Running release" data-test="dashboard" :mark="candidate && verified ? 'warn' : 'ok'" :word="word"
+          :version="inspection.version ?? null" :latest="candidate && verified ? candidate.version : null" :busy="running"
+          :detail="`Source checkout · commit ${inspection.short}${inspection.tag ? ` (${inspection.tag})` : ''}`" health-disabled>
+          <button class="btn primary" :disabled="busy || running" @click="check">Check for updates</button>
+          <span v-if="checkedAt" class="muted small">Checked GitHub {{ new Date(checkedAt).toLocaleString() }}</span>
+          <template #more><span class="muted small">Updates from {{ inspection.remote ?? `the official repository (${REPOSITORY})` }} · <span class="mono">{{ inspection.checkout }}</span></span></template>
+        </ManagedItem>
+      </ul>
 
-      <article v-if="candidate && verified" class="block release">
-        <div>
-          <h4>Update available: {{ candidate.version }}</h4>
-          <p class="muted small">{{ candidate.tag }} · stable · published {{ candidate.published_at ?? 'unknown' }}</p>
-        </div>
+      <article v-if="candidate && verified" class="release">
+        <h3>Update available: {{ candidate.version }}</h3>
+        <p class="muted small">{{ candidate.tag }} · stable channel · published {{ candidate.published_at ?? 'unknown' }}</p>
         <dl class="facts">
-          <dt>From</dt><dd>{{ inspection.version }} ({{ inspection.short }})</dd>
+          <dt>From</dt><dd>{{ inspection.version }} <span class="mono">({{ inspection.short }})</span></dd>
           <dt>To</dt><dd>{{ candidate.version }} <span class="mono">({{ verified.commit.slice(0, 12) }})</span></dd>
-          <dt>Repository</dt><dd>{{ candidate.repository }}</dd>
-          <dt>Signature</dt><dd>Valid, {{ verified.signer }}. The tag must point at the signed commit.</dd>
+          <dt>Source repository</dt><dd>{{ candidate.repository }}</dd>
+          <dt>Authenticity</dt><dd>Signature valid, {{ verified.signer }}. The tag must point at the signed commit.</dd>
         </dl>
-        <div>
-          <h5>Release notes</h5>
-          <pre class="notes log-window">{{ candidate.notes || 'This release has no notes.' }}</pre>
-          <a v-if="releaseLink" :href="releaseLink" target="_blank" rel="noopener noreferrer">View this release on GitHub</a>
-        </div>
+        <h4>Release notes (plain text)</h4>
+        <pre class="notes log-window">{{ candidate.notes || 'This release has no notes.' }}</pre>
         <div v-if="blockers.length">
           <p class="status">Finish this work first:</p>
           <ul class="list" aria-label="Work that must finish first"><li v-for="b in blockers" :key="b">{{ b }}</li></ul>
           <p class="muted small">Nothing is stopped or cancelled for you. Check again when it is done.</p>
-          <p v-if="blockers.some(b => b.includes('waiting on a human decision'))" class="muted small">If an approval wait is an old run that is already finished, <a href="#housekeeping">Housekeeping</a> below can resolve it.</p>
+          <p v-if="blockers.some(b => b.includes('waiting on a human decision'))" class="muted small">If an approval wait is an old run that is already finished, <a href="#housekeeping">Housekeeping</a> can resolve it.</p>
         </div>
-        <div v-else class="actions">
-          <button class="btn primary" :disabled="!canStart" @click="ask">Update to {{ candidate.version }}</button>
+        <div class="actions">
+          <a v-if="releaseLink" class="release-link" :href="releaseLink" target="_blank" rel="noopener noreferrer">View this release on GitHub</a>
+          <button v-if="!blockers.length" class="btn primary" :disabled="!canStart" @click="ask">Update to {{ candidate.version }}</button>
         </div>
       </article>
 
-      <section v-if="asking && candidate && verified" class="block confirm" aria-labelledby="source-confirm-title">
-        <h4 id="source-confirm-title">Update to {{ candidate.version }}</h4>
+      <section v-if="asking && candidate && verified" class="confirm" aria-labelledby="source-confirm-title">
+        <h3 id="source-confirm-title">Update to {{ candidate.version }}</h3>
         <p>The service restarts for a short time. A data backup is taken first, and if the new version does not report exactly this release as healthy, the previous version is put back automatically. Every step is logged on the host.</p>
-        <ul class="list">
+        <ul class="preflight">
           <li>Exact release: <strong>{{ candidate.tag }}</strong>, commit <span class="mono">{{ verified.commit.slice(0, 12) }}</span>.</li>
           <li>The official source and a clean checkout are checked again right before anything changes.</li>
           <li>Nothing may be running, queued, waiting for approval or dispatching. The server checks again before it stops anything.</li>
@@ -196,49 +195,35 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
       </section>
     </template>
 
-    <section v-if="op?.operation" class="block" aria-label="Update progress">
-      <h4>{{ running ? `Updating to ${op.operation.tag}` : `Update to ${op.operation.tag}: ${op.operation.state.replace('_', ' ')}` }}</h4>
-      <p :class="op.operation.state === 'succeeded' ? 'status' : (running ? 'muted' : 'notice-warn')" :role="running ? 'status' : 'alert'">{{ op.operation.message }}</p>
-      <ol class="steps">
-        <li v-for="s in op.operation.steps" :key="s.name" :data-state="s.state"><strong>{{ STEP_TEXT[s.name] ?? s.name }}</strong> <span class="state">{{ s.state }}</span><span v-if="s.detail" class="muted small detail">{{ s.detail }}</span></li>
-      </ol>
-      <details v-if="op.log.length">
-        <summary>Log</summary>
-        <pre class="notes log-window">{{ op.log.join('\n') }}</pre>
-      </details>
-    </section>
+    <UpdateProgress v-if="progress && op" :operation="progress" :log="op.log" :step-text="STEP_TEXT" />
   </section>
 </template>
 <style scoped>
-.source-update { display: grid; gap: var(--gap); border-top: 1px solid var(--surface-border); padding-top: var(--gap-lg); margin-top: var(--gap-sm); }
-.head { display: grid; gap: var(--gap-xs); }
-h3, h4, h5, p { margin: 0; }
-h4 { font-size: var(--font-size); font-weight: var(--font-weight-strong); }
-h5 { font-size: var(--font-size-sm); font-weight: var(--font-weight-strong); color: var(--text-muted); margin-bottom: var(--gap-xs); }
-.lead, .block p, .note { max-width: 72ch; line-height: var(--line-height); }
+/* The same look as the packaged updater (RCD's UpdatePanel): a status card, a release card, a confirmation card and the shared progress view. */
+.source-update { display: grid; gap: var(--gap-lg); }
+h3, h4, p { margin: 0; }
+h3 { font-size: var(--font-size); font-weight: var(--font-weight-strong); }
+h4 { font-size: var(--font-size-sm); font-weight: var(--font-weight-strong); color: var(--text-muted); }
+.note { max-width: 72ch; line-height: var(--line-height); }
 .status { font-weight: 600; }
-.small { font-size: var(--font-size-sm); }
-.block { display: grid; gap: var(--gap); padding: var(--gap-lg); border: 1px solid var(--surface-border); border-radius: var(--radius); background: var(--accent-soft); justify-items: start; }
-.block > * { min-width: 0; max-width: 100%; }
-.confirm { background: transparent; border-color: var(--accent); }
+.small { font-size: var(--font-size-xs); }
+.items { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--gap-sm); }
 .actions { display: flex; gap: var(--gap-sm); flex-wrap: wrap; align-items: center; }
-.block > .actions { justify-content: flex-end; width: 100%; padding-top: var(--gap); border-top: 1px solid var(--glass-border); }
 .actions .btn { min-height: var(--select-height); }
-.list { list-style: disc; display: grid; gap: var(--gap-sm); margin: 0; padding-left: 1.25rem; line-height: var(--line-height); }
-.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--gap-sm) var(--gap-lg); margin: 0; font-size: var(--font-size); line-height: var(--line-height); }
+.release-link { margin-right: auto; color: var(--accent); }
+.release, .confirm { display: grid; gap: var(--gap); border: 1px solid var(--surface-border); border-radius: var(--radius); padding: var(--gap-lg); background: var(--glass-bg); justify-items: stretch; }
+.release p, .confirm p { line-height: var(--line-height); }
+.release .actions, .confirm .actions { justify-content: flex-end; padding-top: var(--gap); border-top: 1px solid var(--glass-border); }
+.list, .preflight { margin: 0; padding-left: 1.5rem; list-style: disc; line-height: var(--line-height); display: grid; gap: var(--gap-sm); }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--gap-xs) var(--gap); margin: 0; font-size: var(--font-size-sm); }
 .facts dt { color: var(--text-muted); }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
-.running { padding: 0 var(--gap-xs); }
-.mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--font-size-sm); }
-.steps { list-style: decimal; display: grid; gap: var(--gap); margin: 0; padding-left: 1.5rem; line-height: var(--line-height); }
-.steps li::marker { color: var(--text-muted); font-weight: var(--font-weight-strong); }
-.steps .state { margin-left: var(--gap-sm); padding: 0.05rem var(--gap-sm); border-radius: var(--radius-pill); border: 1px solid var(--glass-border); font-size: var(--font-size-xs); color: var(--text-muted); text-transform: lowercase; }
-.steps li[data-state='ok'] .state { color: var(--accent); border-color: var(--accent); }
-.steps .detail { display: block; margin-top: var(--gap-xs); }
-.steps li[data-state='failed'] { color: var(--danger, #ef4f4f); }
+.mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--font-size-xs); }
 .check { display: flex; align-items: flex-start; gap: var(--gap-sm); line-height: var(--line-height); padding: var(--gap-xs) 0; }
 .check input { flex: none; margin-top: 0.3rem; accent-color: var(--accent); }
-summary { cursor: pointer; padding: var(--gap-sm) 0; }
-details { width: 100%; }
-@media (max-width: 40rem) { .facts { grid-template-columns: minmax(0, 1fr); gap: 0; } .facts dt { margin-top: var(--gap-sm); } }
+@media (max-width: 600px) {
+  .release, .confirm { padding: var(--gap); }
+  .release .actions, .confirm .actions { justify-content: stretch; }
+  .release .actions .btn, .confirm .actions .btn { flex: 1 1 100%; }
+}
 </style>

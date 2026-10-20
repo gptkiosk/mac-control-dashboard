@@ -54,8 +54,7 @@ async function go(action: 'run' | 'restart' | 'remove') {
   </div>
 </template>
 <style scoped>
-.actions { display: grid; gap: var(--gap-xs); min-width: 17rem; }
+.actions { display: grid; gap: var(--gap-xs); min-width: 12rem; }
 .buttons, .confirm { display: flex; flex-direction: row; flex-wrap: wrap; gap: var(--gap-xs); align-items: center; }
 .small { font-size: var(--font-size-sm); margin: 0; }
-.btn { white-space: nowrap; }
 </style>

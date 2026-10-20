@@ -10,6 +10,21 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.39] - 2026-10-20
+
+### Added
+
+- **One-click packaged updates, as on RCD**: on a packaged install with release-signature trust, **Check for updates** then **Update to X.Y.Z** is one confirmation. The server downloads the release, verifies its signature against the key pinned on this Mac, stages it and installs it with the usual drain check, data snapshot, health check and automatic rollback. A page reload or leaving the page during staging carries on with the update you confirmed. Without signature trust the pasted manifest SHA-256 and the separate install confirmation stay as before, and the panel says how to switch.
+- The packaged Updates panel shows each step of an update (download, verify, prepare, safety checks, backup, switch, restart and health check, finish), how it ended and a log, recorded by the helper in `<root>/state/operation.json`. It survives the service restart and reports a helper that stopped without a result.
+- `update_helper.py enable-signed-updates --fingerprint SHA256:... --allowed-signers FILE` switches an existing install to signature trust after you name the key, and `update_helper.py refresh-helper` brings an older pinned helper up to the current version. The update path changed: run `refresh-helper` once after installing this release so the helper writes the step record and knows `enable-signed-updates`.
+- **Live status, same as RCD**: Tasks, Projects and the task panel now refresh within a moment of a card, run or project changing, over a small `GET /api/events/stream` feed, and poll less often (every 15 seconds) while it is connected. Polling stays the fallback when the stream is down or busy. The feed carries only ids and short state names, never run text, and its memory is fixed (one shared ring of 256 events, at most 16 open streams). Changes made by another process still show at the next poll.
+
+### Changed
+
+- **Same as RCD, from the congruency pass**: a missing agent CLI on the MCP page is a quiet "Not available on this host" note instead of an error, and a failing list command still shows its own redacted message. Optional system tools refresh their rows after a health check and show a newer version only beside an outdated tool. The task editor gains Maximum attempts and Retry backoff, so a failing task can retry by itself. The project review's Spending and billing note says failed planning steps move to the next approved route and the project stays open to revise and retry. Smaller alignments: Service actions width, Housekeeping spacing, the Profile readiness link to Agent roles. Overview explains a stopped or missing macmon in a plain sentence instead of `macmon disabled`.
+- **One help text for dashboard updates**: the update guide now describes Check for updates, the single Update button (signed or source-checkout installs) and the pasted-digest fallback the same way in both apps. The optional system tools guide says what Check for updates shows.
+- **MCD's source-checkout update looks and works like RCD's updater**: a Running release card (version `installed → latest`, Check for updates, progress bar), an Update available card with the release notes and one Update button, the same confirmation card, and the shared step-by-step progress view with its log. The update itself is unchanged (signed tag, backup, automatic rollback). The progress view gained an option to name an updater's own steps; RCD carries the same component.
+
 ## [0.6.38] - 2026-10-20
 
 - Preserve usage-only accounting when deleting tasks, chats, or projects; distinguish configured agents from native session history and recognize the free router price.
@@ -870,7 +885,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.30...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.39...HEAD
 [0.6.29]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.29
 [0.6.28]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.28
 [0.6.27]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.27
@@ -941,3 +956,4 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.6.30]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.30
 
 [0.6.38]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.37...v0.6.38
+[0.6.39]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.38...v0.6.39

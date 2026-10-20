@@ -1,4 +1,4 @@
-"""Task board API: agents, working directories, cards, runs and run logs."""
+"""Task board API: agents, working directories, cards, runs, run logs and live status."""
 
 from __future__ import annotations
 
@@ -6,13 +6,15 @@ import json
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 import approval
 import cards as card_rules
+import live_status
 import projects
 import run_liveness
 from agents import REGISTRY
@@ -385,3 +387,31 @@ def run_log(run_id: int, offset: int = Query(0, ge=0), s: Session = Depends(get_
         text, next_offset = chunk.decode("utf-8", "replace"), offset + len(chunk)
     return {"text": text, "next_offset": next_offset, "done": run.stage != "running",
             "stage": run.stage}
+
+
+# ----------------------------------------------------------------------------- live status
+
+
+@router.get("/events/stream")
+async def status_stream(request: Request, last: str | None = Query(None, max_length=40),
+                        last_event_id: str | None = Header(None, max_length=40)):
+    """Server-Sent Events for card, run and project state changes (see live_status)."""
+    if getattr(request.state, "agent_grant", None):
+        raise HTTPException(403, "Live status requires operator access.")
+
+    async def frames():
+        # Subscribed inside the generator: its `finally` is the only release that always runs.
+        bus = live_status.BUS
+        wake = bus.subscribe()
+        if wake is None:
+            yield live_status.busy_frame()
+            return
+        try:
+            async for frame in live_status.stream(bus, wake, last_event_id or last,
+                                                  max_s=live_status.STREAM_MAX_S):
+                yield frame
+        finally:
+            bus.unsubscribe(wake)
+
+    return StreamingResponse(frames(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

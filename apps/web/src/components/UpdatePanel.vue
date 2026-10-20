@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AppSelect from '@/components/AppSelect.vue'
 import ManagedItem, { type Health } from '@/components/ManagedItem.vue'
 import SourceUpdatePanel from '@/components/SourceUpdatePanel.vue'
+import UpdateProgress, { type UpdateOperation } from '@/components/UpdateProgress.vue'
 import { ApiError, getJson, postJson } from '@/lib/api'
 
 // Only this product and repository are ever offered. The server enforces the same rule; this is a second check.
@@ -23,7 +24,7 @@ interface Version { id: string; complete: boolean; notes?: string | null; versio
 interface Last { tx: string | null; kind: string | null; outcome: string; detail: string; target: string | null; from: string | null; at: number }
 interface Install { current: string | null; previous: string | null; versions: Version[]; tx: { id: string; kind: string; phase: string; target: string } | null; last: Last | null; needs_recovery: boolean }
 interface SourceInspection { eligible: boolean; problems: string[]; checkout?: string; version?: string; commit?: string; short?: string; tag?: string | null; branch?: string | null; remote?: string | null }
-interface UpdateStatus { kind: string; source?: SourceInspection; detail: string; configured: boolean; problems: string[]; manual_instructions: string[]; install?: Install; blockers?: string[] }
+interface UpdateStatus { kind: string; trust?: string; source?: SourceInspection; detail: string; configured: boolean; problems: string[]; manual_instructions: string[]; install?: Install; blockers?: string[] }
 interface Pending { kind: 'install' | 'rollback'; version: Version }
 interface Operation { kind: Pending['kind']; target: string; beforeTx: string | null; sawTx: boolean; polls: number }
 
@@ -37,20 +38,29 @@ const found = ref<CheckResponse | null>(null), checkedAt = ref<number | null>(nu
 const status = ref<UpdateStatus | null>(null)
 const pending = ref<Pending | null>(null), confirmed = ref(false)
 const downloadAsk = ref(false), downloadConfirmed = ref(false), downloading = ref(false)
+const updateAsk = ref(false), updateConfirmed = ref(false)
+const opStatus = ref<{ operation: UpdateOperation | null; active: boolean; log: string[] } | null>(null)
 const operation = ref<Operation | null>(null), reconnecting = ref(false), busy = ref(false)
 const error = ref(''), notice = ref('')
 let timer: ReturnType<typeof setTimeout> | undefined
 let alive = true
 
 const install = computed(() => status.value?.install)
+// With release-signature trust one confirmation downloads, verifies and installs. With a pinned digest the steps stay separate.
+const signed = computed(() => status.value?.trust === 'ssh-signature')
 const managed = computed(() => !!status.value && status.value.kind === 'release' && status.value.configured && !!install.value)
 const blockers = computed(() => status.value?.blockers ?? [])
 const inProgress = computed(() => !!install.value?.tx || !!install.value?.needs_recovery || !!operation.value || downloading.value)
 const canChange = computed(() => managed.value && !busy.value && !inProgress.value && blockers.value.length === 0)
 const previous = computed(() => find(install.value?.previous))
 const canRollback = computed(() => canChange.value && !!previous.value?.complete)
-const others = computed(() => (install.value?.versions ?? []).filter(v => v.id !== install.value?.current))
-const installable = computed(() => others.value.filter(v => !unavailable(v)))
+// While a helper is staging or removing a version its folder is briefly incomplete; that is progress, not a fault, so it is not listed.
+const helperBusy = computed(() => !!opStatus.value?.active)
+const others = computed(() => (install.value?.versions ?? []).filter(v => v.id !== install.value?.current && !(helperBusy.value && !v.complete)))
+const currentVersion = computed(() => find(install.value?.current)?.version ?? null)
+// Only a newer package is an update. An older staged one is kept for rollback and is never offered as an install.
+const installable = computed(() => others.value.filter(v => !unavailable(v) && isNewer(v.version, currentVersion.value)))
+const older = computed(() => others.value.filter(v => !unavailable(v) && !isNewer(v.version, currentVersion.value)))
 const notOffered = computed(() => others.value.filter(v => unavailable(v)))
 const summary = computed(() => {
   const s = status.value
@@ -73,7 +83,6 @@ const healthRow = computed<Health | null>(() => {
   return { ok, version: label(install.value?.current), next: ok ? [] : [last.detail, 'The previous version is still the one to trust. See helper.log on the host, or run update_recovery.py status.'] }
 })
 const busyNow = computed(() => !!operation.value || downloading.value)
-const progressLine = computed(() => downloading.value ? 'Downloading and verifying. Nothing is installed yet.' : operation.value ? progressText.value : '')
 const candidate = computed(() => found.value?.candidate ?? null)
 const refused = computed(() => {
   const c = candidate.value
@@ -91,6 +100,17 @@ function label(id: string | null | undefined) { return find(id)?.version ?? id ?
 function when(seconds: number | null | undefined) { return seconds ? new Date(seconds * 1000).toLocaleString() : 'an unknown time' }
 function stagedVersion(version: string) { return install.value?.versions.find(v => v.version === version && v.complete) ?? null }
 // Only complete, stable or prerelease application packages from this repository are offered. Anything else says why and gets no button.
+function parts(version: string | null): [number, number, number, boolean] | null {
+  const m = /^(\d+)\.(\d+)(?:\.(\d+))?(-.+)?$/.exec(version ?? '')
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3] ?? 0), !!m[4]] : null
+}
+function isNewer(candidate: string | null, installed: string | null): boolean {
+  const a = parts(candidate), b = parts(installed)
+  if (!a) return false // an unreadable version is never offered
+  if (!b) return true
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return (a[i] as number) > (b[i] as number)
+  return b[3] && !a[3] // same number: the release is newer than its own prerelease
+}
 function unavailable(v: Version): string {
   if (!v.complete || !v.version) return 'It is only partly staged, so it cannot be installed.'
   if (v.channel === 'dev') return 'A development build. It is never offered as an update.'
@@ -119,11 +139,17 @@ function refusal(e: unknown, fallback: string) {
   return denied(e, fallback)
 }
 
+// The latest update's steps and log, kept by the helper on this host. Best effort: an older helper has none, and the page works without it.
+async function readOperation() {
+  try { opStatus.value = await getJson('/api/app-updates/operation') } catch { /* no record available */ }
+}
+
 // Reads this host's install state only. It never contacts GitHub.
 async function read(): Promise<boolean> {
   try {
     status.value = await getJson<UpdateStatus>('/api/app-updates')
     reconnecting.value = false; error.value = ''
+    if (managed.value) await readOperation()   // local only; an unmanaged host has no helper record
     return true
   } catch (e) {
     // While an operation runs, a network error or 5xx usually means the service is restarting.
@@ -136,7 +162,7 @@ async function read(): Promise<boolean> {
 // Read-only look at the public GitHub Releases API, sent only when the operator clicks. Nothing is downloaded or changed.
 async function check() {
   if (busy.value || !!operation.value) return
-  busy.value = true; error.value = ''; notice.value = ''; cancelDownload()
+  busy.value = true; error.value = ''; notice.value = ''; cancelDownload(); cancelUpdate()
   try {
     const body = await getJson<CheckResponse>(`/api/app-updates/check?channel=${encodeURIComponent(channel.value)}`)
     found.value = body
@@ -147,6 +173,77 @@ async function check() {
     found.value = null
     error.value = refusal(e, 'Could not check for updates.')
   } finally { busy.value = false }
+}
+
+function askUpdate() { updateAsk.value = true; updateConfirmed.value = false; error.value = ''; notice.value = '' }
+function cancelUpdate() { updateAsk.value = false; updateConfirmed.value = false }
+
+// One confirmation, three server-side steps that each keep their own checks: download and verify the signature against the
+// key pinned on this host, then apply (drain check, data snapshot, switch, health check, automatic rollback).
+// Staging builds the runtime on the host, which takes a few minutes, and a page reload or leaving the page would
+// otherwise lose the rest of the flow. The confirmed intent is kept for this tab (sessionStorage, 30 minutes, this version only)
+// and picked up again when the panel mounts. The server still drain-checks and refuses before anything is stopped.
+const INTENT_KEY = `${PRODUCT}-update-intent`, INTENT_MS = 30 * 60 * 1000
+interface Intent { version: string; channel: string; at: number }
+function saveIntent(version: string, ch: string) { try { sessionStorage.setItem(INTENT_KEY, JSON.stringify({ version, channel: ch, at: Date.now() })) } catch { /* private mode */ } }
+function clearIntent() { try { sessionStorage.removeItem(INTENT_KEY) } catch { /* private mode */ } }
+function loadIntent(): Intent | null {
+  try {
+    const raw = sessionStorage.getItem(INTENT_KEY)
+    const v = raw ? JSON.parse(raw) as Intent : null
+    if (v && typeof v.version === 'string' && typeof v.channel === 'string' && Date.now() - v.at < INTENT_MS) return v
+  } catch { /* unreadable: ignore */ }
+  clearIntent()
+  return null
+}
+
+async function updateNow() {
+  const c = candidate.value
+  if (!c || !signed.value || !updateConfirmed.value || busy.value || refused.value) return
+  cancelUpdate()
+  saveIntent(c.version, channel.value)
+  await runUpdate(c.version, channel.value, true)
+}
+
+async function runUpdate(version: string, ch: string, needFetch: boolean) {
+  if (busy.value) return
+  busy.value = true; downloading.value = true; error.value = ''; notice.value = ''
+  let staged = false
+  const beforeTx = install.value?.last?.tx ?? null
+  try {
+    if (needFetch) await postJson('/api/app-updates/fetch', { version, channel: ch, confirm: true })
+    const ready = await waitForStaged(version, beforeTx)
+    const v = stagedVersion(version)
+    if (!ready || !v) {
+      const last = install.value?.last
+      const failed = last && last.tx !== beforeTx && last.outcome !== 'staged' ? ` Staging reported: ${last.detail}` : ''
+      error.value = `Not staged yet. Nothing was installed.${failed || ' If the download is still running, check again shortly; otherwise check helper.log on the host.'}`
+      clearIntent()
+      return
+    }
+    staged = true; downloading.value = false
+    await postJson('/api/app-updates/apply', { version_id: v.id })
+    clearIntent()
+    operation.value = { kind: 'install', target: v.id, beforeTx: install.value?.last?.tx ?? null, sawTx: false, polls: 0 }
+    notice.value = `Update to ${version} started on the host. Progress is shown below.`
+    timer = setTimeout(poll, POLL_MS)
+  } catch (e) {
+    clearIntent()
+    await read()
+    error.value = refusal(e, 'The update could not be completed.') + (staged ? ' The verified package stays staged; nothing was installed.' : '')
+  } finally { downloading.value = false; busy.value = false }
+}
+
+// After a reload or a visit to another page: carry on with an update the operator confirmed in this tab.
+async function resumeUpdate() {
+  const intent = signed.value ? loadIntent() : null
+  if (!intent) return
+  const current = find(install.value?.current)?.version
+  if (current === intent.version || (current && !isNewer(intent.version, current))) { clearIntent(); return }
+  if (install.value?.tx || stagedVersion(intent.version)) {
+    notice.value = `Continuing your confirmed update to ${intent.version}.`
+    await runUpdate(intent.version, intent.channel, false)
+  } else clearIntent()
 }
 
 function askDownload() { downloadAsk.value = true; downloadConfirmed.value = false; error.value = ''; notice.value = '' }
@@ -160,7 +257,7 @@ async function download() {
   busy.value = true; downloading.value = true; error.value = ''; notice.value = ''; cancelDownload()
   try {
     await postJson('/api/app-updates/fetch', { version: c.version, channel: channel.value, confirm: true, manifest_sha256: pinnedManifestDigest.value.toLowerCase() })
-    const ready = await waitForStaged(c.version)
+    const ready = await waitForStaged(c.version, install.value?.last?.tx ?? null)
     if (ready) notice.value = `Verified and staged ${c.version}. It is not installed until you confirm the install below.`
     else error.value = 'Not staged yet. Nothing was installed. If the download is still running, check again shortly; otherwise check helper.log on the host.'
   } catch (e) {
@@ -170,12 +267,15 @@ async function download() {
 }
 
 // Bounded wait for the helper to stage the package. It only observes; the caller decides every action.
-async function waitForStaged(version: string): Promise<boolean> {
+async function waitForStaged(version: string, beforeTx: string | null = null): Promise<boolean> {
   for (let i = 0; i < DOWNLOAD_POLLS; i++) {
     await new Promise(resolve => setTimeout(resolve, POLL_MS))
     if (!alive) return false
     await read()
     if (stagedVersion(version)) return true
+    // The host finished a staging run that did not stage it: say so now instead of waiting out the clock.
+    const last = install.value?.last
+    if (!install.value?.tx && last && last.tx !== beforeTx && last.kind === 'stage' && last.outcome !== 'staged') return false
   }
   return false
 }
@@ -236,7 +336,7 @@ function stop(message: string) {
   error.value = message
 }
 
-onMounted(read)
+onMounted(async () => { await read(); await resumeUpdate() })
 onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
 </script>
 <template>
@@ -247,7 +347,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
     <p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="reconnecting" class="muted" role="status">Reconnecting to the service. It is restarting, so this can take a minute. Nothing is started again from here.</p>
     <template v-if="status">
-      <p v-if="!managed" class="status" role="status">{{ summary }}</p>
+      <p v-if="!managed && !status.source?.eligible" class="status" role="status">{{ summary }}</p>
       <template v-if="!managed">
         <SourceUpdatePanel v-if="status.source" :inspection="status.source" />
         <details v-if="status.manual_instructions.length && status.source?.eligible" class="manual">
@@ -258,9 +358,12 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
         <p v-for="problem in status.problems" :key="problem" class="muted small">{{ problem }}</p>
       </template>
       <template v-else>
+        <p class="muted small trust">{{ signed
+          ? 'Releases are verified by their signature against the release key pinned on this host. You do not paste a digest.'
+          : 'This host trusts a digest you paste from the release page. To verify releases by signature instead, run update_helper.py enable-signed-updates on the host (see the update guide).' }}</p>
         <ul class="items">
-          <ManagedItem name="Running release" data-test="dashboard" :mark="healthRow && !healthRow.ok ? 'warn' : candidate ? 'warn' : 'ok'" :word="busyNow ? 'working' : candidate ? 'update available' : 'up to date'"
-            :version="label(install?.current)" :latest="candidate?.version ?? null" :detail="summary" :busy="busyNow" :progress="progressLine" :health="healthRow" @health="read">
+          <ManagedItem name="Running release" data-test="dashboard" :mark="healthRow && !healthRow.ok ? 'warn' : candidate && candidate.version !== currentVersion ? 'warn' : 'ok'" :word="busyNow ? 'working' : candidate && candidate.version !== currentVersion ? 'update available' : 'up to date'"
+            :version="label(install?.current)" :latest="candidate && candidate.version !== currentVersion ? candidate.version : null" :detail="summary" :busy="busyNow" :health="healthRow" @health="read">
             <label class="channel">Channel<AppSelect v-model="channel" aria-label="Update channel"><option value="stable">Stable</option><option value="prerelease">Prerelease</option></AppSelect></label>
             <button class="btn primary" :disabled="busy || !!operation" @click="check">Check for updates</button>
             <span v-if="checkedAt" class="muted small">Checked GitHub {{ when(checkedAt / 1000) }}</span>
@@ -268,7 +371,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
           </ManagedItem>
         </ul>
 
-        <article v-if="candidate" class="release">
+        <article v-if="candidate && candidate.version !== currentVersion" class="release">
           <h3>{{ candidate.change === 'upgrade' ? 'Update' : 'Install' }} available: {{ candidate.version }}</h3>
           <p class="muted small">{{ candidate.tag }} · {{ candidate.channel }} channel{{ candidate.prerelease ? ' (prerelease)' : '' }} · published {{ candidate.published_at ?? 'unknown' }}</p>
           <dl class="facts">
@@ -283,9 +386,28 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
           <p v-if="refused" class="notice-warn" role="alert">{{ refused }}</p>
           <div class="actions">
             <a v-if="releaseLink" class="release-link" :href="releaseLink" target="_blank" rel="noopener noreferrer">View this release on GitHub</a>
-            <button v-if="!refused" class="btn primary" :disabled="!canChange" @click="askDownload">Download and verify {{ candidate.version }}</button>
+            <template v-if="!refused">
+              <button v-if="signed" class="btn primary" :disabled="!canChange" @click="askUpdate">Update to {{ candidate.version }}</button>
+              <button v-else class="btn primary" :disabled="!canChange" @click="askDownload">Download and verify {{ candidate.version }}</button>
+            </template>
           </div>
         </article>
+
+        <section v-if="updateAsk && candidate && signed" class="confirm" aria-labelledby="update-title">
+          <h3 id="update-title">Update to {{ candidate.version }}</h3>
+          <p>Downloads the release from {{ candidate.repository }}, verifies its signature against the release key pinned on this host, then installs it. The service restarts for a short time; a data snapshot is taken first, and if the new version does not pass its health check the previous one is put back automatically.</p>
+          <h4>What changed in {{ candidate.version }} (plain text)</h4>
+          <pre class="notes log-window">{{ candidate.notes || 'This release has no notes.' }}</pre>
+          <ul class="preflight">
+            <li>Nothing may be running, queued, waiting for approval or dispatching: the server checks before it stops anything.</li>
+            <li>Running or waiting work: {{ blockers.length ? blockers.join('; ') : 'none found' }}.</li>
+          </ul>
+          <label class="check"><input v-model="updateConfirmed" type="checkbox" />I have read this and want to update to {{ candidate.version }}.</label>
+          <div class="actions">
+            <button class="btn primary" :disabled="!updateConfirmed || busy || !canChange" @click="updateNow">Update to {{ candidate.version }}</button>
+            <button class="btn" :disabled="busy" @click="cancelUpdate">Cancel</button>
+          </div>
+        </section>
 
         <section v-if="downloadAsk && candidate" class="confirm" aria-labelledby="download-title">
           <h3 id="download-title">Download and verify {{ candidate.version }}</h3>
@@ -299,12 +421,15 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
           </div>
         </section>
 
+        <UpdateProgress v-if="opStatus?.operation" :operation="opStatus.operation" :log="opStatus.log" />
+        <p v-if="downloading" class="status" role="status">{{ signed ? `Downloading, verifying the signature and preparing it on this host${install?.tx ? ` (${PHASES[install.tx.phase] ?? 'working'})` : ''}. Nothing is installed until this finishes. This can take a few minutes: you can leave or reload this page and it will carry on with the update you confirmed.` : 'Downloading and verifying. Nothing is installed yet.' }}</p>
+
         <ul v-if="blockers.length" class="updates" aria-label="Work that must finish first">
           <li v-for="b in blockers" :key="b">{{ b }}</li>
         </ul>
         <p v-if="blockers.length" class="muted small">Drain first. Nothing is stopped or cancelled for you.</p>
         <p v-if="blockers.some(b => b.includes('waiting on a human decision'))" class="muted small">If an approval wait is an old run that is already finished, <a href="#housekeeping">Housekeeping</a> below can resolve it.</p>
-        <p v-if="install?.needs_recovery" class="notice-warn" role="alert">An earlier update was interrupted. Run recovery on the host before changing versions.</p>
+        <p v-if="install?.needs_recovery && !helperBusy" class="notice-warn" role="alert">An earlier update was interrupted. Run recovery on the host before changing versions.</p>
 
         <section class="block" aria-labelledby="available-title">
         <h3 id="available-title" class="block-title">Available</h3>
@@ -320,7 +445,14 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
             <div class="actions"><button class="btn primary" :disabled="!canChange" @click="ask('install', v)">Install {{ v.version }}</button></div>
           </li>
         </ul>
-        <p v-else class="muted">No staged update is waiting on this host. Check for updates to download and verify one.</p>
+        <p v-else class="muted">No staged update is waiting on this host. Check for updates to look for a newer release.</p>
+        <details v-if="older.length" class="older">
+          <summary>Older versions kept on this host ({{ older.length }})</summary>
+          <ul class="updates">
+            <li v-for="v in older" :key="v.id">{{ v.version }} · {{ v.channel }} · staged {{ when(v.staged_at) }}</li>
+          </ul>
+          <p class="muted small">These are not offered as installs. Use Rollback to return to the previous version.</p>
+        </details>
         <ul v-if="notOffered.length" class="updates" aria-label="Staged but not offered">
           <li v-for="v in notOffered" :key="v.id">{{ v.version ?? v.id }}: {{ unavailable(v) }}</li>
         </ul>
@@ -356,6 +488,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
           </div>
         </section>
 
+        <p v-if="operation && !opStatus?.operation" class="status" role="status">{{ progressText }}</p>
       </template>
     </template>
   </section>
@@ -365,8 +498,11 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
 .head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--gap); }
 .items { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--gap-sm); }
 .channel { display: flex; align-items: center; gap: var(--gap-sm); margin: 0; }
+.trust { max-width: 72ch; line-height: var(--line-height); }
+.older summary { cursor: pointer; padding: var(--gap-sm) 0; }
 .manual summary { cursor: pointer; padding: var(--gap-sm) 0; }
 .manual .updates { list-style: decimal; margin: var(--gap-sm) 0 0; line-height: var(--line-height); }
+.update-panel > .btn { justify-self: start; }
 h2, h3, h4 { margin: 0; }
 h3 { font-size: var(--font-size); font-weight: var(--font-weight-strong); }
 h4 { font-size: var(--font-size-sm); font-weight: var(--font-weight-strong); color: var(--text-muted); }
@@ -380,7 +516,7 @@ h4 { font-size: var(--font-size-sm); font-weight: var(--font-weight-strong); col
 .release-link { margin-right: auto; color: var(--accent); }
 .block { display: grid; gap: var(--gap); }
 .block-title { padding-bottom: var(--gap-xs); }
-.updates { display: grid; gap: var(--gap); margin: 0; padding-left: 1.5rem; line-height: var(--line-height); }
+.updates { display: grid; gap: var(--gap-sm); margin: 0; padding-left: 1.5rem; line-height: var(--line-height); }
 .release, .confirm { display: grid; gap: var(--gap); border: 1px solid var(--surface-border); border-radius: var(--radius); padding: var(--gap-lg); background: var(--glass-bg); justify-items: stretch; }
 .release p, .confirm p { margin: 0; line-height: var(--line-height); }
 .release .actions, .confirm .actions { justify-content: flex-end; padding-top: var(--gap); border-top: 1px solid var(--glass-border); }
