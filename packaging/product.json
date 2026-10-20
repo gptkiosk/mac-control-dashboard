@@ -39,6 +39,10 @@
     "apps/api/tool_locks/*/package.json",
     "apps/api/tool_locks/*/package-lock.json",
     "packs/roles/delegator/*",
+    "packs/agents/*",
+    "packs/agents/developer/*",
+    "packs/agents/security/*",
+    "packs/agents/reviewer/*",
     "packs/standards/*",
     "packs/evaluation/*"
   ],
