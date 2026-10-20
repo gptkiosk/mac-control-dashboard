@@ -247,7 +247,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
     <p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="reconnecting" class="muted" role="status">Reconnecting to the service. It is restarting, so this can take a minute. Nothing is started again from here.</p>
     <template v-if="status">
-      <p v-if="!managed" class="status" role="status">{{ summary }}</p>
+      <p v-if="!managed && !status.source?.eligible" class="status" role="status">{{ summary }}</p>
       <template v-if="!managed">
         <SourceUpdatePanel v-if="status.source" :inspection="status.source" />
         <details v-if="status.manual_instructions.length && status.source?.eligible" class="manual">

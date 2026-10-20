@@ -70,6 +70,8 @@ it('reads the release only when asked, shows the exact tag, commit and plain-tex
   expect(calls(f, 'GET', '/api/app-updates/source/check')).toHaveLength(0)
   await button(w, 'Check for updates')!.trigger('click'); await flushPromises()
   expect(w.text()).toContain('Update available: 0.4.0')
+  expect(w.get('[data-test="dashboard"] [data-test="version"]').text()).toContain('→ 0.4.0')     // the same Running release card the packaged updater uses
+  expect(w.get('[data-test="dashboard"] [data-test="word"]').text()).toBe('update available')
   expect(w.text()).toContain(COMMIT.slice(0, 12))
   expect(w.find('pre.notes').text()).toBe('Adds <b>things</b>')
   expect(w.find('b').exists()).toBe(false)

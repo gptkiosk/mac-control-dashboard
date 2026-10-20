@@ -10,6 +10,10 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+### Changed
+
+- **MCD's source-checkout update looks and works like RCD's updater**: a Running release card (version `installed → latest`, Check for updates, progress bar), an Update available card with the release notes and one Update button, the same confirmation card, and the shared step-by-step progress view with its log. The update itself is unchanged (signed tag, backup, automatic rollback). The progress view gained an option to name an updater's own steps; RCD carries the same component.
+
 ## [0.6.38] - 2026-10-20
 
 - Preserve usage-only accounting when deleting tasks, chats, or projects; distinguish configured agents from native session history and recognize the free router price.
