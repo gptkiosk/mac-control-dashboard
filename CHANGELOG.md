@@ -10,6 +10,15 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.42] - 2026-10-20
+
+### Fixed
+
+- **A project could not be submitted to an OpenClaw agent that OpenClaw lists but its config file does not.** The validation project's `-oc-developer` story was refused as "OpenClaw target is no longer configured".
+  - OpenClaw targets now also come from `openclaw agents list --json`, cached for a minute and refreshed right after Coordinator setup. This covers project submission, route choices, the task panel and route recovery alike.
+  - CLI output is parsed past log lines such as `[plugins] ready` that can come before the JSON.
+- **MCD's Coordinator setup could not run OpenClaw.** It built the agent environment from an RCD-only module. Both products now use their own dispatcher's environment, and a test runs the real command runner.
+
 ## [0.6.41] - 2026-10-20
 
 ### Changed
@@ -909,7 +918,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.41...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.42...HEAD
 [0.6.29]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.29
 [0.6.28]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.28
 [0.6.27]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.27
@@ -983,3 +992,4 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.6.39]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.38...v0.6.39
 [0.6.40]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.39...v0.6.40
 [0.6.41]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.40...v0.6.41
+[0.6.42]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.41...v0.6.42
