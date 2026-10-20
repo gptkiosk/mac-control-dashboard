@@ -171,6 +171,8 @@ def test_validation_project_waits_for_setup_then_runs_one_read_story_per_ready_p
     stories = [n for n in nodes if n['assignee'] != 'human']
     assert [n['assignee'] for n in stories] == ['openclaw', 'codex']
     assert stories[0]['agent_target'] == agent_setup.agent_id(settings, 'developer') and stories[0]['mode'] == 'read'
+    # Each story names its model: the dispatch gate refuses a blank one (PRICE_UNKNOWN).
+    assert stories[0]['model'] == 'openrouter/free' and stories[1]['model'] == 'gpt-6-luna'
     assert nodes[-1]['assignee'] == 'human' and nodes[-1]['depends_on'] == ['validate-openclaw', 'validate-codex']
     result = c.post(f'/api/projects/{pid}/submit', json={'revision': 1, 'approve_coordination': True, 'approve_api_work': True})
     assert result.status_code == 200, result.text
@@ -179,7 +181,7 @@ def test_validation_project_waits_for_setup_then_runs_one_read_story_per_ready_p
 
 
 def test_the_real_runner_starts_a_command_with_this_products_agent_environment():
-    # Not faked: building the environment must work in this product (MCD and RCD build it differently).
+    # Not faked: building the environment must work in this product (MCD and MCD build it differently).
     import sys
     code, out = agent_setup.run([sys.executable, '-c', 'import os; print("ok", "MAC_CONTROL_DATA_DIR" in os.environ)'])
     assert (code, out) == (0, 'ok False')
