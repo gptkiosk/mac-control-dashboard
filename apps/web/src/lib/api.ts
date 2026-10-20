@@ -370,6 +370,8 @@ export interface Card {
   column: CardColumn
   position: number
   timeout_s: number
+  max_attempts: number
+  retry_backoff_s: number
   budget_usd: Num
   needs_approval: boolean
   approval_reasons: string[]
@@ -431,6 +433,8 @@ export interface NewCardInput {
   model?: string | null
   agent_target?: string | null
   timeout_s?: number
+  max_attempts?: number
+  retry_backoff_s?: number
   budget_usd?: number
   priority?: Priority
   due_date?: string | null
@@ -451,6 +455,8 @@ export type CardPatch = Partial<
     | 'mode'
     | 'working_dir'
     | 'timeout_s'
+    | 'max_attempts'
+    | 'retry_backoff_s'
     | 'budget_usd'
     | 'priority'
     | 'due_date'
@@ -543,6 +549,8 @@ export interface McpAgentServers {
   agent: AgentId
   servers: McpServer[]
   error: string | null
+  /** false when the agent's command is not on this host: shown as a quiet note, not an error. */
+  installed?: boolean
   checked_at: Num
 }
 

@@ -75,7 +75,7 @@ describe('OverviewView', () => {
   it('notes macmon status when it is not running', async () => {
     stubApi(respond(200, { ...current, macmon_status: 'restarting' }))
     const w = await mountOverview()
-    expect(w.get('[data-testid="macmon-status"]').text()).toBe('macmon restarting')
+    expect(w.get('[data-testid="macmon-status"]').text()).toBe('The GPU and power sensor (macmon) is restarting; those tiles may lag.')
     w.unmount()
   })
 })

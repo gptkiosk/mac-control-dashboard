@@ -12,6 +12,8 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ### Changed
 
+- **Same as RCD, from the congruency pass**: a missing agent CLI on the MCP page is a quiet "Not available on this host" note instead of an error, and a failing list command still shows its own redacted message. Optional system tools refresh their rows after a health check and show a newer version only beside an outdated tool. The task editor gains Maximum attempts and Retry backoff, so a failing task can retry by itself. The project review's Spending and billing note says failed planning steps move to the next approved route and the project stays open to revise and retry. Smaller alignments: Service actions width, Housekeeping spacing, the Profile readiness link to Agent roles. Overview explains a stopped or missing macmon in a plain sentence instead of `macmon disabled`.
+- **One help text for dashboard updates**: the update guide now describes Check for updates, the single Update button (signed or source-checkout installs) and the pasted-digest fallback the same way in both apps. The optional system tools guide says what Check for updates shows.
 - **MCD's source-checkout update looks and works like RCD's updater**: a Running release card (version `installed → latest`, Check for updates, progress bar), an Update available card with the release notes and one Update button, the same confirmation card, and the shared step-by-step progress view with its log. The update itself is unchanged (signed tag, backup, automatic rollback). The progress view gained an option to name an updater's own steps; RCD carries the same component.
 
 ## [0.6.38] - 2026-10-20

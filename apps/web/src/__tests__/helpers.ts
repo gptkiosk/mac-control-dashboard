@@ -74,6 +74,8 @@ export function card(over: Partial<Card> = {}): Card {
     column: 'backlog',
     position: 1,
     timeout_s: 1800,
+    max_attempts: 1,
+    retry_backoff_s: 0,
     budget_usd: 1,
     needs_approval: false,
     assignee_type: 'agent',

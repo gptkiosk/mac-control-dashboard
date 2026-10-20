@@ -55,6 +55,10 @@ async function checkHealth() {
   try {
     const r = await getJson<{ checks: (Health & { id: string })[] }>('/api/host/readiness/tools/health')
     health.value = Object.fromEntries(r.checks.map(c => [c.id, c])); healthRan.value = true
+    // Agent tools can be installed after this panel first loads. The health endpoint
+    // probes the current host state, so refresh the inventory too to avoid showing
+    // a passing version check beside a stale "missing" row.
+    await load(false)
   } catch (e) { error.value = e instanceof Error ? e.message : String(e) } finally { healthBusy.value = false }
 }
 async function copy(text: string, label: string) {
@@ -69,7 +73,7 @@ const summary = computed(() => {
   const b = body.value
   if (!b) return ''
   const parts = [`${missing.value.length} missing`]
-  parts.push(b.updates_checked ? `${b.outdated.length} to upgrade` : 'latest versions not checked')
+  parts.push(b.updates_checked ? `${b.outdated.length} to upgrade` : 'updates not checked')
   return parts.join(' · ')
 })
 const markOf = (t: Row): 'ok' | 'warn' | 'missing' | 'info' => !t.installed ? 'info' : t.stopped || (health.value[t.id] && !health.value[t.id]!.ok) || t.outdated ? 'warn' : 'ok'
@@ -112,7 +116,7 @@ onBeforeUnmount(() => clearInterval(timer))
           <template #more><span v-if="body.note" class="muted small">{{ body.note }}</span></template>
         </ManagedItem>
 
-        <ManagedItem v-for="t in body.tools" :key="t.id" :data-tool="t.id" :name="t.id" :mark="markOf(t)" :word="wordOf(t)" :version="t.version" :latest="t.latest"
+        <ManagedItem v-for="t in body.tools" :key="t.id" :data-tool="t.id" :name="t.id" :mark="markOf(t)" :word="wordOf(t)" :version="t.version" :latest="t.outdated ? t.latest : null"
           :detail="t.installed ? t.path ?? '' : `Needed for ${t.needed_for}.`" :health="health[t.id] ?? null" health-disabled>
           <button v-if="mac && !t.installed && BREW_ONE.includes(t.id) && body.brew?.installed" type="button" class="btn" :disabled="busy || running" @click="fix('brew_install', t.id)">Install {{ t.id }}</button>
           <button v-if="t.stopped" type="button" class="btn primary" :disabled="busy || running" @click="fix('colima_start')">Start Colima</button>

@@ -17,7 +17,7 @@ A six-step wizard for local installation, Google access, agents, provider keys, 
 3. Configure Google OAuth privately on the host and sign in with an allowed account. The wizard explains callbacks, test users and the local importer; it does not collect OAuth client secrets.
 4. Install Hermes and OpenClaw using their official guides. Check executable detection and independently confirm native provider/model routing and fallback spending caps. The wizard does not launch agents or grant permissions.
 5. Save your OpenRouter key in encrypted, write-only profile storage. Check key with OpenRouter reads actual key spending; inference credentials still need native agent configuration.
-6. Install and sign into Codex and Claude Code using eligible subscriptions on the Mac. Desktop app login alone does not establish CLI readiness. Confirm the host sign-in yourself; MCD does not collect tokens or verify entitlement.
+6. Install and sign into Codex and Claude Code using eligible subscriptions on the Mac. For included membership usage, use native subscription sign-in; API/OpenRouter billing is separate. Desktop app login alone does not establish CLI readiness. Confirm the host sign-in yourself; MCD does not collect tokens or verify entitlement.
 7. Try header Help chat and browse the main menu. Finish walkthrough saves your reviewed progress; pending items stay listed. Reopen and refresh checks after changes.
 
 Setup progress belongs to your profile. Finishing the walkthrough does not complete project tasks, install software, change model routes, authorize paid usage or enable remote access.
@@ -140,15 +140,15 @@ Check updates and peer connectivity without changing the machine.
 
 ## Check, install or roll back a dashboard update
 
-Look for a newer release on GitHub, read what changed, then download, install or roll back with operator sign-in.
+Look for a newer release on GitHub, read what changed, then update or roll back with operator sign-in.
 
 1. Sign in as the operator. Only the operator can see or change dashboard updates; other sessions get a sign-in message.
 2. Open Updates in Settings and press Check for updates. This reads the public GitHub release list and nothing else: it downloads nothing and changes nothing. The release notes appear as plain text.
-3. To fetch a release, paste its manifest SHA-256 from the release page and confirm. The package is downloaded, verified against that digest and staged. Nothing is stopped yet.
-4. Read “What changed” for the staged version, then confirm the install. The helper stops the service, saves a data snapshot, switches versions and runs a health check; a failed check rolls the version back by itself.
-5. Roll back to the previous version from the same panel. It returns the code only; data written meanwhile stays.
+3. Press Update to the new version and confirm once. With signature trust set up, or on a source checkout, that one button does the rest. Otherwise paste the manifest SHA-256 from the release page: the package is downloaded, verified against that digest and staged, and you confirm the install after reading what changed.
+4. The helper stops the service, saves a data snapshot, switches versions and runs a health check; a failed check rolls the version back by itself. Progress is shown step by step until the update finishes or the page reconnects.
+5. An installed package can be rolled back to the previous version from the same panel. It returns the code only; data written meanwhile stays.
 
-Every step stays disabled while an update is in progress or a blocker is listed. A source checkout or an unmanaged install shows the manual steps instead.
+Every step stays disabled while an update is in progress or a blocker is listed. If managed updates are not set up, the panel shows the manual steps instead.
 
 [Open dashboard updates](http://127.0.0.1:8800/profile#updates) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=app-updates)
 
@@ -524,7 +524,7 @@ Roll back switches to the version kept on this host. Remove deletes the program 
 
 Install (All) and Upgrade (All) for Docker, ffmpeg, Python and gh, with a log and a health check. Homebrew on a Mac; a command to copy on Linux.
 
-1. Open Settings, then Updates & installs, then Optional system tools. Each tool shows its installed version; Check for updates shows the current Homebrew version beside it and marks available upgrades. Managed Agent tools use their verified catalog version.
+1. Open Settings, then Updates & installs, then Optional system tools. Each tool shows its installed version; Check for updates asks Homebrew which are outdated and shows the newer version beside those. Managed Agent tools use their verified catalog version.
 2. On a Mac, Homebrew comes first. If it is missing the card shows the one command to run yourself in Terminal (it asks for your password; the dashboard never runs it). Press Check again afterwards.
 3. Install (All) runs one brew install for everything missing. Upgrade (All) runs brew update and then upgrades only these tools. The log shows every command.
 4. Docker needs its engine: Colima provides it on a Mac. If the health check says the engine is stopped, press Start Colima.

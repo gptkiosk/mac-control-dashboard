@@ -5,10 +5,10 @@ import { computed, reactive, ref } from 'vue'
 import TaskFields, { type TaskFieldValues } from '@/components/TaskFields.vue'
 import TagPill from '@/components/TagPill.vue'
 import TaskApprovalAction from '@/components/TaskApprovalAction.vue'
-import MediaCallout from '@/components/MediaCallout.vue'
-import { useProjectMedia } from '@/composables/useProjectMedia'
 import TaskRetryAction from '@/components/TaskRetryAction.vue'
 import ProjectPlanningRetryAction from '@/components/ProjectPlanningRetryAction.vue'
+import MediaCallout from '@/components/MediaCallout.vue'
+import { useProjectMedia } from '@/composables/useProjectMedia'
 import AppIcon from '@/components/AppIcon.vue'
 import ChipTag from '@/components/ChipTag.vue'
 import ModalShell from '@/components/ModalShell.vue'
@@ -246,6 +246,8 @@ const form = reactive({
   model: '',
   working_dir: '',
   timeoutMin: '30',
+  maxAttempts: '1',
+  retryBackoffSec: '0',
 })
 
 const workdirOptions = computed(() => {
@@ -266,6 +268,8 @@ async function startEdit(): Promise<void> {
     model: c.model ?? '',
     working_dir: c.working_dir ?? '',
     timeoutMin: String(c.timeout_s / 60),
+    maxAttempts: String(c.max_attempts),
+    retryBackoffSec: String(c.retry_backoff_s),
   })
   const estimate = estimateForForm(c.estimate_minutes)
   taskFields.value = {
@@ -304,6 +308,12 @@ async function save(): Promise<void> {
     return
   }
   if (timeout_s !== c.timeout_s) patch.timeout_s = timeout_s
+  const max_attempts = Math.round(Number(form.maxAttempts)), retry_backoff_s = Math.round(Number(form.retryBackoffSec))
+  if (!Number.isFinite(max_attempts) || max_attempts < 1 || max_attempts > 10 || !Number.isFinite(retry_backoff_s) || retry_backoff_s < 0 || retry_backoff_s > 3600) {
+    message.value = { tone: 'danger', text: 'Retry policy must use 1–10 attempts and 0–3600 seconds backoff.' }; return
+  }
+  if (max_attempts !== c.max_attempts) patch.max_attempts = max_attempts
+  if (retry_backoff_s !== c.retry_backoff_s) patch.retry_backoff_s = retry_backoff_s
   const estimate = estimateToMinutes(taskFields.value.estimate, taskFields.value.estimateUnit)
   if (Number.isNaN(estimate) || (estimate !== null && estimate < 1)) {
     message.value = {
@@ -487,6 +497,14 @@ async function save(): Promise<void> {
                 placeholder="Agent default"
                 autocomplete="off"
               />
+            </div>
+            <div class="field">
+              <label for="ed-max-attempts">Maximum attempts</label>
+              <input id="ed-max-attempts" v-model="form.maxAttempts" class="input" type="number" min="1" max="10" step="1" />
+            </div>
+            <div class="field">
+              <label for="ed-retry-backoff">Retry backoff (seconds)</label>
+              <input id="ed-retry-backoff" v-model="form.retryBackoffSec" class="input" type="number" min="0" max="3600" step="1" />
             </div>
             <div class="field">
               <label for="ed-dir">Working directory</label>
