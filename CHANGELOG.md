@@ -10,6 +10,12 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.37] - 2026-10-20
+
+### Fixed
+
+- **Planning retries reuse their task card.** Manual retries and automatic approved-route fallbacks keep run history together instead of creating another failed planning card each time.
+
 ## [0.6.36] - 2026-10-20
 
 ### Fixed
@@ -914,4 +920,5 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.6.33]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.33
 [0.6.35]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.35
 [0.6.36]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.36
+[0.6.37]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.37
 [0.6.30]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.30
