@@ -898,4 +898,5 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.3.1]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.1
 [0.6.31]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.31
 [0.6.32]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.32
+[0.6.33]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.33
 [0.6.30]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.30
