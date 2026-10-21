@@ -136,11 +136,14 @@ it('routes a human-assigned project story to its media action and approval guide
  expect(w.find('.media-tab').exists()).toBe(true)
  w.unmount()
 })
-it('has no Media tab for a project without media slots',async()=>{
+it('offers the Media studio for reference art even without media slots, and says how slots appear',async()=>{
  const {w}=await setup('active')
  await flushPromises()
- expect(w.findAll('nav.tabs button').map(b=>b.text())).not.toContain('Media studio')
- expect(w.find('[data-testid=media-banner]').exists()).toBe(false)
+ expect(w.findAll('nav.tabs button').map(b=>b.text())).toContain('Media studio')
+ expect(w.find('[data-testid=media-banner]').exists()).toBe(false)   // nothing to decide without slots
+ await w.findAll('nav.tabs button').find(b=>b.text()==='Media studio')!.trigger('click'); await flushPromises()
+ expect(w.find('[data-testid=reference-art]').exists()).toBe(true)
+ expect(w.get('[data-testid=no-media-slots]').text()).toContain('media/slots.json')
  w.unmount()
 })
 it('asks for a missing key before creating the project, then creates it after the key is saved or skipped',async()=>{
@@ -387,7 +390,7 @@ it('reruns an unaccepted successful story without accepting its old handoff',asy
 })
 
 it('closes an unfinished project only with a reason and shows it as Closed, never Complete',async()=>{
- const prompt=vi.spyOn(window,'prompt').mockReturnValueOnce('').mockReturnValueOnce('Superseded by the RCD project')
+ const prompt=vi.spyOn(window,'prompt').mockReturnValueOnce('').mockReturnValueOnce('Superseded by the MCD project')
  vi.spyOn(window,'confirm').mockReturnValue(false)
  const {w,f}=await setup('active')
  const closeButton=()=>w.findAll('button').find(b=>b.text()==='Close project…')!
@@ -395,7 +398,7 @@ it('closes an unfinished project only with a reason and shows it as Closed, neve
  expect(f.mock.calls.some(([url])=>url==='/api/projects/1/close')).toBe(false)
  await closeButton().trigger('click');await flushPromises()
  const write=f.mock.calls.find(([url])=>url==='/api/projects/1/close')!
- expect(JSON.parse(String(write[1]?.body))).toEqual({revision:1,reason:'Superseded by the RCD project'})
+ expect(JSON.parse(String(write[1]?.body))).toEqual({revision:1,reason:'Superseded by the MCD project'})
  expect(prompt).toHaveBeenCalledTimes(2);expect(w.text()).toContain('Closed');expect(w.text()).not.toContain('Complete')
  expect(w.findAll('button').some(b=>b.text()==='Close project…')).toBe(false);w.unmount()
 })
