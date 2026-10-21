@@ -152,7 +152,7 @@ it('does not offer the button while work is running and says what to drain', asy
   const w = mount(UpdatePanel); await flushPromises()
   await button(w, 'Check for updates')!.trigger('click'); await flushPromises()
   expect(w.text()).toContain('still running')
-  expect(w.text()).toContain('Finish this work first')
+  expect(w.text()).toContain('Finish or pause this work first')
   expect(button(w, 'Update to 0.4.0')).toBeUndefined()
   w.unmount()
 })

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import UpdateBlockers from '@/components/UpdateBlockers.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ApiError, getJson, postJson } from '@/lib/api'
 import ManagedItem from '@/components/ManagedItem.vue'
@@ -168,9 +169,7 @@ onBeforeUnmount(() => { alive = false; if (timer) clearTimeout(timer) })
         <h4>Release notes (plain text)</h4>
         <pre class="notes log-window">{{ candidate.notes || 'This release has no notes.' }}</pre>
         <div v-if="blockers.length">
-          <p class="status">Finish this work first:</p>
-          <ul class="list" aria-label="Work that must finish first"><li v-for="b in blockers" :key="b">{{ b }}</li></ul>
-          <p class="muted small">Nothing is stopped or cancelled for you. Check again when it is done.</p>
+          <UpdateBlockers :blockers="blockers" :busy="busy" @changed="check" />
           <p v-if="blockers.some(b => b.includes('waiting on a human decision'))" class="muted small">If an approval wait is an old run that is already finished, <a href="#housekeeping">Housekeeping</a> can resolve it.</p>
         </div>
         <div class="actions">
