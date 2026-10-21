@@ -491,7 +491,7 @@ def test_the_upgrade_script_itself_refuses_a_busy_service_even_if_called_directl
     result = subprocess.run(["bash", str(REPO_ROOT / "scripts/upgrade-driver.sh"), "--driver", str(world.driver), "--ref", world.commit,
                              "--label", "v0.2.0", "--require-idle"],
                             capture_output=True, text=True, env={**os.environ, "MAC_CONTROL_DATA_DIR": str(world.data)})
-    assert result.returncode == 1 and "not idle" in result.stderr and "dispatching" in result.stderr
+    assert result.returncode == 1 and "not idle" in result.stderr and "in progress" in result.stderr
     assert git(world.driver, "rev-parse", "HEAD") == world.old
 
 

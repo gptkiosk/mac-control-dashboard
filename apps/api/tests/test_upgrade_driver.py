@@ -183,7 +183,7 @@ exit 0
     gh.chmod(0o755); state.mkdir()
     leaks = tmp_path / "gitleaks"                      # stands in for gitleaks so the test needs no install
     leaks.write_text(f'#!/bin/bash\necho "$@" >> "{tmp_path}/leak-calls"\n[ -f "{state}/leak" ] && exit 1\nexit 0\n'); leaks.chmod(0o755)
-    env = {**os.environ, "MCD_GH": str(gh), "MCD_GITLEAKS": str(leaks)}
+    env = {**os.environ, "MCD_GH": str(gh), "MCD_GITLEAKS": str(leaks), "RELEASE_TRIGGER_WAIT_S": "0"}
     def run(*args):
         return subprocess.run(["bash", str(repo / "scripts/release/publish-release.sh"), *args], capture_output=True, text=True, cwd=repo, env=env)
     return SimpleNamespace(repo=repo, run=run, calls=calls, state=state, head=lambda: git(repo, "rev-parse", "HEAD"))
