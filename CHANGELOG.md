@@ -10,6 +10,10 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.47] - 2026-10-21
+
+- **Switch queued project tasks between memberships:** choose Claude or Codex on pending tasks without waiting for a failed run. The operator-approved amendment retains scope, mode, dependencies, history and project pause state; a task that starts before approval is rejected.
+
 ### Fixed
 
 - **An update that is blocked now says why, next to the Update button.** It lists the work it is waiting for, such as a project in progress, a queued task or a run waiting for a decision. It says that a project can be paused with Pause dispatch and resumed after the update, and links to Projects and Tasks. It used to show only a disabled button.
@@ -980,7 +984,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.46...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.47...HEAD
 [0.6.29]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.29
 [0.6.28]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.28
 [0.6.27]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.27
@@ -1059,3 +1063,5 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.6.44]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.43...v0.6.44
 [0.6.45]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.44...v0.6.45
 [0.6.46]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.45...v0.6.46
+
+[0.6.47]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.46...v0.6.47
