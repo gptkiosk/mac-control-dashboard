@@ -10,6 +10,12 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.50] - 2026-10-22
+
+### Fixed
+
+- **Managed agent tools now survive Codex login-shell startup.** Agent runs restore their scrubbed dashboard tool path after `bash -lc` loads a user profile, so installed Node is available to `node --test` and other task commands.
+
 ## [0.6.49] - 2026-10-21
 
 ### Fixed
@@ -999,7 +1005,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.49...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.50...HEAD
+[0.6.50]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.49...v0.6.50
 [0.6.49]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.48...v0.6.49
 [0.6.48]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.47...v0.6.48
 [0.6.29]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.29
