@@ -7,7 +7,7 @@ const release = ref<ReleaseEnvelope | null>(null)
 const year = new Date().getFullYear()
 const webSha = import.meta.env.VITE_APP_VERSION ?? ''
 const label = computed(() => releaseLabel(release.value, webSha))
-const owner = computed(() => release.value?.owner || 'Mac Control')
+const owner = 'Bamcio LLC'
 const product = computed(() => release.value?.product || 'Mac Control Dashboard')
 
 onMounted(async () => {

@@ -13,8 +13,8 @@ def _app_sessions(client):
 
 def test_release_envelope(make_client):
     body = make_client().get("/api/release").json()
-    assert body["owner"] == "Mac Control"
     assert body["product"] == "Mac Control Dashboard"
+    assert body["owner"] == "Bamcio LLC"
     assert body["product_short"] == "MCD"
     assert body["environment"] == "test"
     assert body["has_migrations"] is False
