@@ -10,6 +10,14 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.49] - 2026-10-21
+
+### Fixed
+
+- **Dashboard-created repository clones now retain their branch-scoped agent Git grant.** Codex can commit recovered work on the setup branch instead of receiving a read-only Git directory.
+- **Dispatched agent runs now receive the dashboard-managed Node runtime on PATH.** Static Node tests run when Node is installed through Agent tools.
+- **Paused projects again expose “Rerun same story” for completed but unaccepted agent handoffs.** The retry keeps the approved scope, workspace, and run history.
+
 ## [0.6.48] - 2026-10-21
 
 ### Fixed
@@ -991,7 +999,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.47...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.49...HEAD
+[0.6.49]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.48...v0.6.49
 [0.6.48]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.47...v0.6.48
 [0.6.29]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.29
 [0.6.28]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.6.28
