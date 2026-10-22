@@ -83,7 +83,8 @@ def test_runner_env_drops_operator_settings(monkeypatch):
     for env in (runner_env(), Dispatcher._env()):
         assert not any(k.upper().startswith(("MAC_CONTROL_", "MCD_", "RCD_")) for k in env)
         assert env["UNRELATED_TOOL_SETTING"] == "kept"
-    assert "/opt/homebrew/bin" in Dispatcher._env()["PATH"]
+    if sys.platform == "darwin":
+        assert "/opt/homebrew/bin" in Dispatcher._env()["PATH"]
 
 
 def test_agent_shell_env_restores_managed_tools_after_a_login_shell(tmp_path):
