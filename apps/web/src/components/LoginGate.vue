@@ -54,7 +54,7 @@ async function recover() {
           </form>
         </details>
       </template>
-      <footer class="small muted">© {{ new Date().getFullYear() }} Mac Control</footer>
+      <footer class="small muted">© { new Date().getFullYear() } Mac Control Dashboard · Bamcio LLC</footer>
     </section>
   </main>
 </template>

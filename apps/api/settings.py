@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     )
 
     environment: str = Field(default="local", description="local | test")
-    organization_name: str = Field(default="Mac Control")
+    organization_name: str = Field(default="Bamcio LLC")
     product_name: str = Field(default="Mac Control Dashboard")
     product_short_name: str = Field(default="MCD")
     host: str = Field(
