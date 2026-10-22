@@ -83,7 +83,19 @@ def test_runner_env_drops_operator_settings(monkeypatch):
     for env in (runner_env(), Dispatcher._env()):
         assert not any(k.upper().startswith(("MAC_CONTROL_", "MCD_", "RCD_")) for k in env)
         assert env["UNRELATED_TOOL_SETTING"] == "kept"
-    assert "/opt/homebrew/bin" in Dispatcher._env()["PATH"]
+    if sys.platform == "darwin":
+        assert "/opt/homebrew/bin" in Dispatcher._env()["PATH"]
+
+
+def test_agent_shell_env_restores_managed_tools_after_a_login_shell(tmp_path):
+    node = tmp_path / "node"
+    node.write_text("#!/bin/sh\nexit 0\n")
+    node.chmod(0o755)
+    env = {"PATH": "/usr/bin:/bin", "DASHBOARD_AGENT_RUNTIME_PATH": str(tmp_path),
+           "BASH_ENV": str(HERE.parent / "agent_shell_env.sh")}
+    result = subprocess.run(["/bin/bash", "-lc", "command -v node"], env=env,
+                            text=True, capture_output=True, check=True)
+    assert result.stdout.strip() == str(node)
 
 
 def test_only_scoped_agent_routes_are_open_to_agents():

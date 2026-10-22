@@ -49,6 +49,7 @@ from idempotency import refuse_timeout_retry
 from models import Card, CardDependency, ChatMessage, ChatThread, Run, RunEvent
 from profiles import SAVED_KEY_AGENTS, saved_openrouter_key
 from operator_boundary import runner_env
+from settings import tool_search_dirs
 
 logger = logging.getLogger("mac_control.dispatcher")
 
@@ -56,7 +57,8 @@ LINE_LIMIT = 16 * 1024 * 1024
 MAX_CHAT_TURNS = 2  # chat turns run beside board cards so a long card never blocks a conversation
 CHAT_TIMEOUT_S = 900
 KILL_GRACE_S = 5.0
-EXTRA_PATH = ("/opt/homebrew/bin", "/usr/local/bin", str(Path.home() / ".local" / "bin"))
+EXTRA_PATH = tool_search_dirs()
+SHELL_ENV = Path(__file__).resolve().parent / "agent_shell_env.sh"
 CANCEL_ERROR = "cancelled by operator"
 LATE_CANCEL_ERROR = ("cancelled by operator; the runner returned a result after the cancel was "
                      "recorded, so it was quarantined rather than accepted")
@@ -356,6 +358,10 @@ class Dispatcher:
         if spec is not None:
             env.update(spec.env)   # for example Grok's telemetry and trace upload switches, always off
         env["PATH"] = ":".join((*EXTRA_PATH, env.get("PATH", "/usr/bin:/bin")))
+        # Codex invokes shell commands as `bash -lc`; a login profile can
+        # overwrite PATH. BASH_ENV restores this tool-only path afterwards.
+        env["DASHBOARD_AGENT_RUNTIME_PATH"] = env["PATH"]
+        env["BASH_ENV"] = str(SHELL_ENV)
         env.setdefault("HOME", str(Path.home()))
         return env
 
