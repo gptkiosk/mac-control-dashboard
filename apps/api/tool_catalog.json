@@ -160,7 +160,7 @@
       },
       "login": {
         "command": "codex login --device-auth",
-        "note": "For this dashboard’s Codex CLI subscription route, use an eligible ChatGPT plan such as Plus ($20/month US), Pro, or an eligible organizational seat and choose ChatGPT sign-in. API-key authentication is billed separately. Free/Go desktop access does not establish CLI entitlement."
+        "note": "For this dashboard\u2019s Codex CLI subscription route, use an eligible ChatGPT plan such as Plus ($20/month US), Pro, or an eligible organizational seat and choose ChatGPT sign-in. API-key authentication is billed separately. Free/Go desktop access does not establish CLI entitlement."
       },
       "system_packages": {
         "required": [],
@@ -173,12 +173,12 @@
     "openclaw": {
       "name": "OpenClaw",
       "installer": "npm-lock",
-      "version": "2026.10.3",
+      "version": "2026.10.6",
       "package": "openclaw",
       "lock_dir": "tool_locks/openclaw",
       "lock": {
-        "package_json_sha256": "f651964ce0488383e96b87ba2c662fc68f045b18ed122130292d060c0523fe7a",
-        "package_lock_sha256": "00a45a58787eb5f94a710f92a99f61fcb926786b8cd1939942128ec0b2d870e7"
+        "package_json_sha256": "8b1d6375533057376f0a5cf8eb5ed60da97ec307c341686d6c9aae797f140791",
+        "package_lock_sha256": "1a32e8ffb84c2065a03c1ac3524601c54ea0a0cf2a65c5c0803d255060f7689b"
       },
       "allow_scripts": [],
       "requires": [
@@ -198,7 +198,7 @@
           "openclaw",
           "--version"
         ],
-        "expect": "2026.10.3"
+        "expect": "2026.10.6"
       },
       "login": {
         "command": "openclaw onboard",

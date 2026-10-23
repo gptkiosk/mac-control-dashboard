@@ -445,7 +445,7 @@ def test_install_writes_only_inside_the_tools_root_and_the_named_hermes_folder(c
 
 def test_the_plan_confirmation_shows_exact_versions_commands_disk_and_memory(cfg, catalog):
     p = plan(cfg, catalog, "openclaw", "install", facts(disk_free_mb=15000, mem_total_mb=3880, mem_available_mb=3100))
-    assert (p["tool"], p["action"], p["from"], p["to"]) == ("openclaw", "install", None, "2026.10.3")
+    assert (p["tool"], p["action"], p["from"], p["to"]) == ("openclaw", "install", None, "2026.10.6")
     assert [r["id"] for r in p["runtimes"]] == ["node"] and p["runtimes"][0]["version"] == "24.21.0"
     text = "\n".join(p["commands"])
     assert "download https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.xz" in text
