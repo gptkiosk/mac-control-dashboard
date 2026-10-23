@@ -9,6 +9,46 @@ updates:
     commit-message:
       prefix: "deps"
       include: scope
+  - package-ecosystem: pip
+    directory: "/apps/api"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+      include: scope
+  - package-ecosystem: pip
+    directory: "/apps/mcp"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+      include: scope
+  - package-ecosystem: npm
+    directory: "/apps/api/tool_locks/codex"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+      include: scope
+  - package-ecosystem: npm
+    directory: "/apps/api/tool_locks/openclaw"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+      include: scope
+  - package-ecosystem: npm
+    directory: "/apps/api/tool_locks/claude-code"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+      include: scope
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
