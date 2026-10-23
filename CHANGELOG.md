@@ -1177,3 +1177,5 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.6.54]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.53...v0.6.54
 
 [0.6.53]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.52...v0.6.53
+
+[0.6.60]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.59...v0.6.60
