@@ -514,12 +514,15 @@ def colima_start(settings):
 
 
 # The system tools panel in Settings: every optional tool with its version, Install (All) and Upgrade (All), and a health check. Homebrew formulae per tool on a Mac.
-SYSTEM_TOOLS = {"python3": ("python",), "node": (), "ffmpeg": ("ffmpeg",), "docker": ("colima", "docker", "docker-compose"), "colima": ("colima",), "gh": ("gh",)}
+SYSTEM_TOOLS = {"python3": ("python",), "node": (), "ffmpeg": ("ffmpeg",), "docker": ("colima", "docker", "docker-compose"), "colima": ("colima",), "gh": ("gh",),
+                "gitleaks": (), "csstree-validator": ()}                # the last two, like node, arrive from Agent tools rather than Homebrew
+AGENT_TOOL_IDS = {"csstree-validator": "css-check"}                      # the command name where it differs from the Agent tools catalog id
 LATEST_FORMULAE = {"python3": "python", "node": "node", "ffmpeg": "ffmpeg", "docker": "docker", "colima": "colima", "gh": "gh"}
 SYSTEM_TOOL_NOTES = {"python3": "tests and scripts", "node": "JavaScript tests and the Playwright screenshot script", "ffmpeg": "publishing generated media",
-                     "docker": "building and running container images", "colima": "the Docker engine on a Mac", "gh": "pull requests from this host"}
+                     "docker": "building and running container images", "colima": "the Docker engine on a Mac", "gh": "pull requests from this host",
+                     "gitleaks": "the secret scan before a commit", "csstree-validator": "checking that stylesheets parse"}
 APT_PACKAGES = {"python3": "python3", "ffmpeg": "ffmpeg", "docker": "docker.io docker-compose"}
-VERSION_ARGS = {"ffmpeg": ("-version",)}
+VERSION_ARGS = {"ffmpeg": ("-version",), "gitleaks": ("version",)}
 VERSION_RE = re.compile(r"(?<![\w.])v?(\d+(?:\.\d+){1,3})")
 
 
@@ -607,7 +610,7 @@ def system_tools(settings=None, check_updates=False):
         if check_updates and path:
             if _managed_tool_path(path, settings):
                 # Managed agent CLIs update from the verified Agent tools catalog, not Homebrew.
-                row["latest"] = _agent_tool_version(tid)
+                row["latest"] = _agent_tool_version(AGENT_TOOL_IDS.get(tid, tid))
                 row["outdated"] = bool(row["latest"] and row["version"] and row["version"] != row["latest"])
             elif outdated is not None and latest_versions is not None:
                 formula = formula_for.get(tid)

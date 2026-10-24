@@ -542,7 +542,8 @@ def test_the_system_tools_panel_lists_versions_and_offers_install_all_only_with_
     rows = {r["id"]: r for r in body["tools"]}
     assert body["platform"] == "mac" and body["brew"]["installed"] and body["can_install_all"] and body["can_upgrade_all"]
     assert rows["colima"]["installed"] and rows["docker"]["installed"] is False and rows["docker"]["version"] is None
-    assert set(body["missing"]) == {"python3", "node", "ffmpeg", "docker", "gh"}
+    assert set(body["missing"]) == {"python3", "node", "ffmpeg", "docker", "gh", "gitleaks", "csstree-validator"}
+    assert rows["gitleaks"]["formulae"] == [] and rows["csstree-validator"]["formulae"] == []          # they come from Agent tools, so Homebrew's Install (All) leaves them out
     present.discard("brew")
     nobrew = hr.system_tools(settings)
     assert nobrew["brew"]["installed"] is False and nobrew["brew"]["install_command"] == hr.BREW_INSTALL
@@ -589,3 +590,8 @@ def test_the_health_check_reports_a_stopped_docker_engine_with_the_next_step(mac
     checks = {c["id"]: c for c in hr.system_tools_health(settings)["checks"]}
     assert checks["docker"]["ok"] is False and checks["docker"]["version"] == "29.3.0"
     assert any("Start Colima" in step for step in checks["docker"]["next"])
+
+
+def test_a_managed_tool_whose_command_differs_from_its_catalog_id_still_gets_its_verified_latest_version():
+    assert hr._agent_tool_version(hr.AGENT_TOOL_IDS.get("csstree-validator", "csstree-validator")) == "4.0.1"
+    assert hr._agent_tool_version("gitleaks") == "8.30.1"
