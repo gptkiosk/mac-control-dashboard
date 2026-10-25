@@ -383,6 +383,17 @@ def resume(project_id:int,body:Action,request:Request,s:Session=Depends(get_sess
     workspace_handoff.dispatch_control(s,p,body.revision,'resume',identity)
     s.commit();return projects.detail(s,p)
 
+@router.post('/{project_id}/retier')
+def retier(project_id:int,body:Retier,request:Request,s:Session=Depends(get_session)):
+    identity=actor(request);write(s);p=projects.get(s,project_id)
+    projects.retier_paused(s,p,body,identity);s.commit();return projects.detail(s,p)
+
+@router.post('/{project_id}/stories/{card_id}/repair-execution')
+def repair_execution(project_id:int,card_id:int,body:RepairExecution,request:Request,s:Session=Depends(get_session)):
+    identity=actor(request);write(s);p=projects.get(s,project_id)
+    projects.repair_incomplete_execution(s,p,card_id,body,get_settings(),identity)
+    s.commit();return projects.detail(s,p)
+
 @router.get('/{project_id}/stories/{card_id}/artifact')
 def inspect_artifact(project_id:int,card_id:int,request:Request,s:Session=Depends(get_session)):
     actor(request);p=projects.get(s,project_id);link=projects.binding(s,card_id);c=s.get(Card,card_id)
