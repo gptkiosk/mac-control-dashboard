@@ -10,6 +10,13 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.66] - 2026-10-24
+
+### Fixed
+
+- **Human preview stories find nested approved checkouts.** Dashboard-managed previews now resolve the verifier for operator-owned stories without requiring a terminal or SSH.
+
+
 ## [0.6.65] - 2026-10-24
 
 ### Fixed
@@ -1130,7 +1137,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.65...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.66...HEAD
+[0.6.66]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.65...v0.6.66
 [0.6.65]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.64...v0.6.65
 [0.6.64]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.63...v0.6.64
 [0.6.63]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.62...v0.6.63
