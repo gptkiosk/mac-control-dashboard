@@ -59,3 +59,7 @@ Screenshots use [synthetic preview data](screenshots/README.md). They illustrate
 - [Model recovery and bootstrap](configuration/model-recovery.md) — route choices, telemetry, retry boundaries and built-in setup plans.
 - [Engineering rules](development/engineering-rules.md) — standing rules agents must not undo: parity, bounded prompts, setup, models and failover.
 - [Shared-feature parity audit](development/parity-audit-0.6.38.md) — inventory, repaired differences and platform limits.
+
+- [Coordinator pipeline, selected context and channel contract](configuration/coordinator-pipeline.md)
+
+- [Shared project workspaces and existing repository intake](configuration/project-workspaces.md)
