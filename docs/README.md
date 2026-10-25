@@ -27,6 +27,7 @@ Start with [Getting started](getting-started.md), then open the [Setup wizard](S
 - [Settings](configuration/settings.md) and [Environment variables](configuration/environment.md)
 - [Google sign-in](configuration/google-sign-in.md)
 - [Private remote access](configuration/remote-access.md)
+- [Remote project preview access](configuration/remote-project-previews.md)
 - [Alerts configuration](configuration/alerts-config.md)
 - [LaunchAgent installation](configuration/launchd.md)
 - [One-click update of a source checkout](configuration/source-update.md)
