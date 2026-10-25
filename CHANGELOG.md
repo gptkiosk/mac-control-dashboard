@@ -10,6 +10,15 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.67] - 2026-10-24
+
+### Fixed
+
+- Website Property plans now require linked media inventory, MCD Media Studio generation and publish, asset integration, and preview evidence before visual approval.
+- Superseded untouched stories stay in the project ledger but leave active task boards and cannot be approved, retried, or edited.
+- Website preview guidance now uses dashboard host actions and the authenticated remote proxy, without host terminal, SSH, Tailscale, or port forwarding steps.
+
+
 ## [0.6.66] - 2026-10-24
 
 ### Fixed
@@ -1137,7 +1146,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.66...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.67...HEAD
+[0.6.67]: https://github.com/gptkiosk/rbp-control-dashboard/compare/v0.6.66...v0.6.67
 [0.6.66]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.65...v0.6.66
 [0.6.65]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.64...v0.6.65
 [0.6.64]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.63...v0.6.64
