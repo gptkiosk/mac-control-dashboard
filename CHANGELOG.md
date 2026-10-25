@@ -10,6 +10,12 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.64] - 2026-10-24
+
+### Fixed
+
+- **Replanned dashboard preview stories open their host controls.** Persistent preview titles produced by existing replans now resolve to the approved dashboard review action, so the task shows host start, remote open, stop, and output controls without requiring a manual host command.
+
 ## [0.6.63] - 2026-10-24
 
 ### Added
@@ -1117,7 +1123,8 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.63...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.64...HEAD
+[0.6.64]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.63...v0.6.64
 [0.6.63]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.62...v0.6.63
 [0.6.50]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.49...v0.6.50
 [0.6.49]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.48...v0.6.49
