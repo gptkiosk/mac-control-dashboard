@@ -61,3 +61,5 @@ Screenshots use [synthetic preview data](screenshots/README.md). They illustrate
 - [Shared-feature parity audit](development/parity-audit-0.6.38.md) — inventory, repaired differences and platform limits.
 
 - [Coordinator pipeline, selected context and channel contract](configuration/coordinator-pipeline.md)
+
+- [Shared project workspaces and existing repository intake](configuration/project-workspaces.md)
