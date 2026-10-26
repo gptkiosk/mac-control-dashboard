@@ -2,6 +2,12 @@
 
 Mac Control Dashboard (`mac-control`) is a local control center for the Mac mini M4 that monitors hardware health (CPU, GPU, memory, temperature, power, network, disk), tracks service health and crash-loop detection, manages a task board with agent dispatch (Claude Code, Codex CLI, Grok Build, Hermes, OpenClaw) and execution approvals, provides agent chat with session resume, supports reviewed project planning with shared memory and bounded model routing, exposes read-only GitHub and operational report panels, and delivers durable failure alerts through an outbox with verification. It runs on a single FastAPI port (default 8800) with a Vue 3 frontend, binds to loopback by default (`127.0.0.1`), and supports optional private HTTPS remote access only through an operator-configured endpoint.
 
+## Why use a project dashboard?
+
+**Turn a brief into tracked work, task-matched models and documented handoffs.** Guided templates, bounded context, a Kanban record, media steps and remote previews help reduce repeated coordination across agents and coding apps.
+
+**[Read the project-workflow brief](docs/project-workflow-value.md)** — benefits versus manual planning or a standalone coding harness, measured planning results, cost limits, and the next step for improving time estimates from actual project history.
+
 **MIT licensed · Provided as-is · Forks welcome.** You may use and customize the code and documentation for personal or commercial purposes under the [MIT license](LICENSE). No ongoing upstream development, updates, support or pull request review is promised. Users maintain their own installations and forks.
 
 ![Synthetic overview preview](docs/screenshots/overview-overview.png)

@@ -1,5 +1,7 @@
 # Mac Control Dashboard documentation
 
+**[Why use MCD / RCD for project delivery?](project-workflow-value.md)** Benefits, measured planning evidence, context/model efficiency and honest limits.
+
 Start with [Getting started](getting-started.md), then open the [Setup wizard](SETUP_WIZARD.md) in MCD to check your host, sign-in, agents and chosen model routes. [Tested environments](tested-environments.md) distinguishes the confirmed Mac setup from untested platforms.
 
 ## Feature guides
