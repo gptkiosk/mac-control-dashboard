@@ -1761,6 +1761,16 @@ def write_ledger(s, p):
     except OSError:
         return None
 
+def _packet_note(s,p):
+    """Where the project's continuation packet is and the one documentation duty; None when it cannot be built (a story still runs)."""
+    import project_packet
+    try:
+        project_packet.ensure(s,p,get_settings())
+    except Exception:
+        return None
+    return {'start_here':str(project_packet.folder(get_settings(),p.id)/'START-HERE.md'),'living_docs':project_packet.LIVING_DOCS+'/',
+        'use':'Read START-HERE only when you need wider project context. If this story changes architecture, configuration names, decisions or operating steps, update docs/project/ in this story.'}
+
 def _context_lineage(document,story):
     by_key={n['key']:n for n in document['nodes'] if n['kind']=='story'}
     ordered_keys=[]
@@ -1821,6 +1831,7 @@ def context(s,p,story=None,workspace=None):
     payload['guidance']['rule']='Read only what this story needs. Use general plus selected-type guides and accepted prerequisites; omit other templates and unrelated personal chat.'
     if (art:=_reference_art(d)): payload['reference_art']=art
     if d.get('repository'): payload['repository']=_repository_note(d)
+    if (packet:=_packet_note(s,p)): payload['project_packet']=packet
     if (amend:=_amendment_payload(s,p,d)): payload['brief_amendments']=amend
     if story:
         current=by_key[story]
@@ -1854,7 +1865,7 @@ def context(s,p,story=None,workspace=None):
     payload['memory_compaction']['digested']=sum(1 for m in payload['accepted_memory'] if '[digest of' in m['text'])
     # Stable keys first (identical across the stories of a revision, so a prompt cache can reuse
     # them), what varies per story after, and the story's own location and identity last.
-    order=['project_id','revision','title','brief','brief_amendments','constraints','project_type','guidance','reference_art','repository','stories','accepted_artifacts','accepted_outputs','reported_external_work',
+    order=['project_id','revision','title','brief','brief_amendments','constraints','project_type','guidance','reference_art','repository','project_packet','stories','accepted_artifacts','accepted_outputs','reported_external_work',
         'memory_compaction','accepted_memory','execution_workspace','current_story','free_retry']
     payload={k:payload[k] for k in order if k in payload}
     payload['memory_compaction']['entries_included']=len(payload['accepted_memory'])
