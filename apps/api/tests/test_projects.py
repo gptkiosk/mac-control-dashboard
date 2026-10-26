@@ -1036,7 +1036,10 @@ def test_prompt_puts_the_stable_parts_first_and_the_story_last(app):
     p=active(app,[dict(node('a'),title='Story A'),dict(node('b'),title='Story B')]);c,s,wd,settings=app
     ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
     with s() as db:
-        pa=projects.claim_context(db,db.get(Card,ids['a'])); pb=projects.claim_context(db,db.get(Card,ids['b']))
+        pa=projects.claim_context(db,db.get(Card,ids['a']))
+        # MCD holds a sequential story until its predecessor is accepted, so the second prompt is built the
+        # way the claim builds it: the shared context first, the story's own text last.
+        pb=projects.context(db,db.get(Project,1),'b',db.get(Card,ids['b']).working_dir)+'\n\nYOUR STORY (do this now)\n'+db.get(Card,ids['b']).body
         bodies={ids['a']:db.get(Card,ids['a']).body.rstrip(),ids['b']:db.get(Card,ids['b']).body.rstrip()}
     for prompt,card in ((pa,ids['a']),(pb,ids['b'])):
         assert prompt.index('YOUR STORY (do this now)')>prompt.index('"brief"')>prompt.index('MCD SHARED PROJECT CONTEXT')
@@ -1641,3 +1644,51 @@ def test_paused_project_replan_replaces_only_unstarted_work_and_can_be_discarded
     assert all(active_cards[card_id]['superseded'] is True for card_id in old_after)
     assert all(c.get(f'/api/cards/{card_id}').json()['superseded'] is True for card_id in old_after)
     assert any(t['node_key'] == 'new-work' and t['revision'] == 2 for t in final['tasks'])
+
+
+@pytest.mark.parametrize('stage',['failed','timeout','cancelled','awaiting_approval'])
+def test_failed_or_blocked_root_halts_transitive_dependents_with_visible_reason(app,stage):
+    p=active(app,[node('a'),node('b',depends_on=['a']),node('c',depends_on=['a']),node('d',depends_on=['b','c'])])
+    c,s,wd,settings=app;ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    assert policy_request(c,p).status_code==200
+    finish(app,ids['a'],'Upstream stopped.',stage=stage,error='Synthetic upstream stop')
+    d=Dispatcher(s,settings);assert d._claim(4)==[]
+    q=c.get('/api/projects/1').json()
+    for key in ['b','c','d']:
+        task=next(t for t in q['tasks'] if t['node_key']==key)
+        assert ids['a'] in task['blocked_by']
+        assert any(b['card_id']==ids['a'] and stage in b['reason'] for b in task['blocked_reasons'])
+    with s() as db:
+        assert projects.claim_context(db,db.get(Card,ids['d'])) is None
+        assert not list(db.scalars(select(Run).where(Run.card_id.in_([ids[k] for k in ['b','c','d']]))))
+    if stage=='failed':
+        assert c.post(f'/api/projects/1/stories/{ids["a"]}/retry',json={'revision':1}).status_code==200
+        assert [x[0]['id'] for x in d._claim(4)]==[ids['a']]
+        finish(app,ids['a'],'Root repaired and checked.')
+        assert [x[0]['id'] for x in d._claim(4)]==[ids['b']]
+
+
+def test_done_column_alone_and_stale_handoff_cannot_release_a_story(app):
+    p=active(app,[node('a'),node('b',depends_on=['a'])]);c,s,wd,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    with s.begin() as db: db.get(Card,ids['a']).column='done'
+    assert Dispatcher(s,settings)._claim(2)==[]
+    rid=finish(app,ids['a'],'Verified first result.')
+    assert c.post(f'/api/projects/1/stories/{ids["a"]}/accept',json={'run_id':rid,'summary':'Accepted first result.'}).status_code==200
+    finish(app,ids['a'],'Newer result failed.',stage='failed',error='Synthetic failure')
+    with s.begin() as db: db.get(Card,ids['a']).column='done'
+    assert Dispatcher(s,settings)._claim(2)==[]
+    task=next(t for t in c.get('/api/projects/1').json()['tasks'] if t['node_key']=='b')
+    assert 'latest run has not succeeded' in task['blocked_reasons'][0]['reason']
+
+
+def test_approved_dag_still_blocks_if_a_board_dependency_edge_is_missing(app):
+    from models import CardDependency
+    p=active(app,[node('a'),node('b',depends_on=['a'])]);c,s,wd,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    with s.begin() as db:
+        db.delete(db.get(CardDependency,(ids['b'],ids['a'])))
+        assert projects.claim_context(db,db.get(Card,ids['b'])) is None
+    task=next(t for t in c.get('/api/projects/1').json()['tasks'] if t['node_key']=='b')
+    assert task['blocked_by']==[ids['a']]
+    assert [x[0]['id'] for x in Dispatcher(s,settings)._claim(4)]==[ids['a']]

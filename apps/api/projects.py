@@ -526,11 +526,58 @@ def plan_schedule(p):
     except ValueError:
         return None
 
+def prerequisite_reason(s, card_id):
+    """Done is a release gate only when backed by the current accepted success."""
+    c=s.get(Card,card_id)
+    if not c: return 'Prerequisite is missing.'
+    r=s.scalar(select(Run).where(Run.card_id==c.id).order_by(Run.id.desc()).limit(1))
+    if c.column!='done':
+        state=r.stage if r and c.column in {'failed','running','review'} else c.column
+        return f'#{c.id} {c.title}: {state}; prerequisite handoff has not been accepted.'
+    link=binding(s,c.id)
+    if not link or link.role!='story': return None
+    handoff=s.scalar(select(ProjectMemory).where(ProjectMemory.project_id==link.project_id,
+        ProjectMemory.card_id==c.id,ProjectMemory.kind=='handoff').order_by(ProjectMemory.id.desc()).limit(1))
+    if c.assignee_type=='human':
+        return None if handoff and handoff.run_id is None else f'#{c.id} {c.title}: human decision has not been recorded.'
+    if not r or r.stage!='succeeded' or r.error or project_outputs.incomplete_error(r):
+        return f'#{c.id} {c.title}: latest run has not succeeded.'
+    if not handoff or handoff.run_id!=r.id:
+        return f'#{c.id} {c.title}: latest successful run has no accepted handoff.'
+    return None
+
 def dependency_blocks(s, card_id, cache=None):
-    """Unfinished direct prerequisites of a card, as {card_id, reason}: the same rule as the board's blocked_by.
-    Shared workspace and packet code call this; the cache argument keeps RCD's signature."""
-    return [{'card_id':dep,'reason':f'#{dep} {d.title}: {d.column}; prerequisite handoff has not been accepted.'}
-        for dep in cards.dependency_ids(s,card_id) if (d:=s.get(Card,dep)) and d.column!='done']
+    # Include transitive blockers so a diamond's join shows the failed root cause.
+    cache=cache if cache is not None else {'reasons':{},'dependencies':{}}
+    cache.setdefault('projects',{})
+    reasons=[];seen={card_id}
+    def visit(cid):
+        if cid not in cache['dependencies']:
+            deps=cards.dependency_ids(s,cid)
+            link=binding(s,cid)
+            if link and link.role=='story':
+                if link.project_id not in cache['projects']:
+                    project=get(s,link.project_id)
+                    manifest=json.loads(project.approved_manifest) if project.approved_manifest else {}
+                    links=list(s.scalars(select(ProjectTask).where(ProjectTask.project_id==link.project_id,
+                        ProjectTask.role=='story',ProjectTask.revision==manifest.get('revision'))))
+                    cache['projects'][link.project_id]=(manifest,{t.node_key:t.card_id for t in links})
+                manifest,bindings=cache['projects'][link.project_id]
+                node=next((n for n in manifest.get('document',{}).get('nodes',[]) if n['key']==link.node_key),{})
+                # The approved DAG remains authoritative even if a board edge is absent.
+                deps=list(dict.fromkeys(deps+[bindings.get(k) for k in node.get('depends_on',[])]))
+            cache['dependencies'][cid]=deps
+        for dep in cache['dependencies'][cid]:
+            if dep is None:
+                reasons.append({'card_id':None,'reason':'An approved prerequisite story is missing from this project revision.'})
+                continue
+            if dep in seen: continue
+            seen.add(dep)
+            if dep not in cache['reasons']: cache['reasons'][dep]=prerequisite_reason(s,dep)
+            if reason:=cache['reasons'][dep]: reasons.append({'card_id':dep,'reason':reason})
+            visit(dep)
+    visit(card_id)
+    return reasons
 
 def detail(s, p):
     bindings = []
@@ -543,9 +590,11 @@ def detail(s, p):
     cheap_routes=low_cost_routes(s,get_settings()) if p.state in {'active','paused'} else []
     queued_routes=pending_subscription_routes(s,get_settings())
     paid_routes=paid_retry_routes(get_settings(),s) if p.state=='active' else []
+    dependency_cache={'reasons':{},'dependencies':{}}
     for link in s.scalars(select(ProjectTask).where(ProjectTask.project_id==p.id).order_by(ProjectTask.card_id)):
         c = s.get(Card, link.card_id)
         r = s.scalar(select(Run).where(Run.card_id==link.card_id).order_by(Run.id.desc()).limit(1))
+        blocks=dependency_blocks(s,c.id,dependency_cache) if c else []
         bindings.append({'card_id':link.card_id, 'node_key':link.node_key, 'role':link.role,
             'working_dir':c.working_dir if c else None, 'agent':c.agent if c else None, 'model':c.model if c else None,
             'mode':c.mode if c else None, 'incomplete_reason':project_outputs.incomplete_error(r) if r else None,
@@ -558,7 +607,8 @@ def detail(s, p):
             'queued_route_blocker':'This task is an approved output continuation. Review its output approval before changing the route.' if approved_routes.get('output_continuations',{}).get(link.node_key,{}).get('state')=='queued' else None,
             'queued_route_options':[x for x in queued_routes if (x['agent'],x['model'])!=(c.agent,c.model or '')] if link.role=='story' and c and c.assignee_type=='agent' and c.column in {'queued','backlog'} and p.state in {'active','paused'} else [],
             'low_cost_routes':[x for x in cheap_routes if (x['agent'],x['model'])!=(c.agent,c.model or '') or c.mode=='read'] if link.role=='story' and c and c.assignee_type=='agent' and c.column=='failed' and r and r.stage in {'failed','timeout','interrupted'} else [],
-            'blocked_by':[dep for dep in cards.dependency_ids(s,c.id) if (d:=s.get(Card,dep)) and d.column!='done'] if c else [],
+            'blocked_by':[b['card_id'] for b in blocks if b['card_id'] is not None],
+            'blocked_reasons':blocks,
             'retry_routes':[r for r in approved_story_routes(p,link) if (r['agent'],r['model']) != (c.agent,c.model or '')]
                 if c and c.column=='failed' and p.state=='active' else [],
             'output_approval':{'run_id':r.id,'path':str(project_outputs.path(get_settings(),p.id,c.id,r.id,link.node_key)),
@@ -1893,6 +1943,7 @@ def claim_context(s,card,run_id=None):
     if (card.agent,card.model or '') not in pinned:
         card.column='failed';p.error=f'Story #{card.id} route {card.agent}/{card.model or "default"} is not in its approved plan. No model was dispatched; choose an approved route.'
         memory(s,p,'incident',p.error,'mcd',card.id);return None
+    if dependency_blocks(s,card.id): return None
     free=m.get('free_retries',{}).get(link.node_key)
     is_free=bool(free and {'agent':card.agent,'model':card.model}==free['route'])
     if is_free and (card.agent_target!=free['agent_target'] or
@@ -1961,7 +2012,7 @@ def continue_output(s,p,card_id,data,settings,actor):
     if not data.approve_output: fail('Explicitly approve the displayed Markdown output before continuing.',422)
     if not REGISTRY[c.agent].available(settings): fail('The story agent is not installed.',422)
     if not subscription(s,c.agent): fail('This continuation requires the reviewed subscription route; review API billing separately.',422)
-    if any(s.get(Card,dep).column!='done' for dep in cards.dependency_ids(s,c.id)): fail('Finish prerequisites first.')
+    if dependency_blocks(s,c.id): fail('Finish prerequisites first.')
     # Authorization is server-derived, one source run and one fixed output only.
     target=project_outputs.path(settings,p.id,c.id,r.id,link.node_key)
     m.setdefault('output_continuations',{})[link.node_key]={'source_run_id':r.id,'state':'queued','run_id':None}
@@ -2052,7 +2103,7 @@ def accept_story(s,p,card_id,data,actor):
     import workspace_handoff
     if workspace_handoff.blocking(s,c.working_dir or document(p)['working_dir']):
         fail('Record and release the external-work handoff before accepting this workspace.',409)
-    if any(s.get(Card,dep).column!='done' for dep in cards.dependency_ids(s,c.id)): fail('Finish this story’s prerequisites first.')
+    if dependency_blocks(s,c.id): fail('Finish this story’s prerequisites first.')
     output=None
     if c.assignee_type!='human':
         r=s.scalar(select(Run).where(Run.card_id==c.id).order_by(Run.id.desc()).limit(1))
@@ -2213,7 +2264,7 @@ def process_handoffs(s,p,actor=None,card_ids=None):
         if link.revision!=m['revision'] or link.card_id not in card_ids or not c or not n or handoff_exclusion(c,n): continue
         run=s.scalar(select(Run).where(Run.card_id==c.id).order_by(Run.id.desc()).limit(1))
         if c.column!='review' or not run or run.stage!='succeeded' or run.error or not (run.result_text or '').strip(): continue
-        if project_outputs.needs_approval(c,run) or any(s.get(Card,d).column!='done' for d in cards.dependency_ids(s,c.id)): continue
+        if project_outputs.needs_approval(c,run) or dependency_blocks(s,c.id): continue
         # Isolated Git snapshots/integration always retain their artifact review gate.
         if link.node_key in m.get('workspaces',{}): continue
         try:
