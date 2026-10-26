@@ -10,6 +10,16 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.72] - 2026-10-25
+
+### Changed
+
+- Includes the task-matched Coordinator, independent planning/review, bounded replan context and semantic website-plan checks prepared for 0.6.71, with dated OpenRouter/LiteLLM model evidence and unchanged route/billing approvals.
+
+### Fixed
+
+- Project planning choices use a padded section with consistent type, paragraph spacing and a separate wrapping help-link row. The selected planner is shown once, using readable labels instead of raw configuration text.
+
 ## [0.6.71] - 2026-10-25
 
 ### Changed
@@ -1204,6 +1214,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
+[0.6.72]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.70...v0.6.72
 [Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.67...HEAD
 [0.6.67]: https://github.com/gptkiosk/rbp-control-dashboard/compare/v0.6.66...v0.6.67
 [0.6.66]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.65...v0.6.66
