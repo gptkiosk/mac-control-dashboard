@@ -873,9 +873,13 @@ def _planning_route_allowed(s,settings,route):
     return recovery.allowed_class(s,settings,price)
 
 
+class UnapprovedPlanningRoute(HTTPException):
+    """A model cannot expand its own route approval through output repair."""
+
+
 def _retry_unusable_planning_result(s, p, pipeline, step, run, card, settings, error=None):
     """A successful process can still return unusable plan data. Retry only another approved route; never dispatch stories here."""
-    if step not in {'coordinate', 'plan', 'return'}:
+    if isinstance(error, UnapprovedPlanningRoute) or step not in {'coordinate', 'plan', 'return'}:
         return False
     recovery.contract_failure(s,run)
     card.column='failed'
@@ -1462,7 +1466,7 @@ def advance(s,settings):
                 data=_json_result(r.result_text); step=pipeline['step']
                 if step=='coordinate':
                     chosen=next((v for v in pipeline['choices'] if v['agent']==data.get('agent') and v['model']==data.get('model')),None)
-                    if not chosen: fail('Delegator selected an unapproved planner/model. No fallback was run.',422)
+                    if not chosen: raise UnapprovedPlanningRoute(422,'Delegator selected an unapproved planner/model. No fallback was run.')
                     c=_queue(s,p,'plan',chosen['agent'],chosen['model'],_planner_prompt(p,pipeline.get('execution_catalog'),s,pipeline.get('fresh',False),pipeline.get('replan')),settings)
                     p.pipeline=json.dumps({**pipeline,'step':'plan','card_id':c.id,'chosen':chosen})
                     memory(s,p,'proposal','Planner choice: '+json.dumps(data),r.agent,r.card_id,r.id)
