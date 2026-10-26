@@ -94,6 +94,7 @@ def test_bridge_scope_local_only_and_other_profile_refused(secured,tmp_path):
     _,old=issue(secured);assert call(agent(secured,old),'list').status_code==401
 
 def test_intake_questions_idempotency_revision_and_separate_approval(secured,tmp_path,monkeypatch):
+    import billing
     monkeypatch.setattr(AgentSpec,'available',lambda self,settings:True)
     monkeypatch.setattr(billing,'DEFAULT_LIMITS',{**billing.DEFAULT_LIMITS,'allow_subscription_in_free_only':True})
     b,_=paired(secured,tmp_path)
