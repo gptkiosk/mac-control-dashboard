@@ -10,6 +10,10 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+### Changed
+
+- Project stories now wait on the same prerequisite gate as RCD. A prerequisite counts as finished only when its latest run succeeded and that run's handoff was accepted (a human story needs its recorded decision), so a card dragged to Done or a stale handoff no longer releases dependents. Blockers are checked through the whole approved plan, including edges missing from the board, and each project task lists them with a reason in `blocked_reasons`. Dispatch, output continuation, story acceptance and automatic handoff all use this gate.
+
 ## [0.6.74] - 2026-10-26
 
 ### Added
