@@ -325,6 +325,8 @@ def memory(s, p, kind, text, actor, card_id=None, run_id=None):
     s.add(ProjectMemory(project_id=p.id, kind=kind, text=text[:150000] if kind=='context' else text[:12000], actor=actor,
         card_id=card_id, run_id=run_id, created_at=now()))
     p.updated_at = now()
+    import project_packet
+    project_packet.note_work(s, p, kind)   # recorded work moves the packet's freshness baseline after commit
 
 def model_locked(p):
     return bool(p.approved_manifest and json.loads(p.approved_manifest).get('model_lock', False))
@@ -523,6 +525,12 @@ def plan_schedule(p):
         return {**schedule.stats(d['nodes']), 'problems': schedule.overlap_problems(d['nodes']), 'max_concurrent_runs': get_settings().max_concurrent_runs}
     except ValueError:
         return None
+
+def dependency_blocks(s, card_id, cache=None):
+    """Unfinished direct prerequisites of a card, as {card_id, reason}: the same rule as the board's blocked_by.
+    Shared workspace and packet code call this; the cache argument keeps RCD's signature."""
+    return [{'card_id':dep,'reason':f'#{dep} {d.title}: {d.column}; prerequisite handoff has not been accepted.'}
+        for dep in cards.dependency_ids(s,card_id) if (d:=s.get(Card,dep)) and d.column!='done']
 
 def detail(s, p):
     bindings = []
@@ -1633,7 +1641,7 @@ def delete_project(s,p,settings):
     return paths,pid,folder
 
 def forget_project_files(settings,pid):
-    """Files kept outside the database for a project id: its ledger file, saved outputs and branch grants. Called after the delete commits."""
+    """Files kept outside the database for a project id: its ledger file, saved outputs, branch grants and project packet. Called after the delete commits."""
     import shutil
     ledger=Path(settings.data_dir)/'project-ledgers'/f'project-{pid}.md'
     try: ledger.unlink()
@@ -1645,6 +1653,8 @@ def forget_project_files(settings,pid):
     import agent_git
     try: agent_git.forget_project(settings.agent_git_grants_file,pid)
     except Exception: pass
+    import project_packet
+    project_packet.forget(settings,pid)
 
 def protect(s,card):
     if binding(s,card.id): fail('This task belongs to an approved project. Use Projects for handoff acceptance/retry; its scope and dependencies cannot be changed on the board.')

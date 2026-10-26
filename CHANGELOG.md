@@ -10,6 +10,14 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+### Added
+
+- Project packets (in progress): each project keeps a versioned continuation packet (`bamcio.project-packet/1`) in the app's private data folder, never in the workspace. It holds a start-here document, brief, source map, environment variable names, state, decisions, evidence, media and a redacted ledger. It reports whether the workspace has changed since the last recorded handoff, without attributing unreported edits. `GET /api/projects/{id}/packet` reads it. Export, import and the Workspace panel follow before release.
+
+### Fixed
+
+- Projects → Workspace, Copy handoff and the paired Discord `workspace` read failed for submitted projects. The shared workspace view called a dependency helper MCD did not have.
+
 ## [0.6.73] - 2026-10-26
 
 ### Fixed
