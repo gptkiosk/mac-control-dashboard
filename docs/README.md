@@ -65,3 +65,4 @@ Screenshots use [synthetic preview data](screenshots/README.md). They illustrate
 - [Coordinator pipeline, selected context and channel contract](configuration/coordinator-pipeline.md)
 
 - [Shared project workspaces and existing repository intake](configuration/project-workspaces.md)
+- [Project packets: export, import and continuation in coding apps](configuration/project-packets.md)
