@@ -10,6 +10,17 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.75] - 2026-10-26
+
+### Changed
+
+- Project stories now wait on the same prerequisite gate as RCD. A prerequisite counts as finished only when its latest run succeeded and that run's handoff was accepted (a human story needs its recorded decision), so a card dragged to Done or a stale handoff no longer releases dependents. Blockers are checked through the whole approved plan, including edges missing from the board, and each project task lists them with a reason in `blocked_reasons`. Dispatch, output continuation, story acceptance and automatic handoff all use this gate.
+
+### Fixed
+
+- Reference-first artwork checks now recognise briefs that say a character reference comes *then* the scenes (for example "one approved heroine reference, then paired illustrations"), "once the character reference is approved" or "next". Such plans must use separate reference and scene passes before submission. Previously only "first", "before" or "followed by" triggered the rule.
+- Project packets for folders without Git (scratch projects) now track freshness by file path, size and time instead of reporting Unknown. A folder that is missing or too large to list in time still reports Unknown with the reason.
+
 ## [0.6.74] - 2026-10-26
 
 ### Added
@@ -1235,7 +1246,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
 [0.6.72]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.70...v0.6.72
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.67...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.75...HEAD
 [0.6.67]: https://github.com/gptkiosk/rbp-control-dashboard/compare/v0.6.66...v0.6.67
 [0.6.66]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.65...v0.6.66
 [0.6.65]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.64...v0.6.65
@@ -1349,5 +1360,6 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.6.71]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.70...v0.6.71
 [0.6.70]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.69...v0.6.70
 
+[0.6.75]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.74...v0.6.75
 [0.6.74]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.73...v0.6.74
 [0.6.73]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.72...v0.6.73
