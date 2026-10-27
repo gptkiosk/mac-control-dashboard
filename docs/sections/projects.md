@@ -71,7 +71,7 @@ This passes agent-reported completion into shared memory, not independent artifa
 ## Troubleshooting
 
 - **Everything is queued:** find the earliest unaccepted handoff or human decision in Stories & runs. Sequential mode waits even when later stories have no original explicit dependency.
-- **Planning failed:** open the failed planning run from Stories & runs for its error. MCD retries coordinator, planner or plan-review failures on the next approved route; free-only dispatch uses reviewed-free Hermes routes. When routes are exhausted, edit the brief or route and retry the retained project. Planning retries never start project stories. **Resume saved plan** remains available when a successful proposal only needs validation again.
+- **Planning failed:** open the failed planning run from Stories & runs for its error. MCD retries coordinator, planner or plan-review failures on the next approved route the route policy allows, with paid API last. When routes are exhausted, edit the brief or route and retry the retained project. Planning retries never start project stories. **Resume saved plan** remains available when a successful proposal only needs validation again.
 - **Missing instructions/scope/definition of done:** complete the named story's required fields and review the proposal again. Do not accept an incomplete artifact to release the queue.
 - **Retired target or changed branch:** restore the approved state or prepare a new reviewed plan; do not silently reroute running work.
 - **Changed artifact hash:** review the current output and refresh the evidence. A stale/missing output cannot be accepted.
