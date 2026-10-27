@@ -47,8 +47,8 @@ accepts no arbitrary trailing content; one redundant closing brace after a compl
 object is tolerated, and the original run output remains available. **Retry planning**
 starts a new planning pipeline after its coordination review. If coordination, planning or
 plan review fails, times out or is interrupted, MCD automatically retries that read-only
-planning step on the next configured, approved route that has not already been tried. With
-free-only dispatch enabled, recovery is limited to reviewed-free Hermes routes. If all
+planning step on the next configured, approved route that has not already been tried. Routes
+outside the route policy are excluded, and paid API is tried last. If all
 eligible routes fail, the project and brief remain available to edit and retry. Recovery
 never starts story execution or authorizes publication.
 
@@ -211,7 +211,7 @@ costs more than you chose:
 - **Use Claude Haiku or Codex Luna** (your subscription, no per-token charge): the cost-aware Balanced models. For a read-only task you can also tick
   **edit mode**, which switches that one task to workspace execution on the project branch and needs a separate acknowledgement.
 - **Pay for this task** (API billing, this task only): a configured OpenRouter model that is not free, on a configured OpenClaw agent. It needs an
-  acknowledgement, no Google BYOK route is added, and any limits you turned on in Agents, Billing & rates, Spending & limits, and the free-only setting still apply when it starts, so it can stop
+  acknowledgement, no Google BYOK route is added, and any limits you turned on in Agents, Billing & rates, Spending & limits, and the route policy still apply when it starts, so it can stop
   there with the reason.
 
 Each choice keeps the story's scope, workspace, dependencies and acceptance, supersedes any pending output continuation, and records an operator decision in
