@@ -138,8 +138,7 @@ def reviewed_route_class(s, settings, source, model: str | None) -> str | None:
         # and used by project planning. Claude and Codex ship with standard
         # subscription defaults; saving an unchanged dialog must not be the
         # hidden action that makes those defaults real for dispatch.
-        account = billing.config(s)["accounts"].get(agent, {})
-        if agent in SUBSCRIPTION_AGENTS and account.get("mode") == "subscription":
+        if agent in SUBSCRIPTION_AGENTS and billing.account_mode(s, agent) == "subscription":
             return "subscription"
     except (ValueError, TypeError, AttributeError):
         return None
