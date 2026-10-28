@@ -41,7 +41,7 @@ Start with [Getting started](getting-started.md), then open the [Setup wizard](S
 - [Repository standards](configuration/standards.md)
 - [Starter standards](configuration/starter-standards.md)
 - [What survives an update](configuration/upgrades-and-your-data.md)
-- [Models & providers](configuration/route-policy.md)
+- [AI & models](configuration/route-policy.md)
 - [Model profiles](configuration/model-profiles.md)
 - [Coordinator scorecard](configuration/coordinator-scorecard.md)
 - [Service actions](configuration/service-actions.md)
