@@ -10,6 +10,8 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.85] - 2026-10-29
+
 ### Added
 - Playwright browser checks in Agent tools: the pinned Playwright package plus the Chromium build it pins, installed into the dashboard's own folder (about 600 MB). Stories can take screenshots at phone, tablet and desktop sizes for visual polish. Agents and preview actions get `NODE_PATH` and `PLAYWRIGHT_BROWSERS_PATH`, Claude stories may run `playwright screenshot` and `playwright pdf`, and the planner is told how to load it.
 
@@ -1363,7 +1365,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
 [0.6.72]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.70...v0.6.72
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.84...HEAD
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.85...HEAD
 [0.6.67]: https://github.com/gptkiosk/rbp-control-dashboard/compare/v0.6.66...v0.6.67
 [0.6.66]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.65...v0.6.66
 [0.6.65]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.64...v0.6.65
@@ -1477,6 +1479,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.6.71]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.70...v0.6.71
 [0.6.70]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.69...v0.6.70
 
+[0.6.85]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.84...v0.6.85
 [0.6.84]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.83...v0.6.84
 [0.6.83]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.82...v0.6.83
 [0.6.82]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.81...v0.6.82
