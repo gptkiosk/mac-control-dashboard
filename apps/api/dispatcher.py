@@ -49,7 +49,7 @@ from idempotency import refuse_timeout_retry
 from models import Card, CardDependency, ChatMessage, ChatThread, Run, RunEvent
 from profiles import SAVED_KEY_AGENTS, saved_openrouter_key
 from operator_boundary import runner_env
-from settings import tool_search_dirs
+from settings import managed_playwright_env, tool_search_dirs
 
 logger = logging.getLogger("mac_control.dispatcher")
 
@@ -361,6 +361,7 @@ class Dispatcher:
         if spec is not None:
             env.update(spec.env)   # for example Grok's telemetry and trace upload switches, always off
         env["PATH"] = ":".join((*EXTRA_PATH, env.get("PATH", "/usr/bin:/bin")))
+        env.update(managed_playwright_env())       # browser checks from Agent tools, once installed
         # Codex invokes shell commands as `bash -lc`; a login profile can
         # overwrite PATH. BASH_ENV restores this tool-only path afterwards.
         env["DASHBOARD_AGENT_RUNTIME_PATH"] = env["PATH"]
