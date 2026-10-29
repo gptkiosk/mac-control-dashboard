@@ -44,6 +44,7 @@ def incomplete_error(run):
                          r"\b(?:not verified|not executed)\b|"
                          r"\b(?:acceptance criteria|definition of done) (?:remain|remains|is|are) unmet\b|"
                          r"\bnot release-ready\b|"
+                         r"^\s*[*_`~#\s]*(?:story|task) (?:incomplete|unfinished|not complete)\b|"
                          r"\bdo not mark (?:this )?(?:story|task) (?:as )?done\b", opening, re.I)
     # An unambiguous current-status declaration is safe to recognize anywhere in
     # a report. This catches agents that put their final status after long findings
