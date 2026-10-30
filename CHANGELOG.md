@@ -17,6 +17,9 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 - Template rehearsal (`apps/api/rehearsal.py`): builds the planner's real prompt for a template example without a project, and judges a planner's answer with the dashboard's own plan validation, the template's plan checks and the example's expectations. The template store's rehearsal gate runs it; it never calls a model itself.
 - Class codes for course packs: the `course-package` check accepts a `code` in `course.json` only in the form `SUBJ:LL-Class name` (for example `MATH:07-Forces and Motion`), and only the code the project's subject, level and class name settings give.
 
+### Changed
+- Release packages are built on GitHub's macOS 15 runners; the macOS 14 images retire on November 2, 2026. The package contents are the same: Python dependencies are still installed on your Mac from the locked list.
+
 ## [0.6.87] - 2026-10-30
 
 ### Added
