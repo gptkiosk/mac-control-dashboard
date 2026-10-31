@@ -51,7 +51,7 @@ def test_the_job_order_is_gate_build_sign_publish():
 
 
 def test_the_build_runs_on_an_apple_silicon_runner_and_the_rest_on_linux():
-    assert JOBS["build"]["runs-on"] == "macos-14"
+    assert JOBS["build"]["runs-on"] == "macos-15"
     assert JOBS["sign-and-attest"]["runs-on"].startswith("ubuntu") and JOBS["publish-draft"]["runs-on"].startswith("ubuntu")
     assert "uname -s)\" = Darwin" in steps_text("build") and "uname -m)\" = arm64" in steps_text("build")
 
