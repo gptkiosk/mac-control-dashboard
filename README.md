@@ -1,5 +1,14 @@
 # Mac Control Dashboard (MCD)
 
+## Functionality at a glance
+
+A local Mac control center for host/service health, task boards, reviewed agent dispatch, chat, project planning, media workflows, and operational reports.
+
+- Runtime: FastAPI with a Vue frontend on one port, default `127.0.0.1:8800`. Remote HTTPS access requires an operator-configured private endpoint.
+- Connectivity: installed agent CLIs and configured model/media providers, read-only GitHub panels, and verified releases from [dashboard-pipeline-packs](https://github.com/gptkiosk/dashboard-pipeline-packs).
+- upubhub course packages can be prepared and validated locally for operator import. A pack is not an automatic publishing connection.
+- This is the macOS application. The [Raspberry Pi dashboard](https://github.com/gptkiosk/rbp-control-dashboard) is a separate codebase; neither requires the retired Mission Control application.
+
 Mac Control Dashboard (`mac-control`) is a local control center for the Mac mini M4 that monitors hardware health (CPU, GPU, memory, temperature, power, network, disk), tracks service health and crash-loop detection, manages a task board with agent dispatch (Claude Code, Codex CLI, Grok Build, Hermes, OpenClaw) and execution approvals, provides agent chat with session resume, supports reviewed project planning with shared memory and bounded model routing, exposes read-only GitHub and operational report panels, and delivers durable failure alerts through an outbox with verification. It runs on a single FastAPI port (default 8800) with a Vue 3 frontend, binds to loopback by default (`127.0.0.1`), and supports optional private HTTPS remote access only through an operator-configured endpoint.
 
 ## Why use a project dashboard?
