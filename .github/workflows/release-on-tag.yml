@@ -57,7 +57,7 @@ jobs:
     name: build from clean committed source
     needs: gate
     if: needs.gate.outputs.build == 'true'
-    runs-on: macos-14
+    runs-on: macos-15            # macOS 14 runner images retire 2026-11-02 (actions/runner-images#13518)
     timeout-minutes: 45
     outputs:
       archive: ${{ steps.assets.outputs.archive }}
