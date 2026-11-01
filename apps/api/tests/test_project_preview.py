@@ -88,7 +88,8 @@ mkdir -p .preview
 case "$1" in
   verify) echo verified ;;
   serve)
-    nohup python3 -m http.server 41390 --bind 127.0.0.1 > .preview/server.log 2>&1 < /dev/null &
+    command -v python3
+    nohup python3 -u -c "import faulthandler, runpy, sys; faulthandler.dump_traceback_later(5, repeat=True); sys.argv=['http.server','41390','--bind','127.0.0.1']; runpy.run_module('http.server',run_name='__main__')" > .preview/server.log 2>&1 < /dev/null &
     pid=$!
     for _ in $(seq 50); do python3 -c "import socket;socket.create_connection(('127.0.0.1',41390),1)" 2>/dev/null && break; sleep 0.1; done
     printf '{"pid": %s, "port": 41390, "source_sha": "%s", "status": "running"}' "$pid" "$(printf x | shasum -a 256 | cut -c1-64)" > .preview/preview.state ;;
