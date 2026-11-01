@@ -83,6 +83,7 @@ class PreviewHostPathTest(unittest.TestCase):
 
 SERVE_SCRIPT = r"""#!/usr/bin/env bash
 set -eu
+set -x
 mkdir -p .preview
 case "$1" in
   verify) echo verified ;;
@@ -142,7 +143,9 @@ class PreviewServeContractTest(unittest.TestCase):
             (root / 'tools' / 'verify-preview.sh').write_text(SERVE_SCRIPT)
             (root / 'index.html').write_text('<h1>hi</h1>')
             result = project_preview.run(review_project(root), SimpleNamespace(), SimpleNamespace(node_key='verify'), 'verify', proxy_base='/p')
-            self.assertTrue(result['ok'], result['output'])
+            server_log = root / '.preview' / 'server.log'
+            diagnostics = server_log.read_text(errors='replace') if server_log.exists() else '(no synthetic server log)'
+            self.assertTrue(result['ok'], result['output'] + '\nSynthetic server log:\n' + diagnostics)
             self.assertIn('Start/Stop check passed', result['output'])
             self.assertIsNone(project_preview._state(root))
             started = project_preview.run(review_project(root), SimpleNamespace(), SimpleNamespace(node_key='review'), 'serve', proxy_base='/p')
