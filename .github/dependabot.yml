@@ -25,30 +25,10 @@ updates:
     commit-message:
       prefix: "deps"
       include: scope
-  - package-ecosystem: npm
-    directory: "/apps/api/tool_locks/codex"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "deps"
-      include: scope
-  - package-ecosystem: npm
-    directory: "/apps/api/tool_locks/openclaw"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "deps"
-      include: scope
-  - package-ecosystem: npm
-    directory: "/apps/api/tool_locks/claude-code"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "deps"
-      include: scope
+  # The pinned tool installs under apps/api/tool_locks are not listed here on
+  # purpose. Each lock file is guarded by a hash in apps/api/tool_catalog.json,
+  # which Dependabot cannot update, so its pull requests there always fail the
+  # api suite. Bump those with scripts/tools/check.py --apply instead.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
