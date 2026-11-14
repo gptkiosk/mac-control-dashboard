@@ -14,6 +14,35 @@ import projects
 import cards
 import project_outputs
 
+PLAN_MODE_REFUSAL = (
+    "The verifier run is not done. Plan mode is active, so I have not run `tools/verify-preview.sh` or any other command that writes or starts a server.\n\n"
+    "I wrote the plan to `/home/pi/.claude/plans/x.md`. I could not call ExitPlanMode to submit the plan for approval.")
+
+
+def test_a_plan_mode_refusal_is_incomplete_with_a_reason_that_says_what_to_do():
+    reason = project_outputs.incomplete_error(SimpleNamespace(result_text=PLAN_MODE_REFUSAL))
+    assert reason and 'plan mode' in reason and 'human or CI story' in reason and 'workspace execution' in reason and 'does not allow starting a server' in reason
+
+
+@pytest.mark.parametrize('result', [
+    "Plan mode is active, so nothing was executed. The commands below are the plan.",
+    "I cannot run the build in plan mode; no check ran.",
+    "Plan mode blocks execution, and the checks have not been run.",
+])
+def test_other_phrasings_of_a_plan_mode_refusal_are_incomplete(result):
+    assert 'plan mode' in project_outputs.incomplete_error(SimpleNamespace(result_text=result))
+
+
+@pytest.mark.parametrize('result', [
+    "# Review\n\nI read the files and found two issues. Plan mode kept this review read-only, as intended.",
+    "All checks ran and passed. The agent used plan mode only for the read steps.",
+    "Plan mode is active. The plan is written; plan mode blocks writing the file, so approve the plan to lift plan mode and save it.",
+])
+def test_a_normal_read_result_or_an_output_approval_plan_is_not_flagged_as_a_plan_mode_refusal(result):
+    reason = project_outputs.incomplete_error(SimpleNamespace(result_text=result))
+    assert not reason or 'read-only plan mode' not in reason
+
+
 @pytest.fixture
 def app(make_client, monkeypatch, tmp_path):
     monkeypatch.setattr(AgentSpec,'available',lambda self,settings:True)
@@ -22,6 +51,7 @@ def app(make_client, monkeypatch, tmp_path):
     config.write_text(json.dumps({'agents':{'list':[{'id':'mm-main'},{'id':'mm-developer'},{'id':'mm-security'}]}}))
     get_settings().openclaw_config_path=config
     with client:
+        assert client.patch('/api/routes/policy/cost',json={'membership':True,'paid':True}).status_code==200   # paid flows still need their own approval
         yield client,client.app.state.sessions,tmp_path/'ws/proj',get_settings()
 
 def node(key,**kw):
@@ -53,6 +83,8 @@ def node(key,**kw):
     '## Handoff: s16_docs_mcd is incomplete\n\nNothing was executed.',
     'The evidence pack is incomplete, so nothing should be marked done.',
     '## Handoff — incomplete verification\n\nChanges were written but require host testing.',
+    'Story incomplete: the inventory is drafted, but dashboard catalog sizing and estimates remain unverified.',   # pilot story 17
+    '**Task unfinished.** The scenes are drafted.',
 ])
 def test_direct_incomplete_handoff_language_is_not_completion(result):
     assert project_outputs.incomplete_error(SimpleNamespace(result_text=result))
@@ -604,7 +636,7 @@ def test_legacy_bias_default_is_read_only_and_edits_preserve_assignments(app):
     saved=app[0].patch('/api/projects/1',json={'revision':1,'document':p['document']}).json()
     assert saved['document']['planning_bias']==0 and saved['document']['nodes']==original
 
-@pytest.mark.parametrize('bias,phrase',[(0,'Economy / OpenClaw first'),(50,'Balanced.'),(100,'Capability / Claude and Codex first')])
+@pytest.mark.parametrize('bias,phrase',[(0,'Economy.'),(50,'Balanced.'),(100,'Capability.')])
 def test_bias_reaches_each_planning_stage_and_reviewed_edits_win(app,bias,phrase):
     c,s,_,_=app
     c.app.state.collector=SimpleNamespace(subagents={'openclaw':{'agents':[{'id':'mm-developer','name':'Local Dev','model':'openrouter/thinkingmachines/inkling:free','secret':'must-not-propagate'}]}})
@@ -1007,7 +1039,10 @@ def test_prompt_puts_the_stable_parts_first_and_the_story_last(app):
     p=active(app,[dict(node('a'),title='Story A'),dict(node('b'),title='Story B')]);c,s,wd,settings=app
     ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
     with s() as db:
-        pa=projects.claim_context(db,db.get(Card,ids['a'])); pb=projects.claim_context(db,db.get(Card,ids['b']))
+        pa=projects.claim_context(db,db.get(Card,ids['a']))
+        # MCD holds a sequential story until its predecessor is accepted, so the second prompt is built the
+        # way the claim builds it: the shared context first, the story's own text last.
+        pb=projects.context(db,db.get(Project,1),'b',db.get(Card,ids['b']).working_dir)+'\n\nYOUR STORY (do this now)\n'+db.get(Card,ids['b']).body
         bodies={ids['a']:db.get(Card,ids['a']).body.rstrip(),ids['b']:db.get(Card,ids['b']).body.rstrip()}
     for prompt,card in ((pa,ids['a']),(pb,ids['b'])):
         assert prompt.index('YOUR STORY (do this now)')>prompt.index('"brief"')>prompt.index('MCD SHARED PROJECT CONTEXT')
@@ -1048,10 +1083,13 @@ def test_delegator_pipeline_keeps_assigned_agent_and_model_during_role_change(ap
     finish(app,p['pipeline']['card_id'],json.dumps({'nodes':[node('story')]}));advance(app)
     p=client.get('/api/projects/1').json()
     assert p['pipeline']['delegator'] == route
+    # Automatic planning pins its selected planner as the separate return reviewer.
+    # A later global Coordinator role change cannot replace either assignment.
+    assert p['pipeline']['reviewer'] == selected
     with app[1]() as db:
         card=db.get(Card,p['pipeline']['card_id'])
-        assert card.agent == agent
-        assert (card.model or '') == route['model']
+        assert card.agent == selected['agent']
+        assert (card.model or '') == selected['model']
 
 def test_free_only_setup_can_plan_with_hermes_without_subscription_clis(app, monkeypatch, tmp_path):
     monkeypatch.setattr(AgentSpec, 'available', lambda self, settings: self.id == 'hermes')
@@ -1462,6 +1500,7 @@ def test_the_operator_can_accept_a_story_whose_agent_reported_it_unfinished_with
     with s() as db: assert db.get(Run,rid).stage=='failed'                                              # the run history is not rewritten
     advance(app)
     assert c.get(f'/api/cards/{ids["b"]}').json()['column']=='queued'                                    # the dependent is released
+    with s() as db: assert projects.dependency_blocks(db,ids['b'])==[]                                  # and the dispatcher may start it
     assert c.post(path,json={'run_id':rid,'reason':'Already accepted, so this changes nothing.'}).status_code==200
 
 def test_only_a_run_that_finished_and_reported_unfinished_work_can_be_accepted_this_way(app):
@@ -1475,6 +1514,27 @@ def test_only_a_run_that_finished_and_reported_unfinished_work_can_be_accepted_t
     assert accept('b',ok).status_code==409                                                              # not failed
     assert c.post(f'/api/projects/{p["id"]}/stories/{ids["c"]}/accept-despite-report',json={'run_id':1,'reason':'A human story is decided.'}).status_code==422
     assert c.post(f'/api/projects/{p["id"]}/stories/999/accept-despite-report',json={'run_id':1,'reason':'No such story here.'}).status_code==404
+
+
+def test_a_reviewed_continuation_that_still_reports_unfinished_work_can_be_accepted_anyway(app):
+    """Pilot 2026-10-28: an approved read-only continuation succeeded but said 'Status: incomplete', so it sat in review.
+    Approve handoff refused the report and Accept anyway only took failed stories, leaving no way forward."""
+    p=active(app,[node('a'),node('b',depends_on=['a'])])
+    c,s,wd,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    rid=finish(app,ids['a'],'Status: not complete, operator acceptance required. Quota and browser capture are unverified.',stage='failed')
+    with s.begin() as db:                                                                                 # what an output-continuation grant leaves behind
+        db.get(Run,rid).stage='succeeded';db.get(Run,rid).error=None;db.get(Card,ids['a']).column='review'
+    refused=c.post(f'/api/projects/{p["id"]}/stories/{ids["a"]}/accept',json={'run_id':rid,'summary':'Looks fine to me.'})
+    assert refused.status_code==409 and 'Accept anyway' in refused.text                                  # the refusal names the way out
+    task=next(t for t in c.get(f'/api/projects/{p["id"]}').json()['tasks'] if t['card_id']==ids['a'])
+    assert task['column']=='review' and task['run_stage']=='succeeded' and task['incomplete_reason']
+    r=c.post(f'/api/projects/{p["id"]}/stories/{ids["a"]}/accept-despite-report',json={'run_id':rid,'reason':'Quota and preview are dashboard-owned; the report is enough.'})
+    assert r.status_code==200,r.text
+    assert c.get(f'/api/cards/{ids["a"]}').json()['column']=='done'
+    with s() as db:
+        assert db.get(Run,rid).stage=='succeeded'
+        assert projects.dependency_blocks(db,ids['b'])==[]      # pilot story 16 stayed queued: the prerequisite check ignored Accept anyway
 
 
 @pytest.mark.parametrize('state,column', [('active','queued'),('active','backlog'),('paused','queued')])
@@ -1525,10 +1585,10 @@ def pending_subscriptions(monkeypatch):
 
 def test_pending_route_options_respect_host_membership_policy(app,pending_subscriptions):
     c,s,_,settings=app
-    settings.dispatch_free_only=True
+    assert c.patch('/api/routes/policy/cost',json={'membership':False}).status_code==200
     with s() as db:
         assert projects.pending_subscription_routes(db,settings)==[]
-    settings.dispatch_free_only=False
+    assert c.patch('/api/routes/policy/cost',json={'membership':True}).status_code==200
     with s() as db:
         assert {'agent':'codex','model':'gpt-6-luna'} in projects.pending_subscription_routes(db,settings)
 
@@ -1605,4 +1665,125 @@ def test_paused_project_replan_replaces_only_unstarted_work_and_can_be_discarded
     old_after = {t['card_id']: t for t in final['tasks'] if t['card_id'] in {x['card_id'] for x in old}}
     assert final['state'] == 'active'
     assert all(t['column'] == 'backlog' and t['superseded'] for t in old_after.values())
+    active_cards = {card['id']: card for card in c.get('/api/cards').json()['cards']}
+    assert all(active_cards[card_id]['superseded'] is True for card_id in old_after)
+    assert all(c.get(f'/api/cards/{card_id}').json()['superseded'] is True for card_id in old_after)
     assert any(t['node_key'] == 'new-work' and t['revision'] == 2 for t in final['tasks'])
+
+
+@pytest.mark.parametrize('stage',['failed','timeout','cancelled','awaiting_approval'])
+def test_failed_or_blocked_root_halts_transitive_dependents_with_visible_reason(app,stage):
+    p=active(app,[node('a'),node('b',depends_on=['a']),node('c',depends_on=['a']),node('d',depends_on=['b','c'])])
+    c,s,wd,settings=app;ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    assert policy_request(c,p).status_code==200
+    finish(app,ids['a'],'Upstream stopped.',stage=stage,error='Synthetic upstream stop')
+    d=Dispatcher(s,settings);assert d._claim(4)==[]
+    q=c.get('/api/projects/1').json()
+    for key in ['b','c','d']:
+        task=next(t for t in q['tasks'] if t['node_key']==key)
+        assert ids['a'] in task['blocked_by']
+        assert any(b['card_id']==ids['a'] and stage in b['reason'] for b in task['blocked_reasons'])
+    with s() as db:
+        assert projects.claim_context(db,db.get(Card,ids['d'])) is None
+        assert not list(db.scalars(select(Run).where(Run.card_id.in_([ids[k] for k in ['b','c','d']]))))
+    if stage=='failed':
+        assert c.post(f'/api/projects/1/stories/{ids["a"]}/retry',json={'revision':1}).status_code==200
+        assert [x[0]['id'] for x in d._claim(4)]==[ids['a']]
+        finish(app,ids['a'],'Root repaired and checked.')
+        assert [x[0]['id'] for x in d._claim(4)]==[ids['b']]
+
+
+def test_done_column_alone_and_stale_handoff_cannot_release_a_story(app):
+    p=active(app,[node('a'),node('b',depends_on=['a'])]);c,s,wd,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    with s.begin() as db: db.get(Card,ids['a']).column='done'
+    assert Dispatcher(s,settings)._claim(2)==[]
+    rid=finish(app,ids['a'],'Verified first result.')
+    assert c.post(f'/api/projects/1/stories/{ids["a"]}/accept',json={'run_id':rid,'summary':'Accepted first result.'}).status_code==200
+    finish(app,ids['a'],'Newer result failed.',stage='failed',error='Synthetic failure')
+    with s.begin() as db: db.get(Card,ids['a']).column='done'
+    assert Dispatcher(s,settings)._claim(2)==[]
+    task=next(t for t in c.get('/api/projects/1').json()['tasks'] if t['node_key']=='b')
+    assert 'latest run has not succeeded' in task['blocked_reasons'][0]['reason']
+
+
+def test_approved_dag_still_blocks_if_a_board_dependency_edge_is_missing(app):
+    from models import CardDependency
+    p=active(app,[node('a'),node('b',depends_on=['a'])]);c,s,wd,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    with s.begin() as db:
+        db.delete(db.get(CardDependency,(ids['b'],ids['a'])))
+        assert projects.claim_context(db,db.get(Card,ids['b'])) is None
+    task=next(t for t in c.get('/api/projects/1').json()['tasks'] if t['node_key']=='b')
+    assert task['blocked_by']==[ids['a']]
+    assert [x[0]['id'] for x in Dispatcher(s,settings)._claim(4)]==[ids['a']]
+
+
+def test_media_stories_already_done_in_media_studio_are_recorded_not_asked_again(app):
+    """Pilot 2026-10-29: all seven slots were published at the start, yet each generate/publish story still asked for the same handoff."""
+    human=dict(assignee='human',model='',mode='read')
+    p=active(app,[node('inv'),dict(node('gen',depends_on=['inv'],media_stage='generate'),**human),dict(node('pub',depends_on=['gen'],media_stage='publish'),**human),
+                  node('integ',depends_on=['pub'])])
+    c,s,wd,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    (wd/'media').mkdir(parents=True,exist_ok=True);(wd/'assets/img').mkdir(parents=True,exist_ok=True)
+    (wd/'media/slots.json').write_text(json.dumps({'slots':[{'name':'hero','kind':'image','prompt':'A doorway.'}]}))
+    advance(app)
+    assert next(t for t in c.get('/api/projects/1').json()['tasks'] if t['node_key']=='gen')['column']!='done'      # blocked by inv, and nothing made yet
+    rid=finish(app,ids['inv'],'Wrote the media inventory.')
+    assert c.post(f'/api/projects/1/stories/{ids["inv"]}/accept',json={'run_id':rid,'summary':'Inventory checked.'}).status_code==200
+    advance(app)
+    q=c.get('/api/projects/1').json();states={t['node_key']:t['column'] for t in q['tasks'] if t['role']=='story'}
+    assert states['gen']!='done' and states['pub']!='done'                                                            # unmade art is still the operator's call
+    (wd/'assets/img/hero.jpg').write_bytes(b'\xff\xd8 published')
+    advance(app)
+    q=c.get('/api/projects/1').json();states={t['node_key']:t['column'] for t in q['tasks'] if t['role']=='story'}
+    assert states['gen']=='done' and states['pub']=='done' and states['integ']!='done'
+    recorded=[m['text'] for m in q['memory'] if m['kind']=='handoff' and m['text'].startswith('Recorded by MCD')]
+    assert len(recorded)==2 and all('(hero)' in t and 'nothing new was generated or spent' in t for t in recorded)
+
+
+def test_a_failed_host_verifier_cannot_be_accepted_as_if_it_passed(app):
+    """Pilot 2026-10-29: the verifier failed (exit 1) and the human story still offered acceptance as though it had worked."""
+    p=active(app,[dict(node('verify',host_action='preview-verify'),assignee='human',model='',mode='read')]);c,s,wd,settings=app
+    cid=next(t['card_id'] for t in p['tasks'] if t['role']=='story')
+    r=c.post(f'/api/projects/1/stories/{cid}/accept',json={'summary':'Looks fine.'})
+    assert r.status_code==409 and 'get a pass' in r.text                                                               # never run
+    with s.begin() as db:
+        projects.memory(db,db.get(projects.Project,1),'checkpoint',projects.HOST_VERIFY+'failed (exit 1).\n\n{"status": "failed"}','operator',cid)
+    with s() as db: assert projects.last_host_verify(db,db.get(projects.Project,1),cid)['ok'] is False
+    assert c.post(f'/api/projects/1/stories/{cid}/accept',json={'summary':'Looks fine.'}).status_code==409
+    with s.begin() as db:
+        projects.memory(db,db.get(projects.Project,1),'checkpoint',projects.HOST_VERIFY+'passed.\n\n{"status": "passed"}','operator',cid)
+    r=c.post(f'/api/projects/1/stories/{cid}/accept',json={'summary':'Verifier passed on the host.'})
+    assert r.status_code==200 and r.json()['state']=='complete',r.text
+
+
+def test_an_accepted_handoff_is_not_taken_back_when_a_later_release_reads_its_report_more_strictly(app):
+    """Pilot 2026-10-29: story #17 was accepted with a report that began "Story incomplete:". 0.6.84 started reading that as unfinished,
+    and every story after it was silently refused by the server while the board showed nothing blocking."""
+    p=active(app,[node('a'),node('b',depends_on=['a'])]);c,s,wd,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    rid=finish(app,ids['a'],'Created the inventory and checked it.')
+    assert c.post(f'/api/projects/1/stories/{ids["a"]}/accept',json={'run_id':rid,'summary':'Accepted.'}).status_code==200
+    with s.begin() as db:
+        db.get(Run,rid).result_text='Story incomplete: estimates remain unverified.'     # the accepted report, as a stricter reader now sees it
+    with s() as db:
+        assert projects.dependency_blocks(db,ids['b'])==[]
+        db.get(Run,rid)                                                                       # an unaccepted run with that report still blocks
+    with s.begin() as db:
+        db.query(projects.ProjectMemory).filter_by(card_id=ids['a'],kind='handoff').delete()
+    with s() as db:
+        assert projects.dependency_blocks(db,ids['b'])[0]['card_id']==ids['a']
+
+
+def test_the_host_preview_panel_is_told_why_the_server_would_refuse_the_action(app):
+    p=active(app,[node('a'),dict(node('verify',host_action='preview-verify',depends_on=['a']),assignee='human',model='',mode='read')]);c,s,wd,settings=app
+    ids={t['node_key']:t['card_id'] for t in p['tasks'] if t['role']=='story'}
+    (wd/'tools').mkdir(parents=True,exist_ok=True);(wd/'tools/verify-preview.sh').write_text('#!/usr/bin/env bash\necho ok\n')
+    body=c.get(f'/api/projects/1/stories/{ids["verify"]}/host-preview').json()
+    assert body['available'] and len(body['blocked_by'])==1 and f'#{ids["a"]}' in body['blocked_by'][0]
+    assert c.post(f'/api/projects/1/stories/{ids["verify"]}/host-preview',json={'action':'verify'}).status_code==409
+    rid=finish(app,ids['a'],'Done and checked.')
+    c.post(f'/api/projects/1/stories/{ids["a"]}/accept',json={'run_id':rid,'summary':'Accepted.'})
+    assert c.get(f'/api/projects/1/stories/{ids["verify"]}/host-preview').json()['blocked_by']==[]

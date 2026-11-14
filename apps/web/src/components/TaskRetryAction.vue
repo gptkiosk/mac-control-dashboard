@@ -17,7 +17,7 @@ const succeededRerunnable = computed(() => story.value && task.value?.run_stage 
   ((task.value.column === 'review' && project.value?.state === 'active') ||
    (task.value.column === 'done' && ['active', 'complete'].includes(project.value?.state ?? ''))))
 // A run that finished and reported unfinished work can be accepted on the operator's say-so; a crash or timeout cannot (there is no report to accept).
-const acceptable = computed(() => !!task.value?.incomplete_reason && !!task.value.run_id && task.value.run_id === props.card.last_run?.id && ['active', 'paused'].includes(project.value?.state ?? '') && !notice.value)
+const acceptable = computed(() => !!task.value?.incomplete_reason && !!task.value.run_id && task.value.run_id === props.card.last_run?.id && ['failed', 'succeeded'].includes(props.card.last_run?.stage ?? '') && ['failed', 'review'].includes(props.card.column) && ['active', 'paused'].includes(project.value?.state ?? '') && !notice.value)
 const timedOut = computed(() => props.card.last_run?.stage === 'timeout')
 const timeoutAck = ref(false)
 // After a timeout MCD cannot tell what the attempt changed or whether it is still running, so a new attempt needs the operator's word that the partial work was reviewed.
@@ -41,13 +41,16 @@ const freeTargets = computed(() => [...new Set(freeRoutes.value.map(r => r.agent
 async function acceptAnyway() {
   if (busy.value || !acceptable.value || !task.value) return
   const reason = window.prompt(`The agent reported "${props.card.title}" unfinished:\n\n${(task.value.incomplete_reason || '').slice(0, 300)}\n\nAccept it anyway? Its report and your reason are recorded as the handoff, the run stays failed in the history, and dependent stories are released. Why is this acceptable?`, '')
-  if (!reason || reason.trim().length < 10) return
+  if (reason === null) return
+  if (reason.trim().length < 10) { error.value = 'Give a reason of at least ten characters, then choose Accept anyway… again.'; return }
   busy.value = true; error.value = ''
   try {
     const base = `/api/projects/${props.card.project!.id}`
     const fresh = await getJson<Project>(base)
     const t = fresh.tasks.find(x => x.card_id === props.card.id && x.role === 'story')
-    if (t?.column !== 'failed' || t.run_id !== props.card.last_run?.id) throw new Error('The task changed. Refresh before accepting it.')
+    // Same states the server accepts: a failed run on a failed story, or a succeeded continuation on a story in review.
+    const eligible = (t?.column === 'failed' && t.run_stage === 'failed') || (t?.column === 'review' && t.run_stage === 'succeeded')
+    if (!t || !eligible || t.run_id !== props.card.last_run?.id) throw new Error('The task changed. Refresh before accepting it.')
     await postJson(`${base}/stories/${props.card.id}/accept-despite-report`, { revision: fresh.revision, run_id: t.run_id, reason: reason.trim() })
     notice.value = 'Accepted. Its report and your reason are recorded as the handoff, and the stories that wait on it are released.'
     emit('changed')
@@ -169,8 +172,8 @@ async function retry(route?: ProjectNode['routes'][number]) {
       <button v-for="r in lowCost" :key="`${r.agent}:${r.model}`" type="button" class="btn" :disabled="busy || !ready" @click="chooseCheap(r)">Use {{ cheapLabel(r) }} (subscription)</button>
       <button v-if="paidRoutes.length" type="button" class="btn" :disabled="busy || !ready" @click="choosePaid">Pay for this task…</button>
       <button v-if="limited && (card.agent === 'claude' || card.agent === 'codex')" type="button" class="btn" :disabled="busy || !ready || !freeRoutes.length" @click="chooseFree">Go Free!</button>
-      <button v-if="acceptable" type="button" class="btn" :disabled="busy" data-testid="accept-anyway" @click="acceptAnyway">Accept anyway…</button>
       </template>
+      <button v-if="acceptable" type="button" class="btn" :disabled="busy" data-testid="accept-anyway" @click="acceptAnyway">Accept anyway…</button>
     </div>
     <div v-if="showFree" class="free-choice" aria-label="Choose free retry">
       <p><strong>Continue this task with OpenClaw</strong></p>

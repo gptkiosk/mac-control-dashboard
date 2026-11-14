@@ -9,7 +9,7 @@ uses no model tokens. Live work starts only from a reviewed planning/submission 
    constraints and exclusions. Set **Story assignment preference** from Economy / OpenClaw
    first through Balanced to Capability / Claude & Codex first. The initial default is centered
    at Balanced (50/100). Save changes as a new revision.
-2. **Plan with Hermes** reviews the coordinator request. Hermes chooses an approved
+2. **Plan** (the button names your planner, for example *Plan (Codex planner)*) reviews the coordinator request. Hermes chooses an approved
    subscription candidate (Claude Opus or the configured Codex model), MCD invokes that
    CLI, and Hermes reviews its returned JSON plan. Explicit Hermes API planning needs its
    own approval. Planner output must satisfy the bounded node schema; malformed or
@@ -47,8 +47,8 @@ accepts no arbitrary trailing content; one redundant closing brace after a compl
 object is tolerated, and the original run output remains available. **Retry planning**
 starts a new planning pipeline after its coordination review. If coordination, planning or
 plan review fails, times out or is interrupted, MCD automatically retries that read-only
-planning step on the next configured, approved route that has not already been tried. With
-free-only dispatch enabled, recovery is limited to reviewed-free Hermes routes. If all
+planning step on the next configured, approved route that has not already been tried. Routes
+outside the route policy are excluded, and paid API is tried last. If all
 eligible routes fail, the project and brief remain available to edit and retry. Recovery
 never starts story execution or authorizes publication.
 
@@ -68,7 +68,7 @@ configured capped Google BYOK fallback. Subscription fees stay fixed; choosing O
 can conserve subscription quota, but does not inherently lower those fees. Existing API
 and execution review requirements still apply.
 
-After mapping, edit the slider under **Project brief & planner**, save, then request a new
+After mapping, edit the slider under **Project settings**, save, then request a new
 plan if you want revised recommendations. Moving it alone preserves all existing agent,
 model and dependency edits. New manual stories start with OpenClaw below the midpoint
 (using the configured developer target when available), otherwise Codex; their model stays
@@ -173,7 +173,7 @@ that one folder in order, and there is no branch, branch grant, hook or commit r
 button push: name, brief, create. The planner, preference, build mode and working directory are under **Choices (the defaults work)**; the consultant chat uses the same default. Use a git repository as the working directory when the work must be
 committed on a branch; then the project needs a branch grant (`project-<id>/<slug>`) before agents can commit, and the checkout must stay on the approved branch.
 
-An Edit-mode Claude story in a scratch folder can run test and syntax runners (`pytest`, `unittest`, `py_compile`, `json.tool`, `node --check`, `npm run test`/`type-check`/`build`, `vitest`, `bash -n`, `shasum`) so it can verify its own work; git, network tools and arbitrary shell stay denied, and a Read-mode story gets no shell.
+An Edit-mode Claude story in a scratch folder can run test and syntax runners (`pytest`, `unittest`, `py_compile`, `json.tool`, `node --check`, `npm run test`/`type-check`/`build`, `vitest`, `bash -n`, `shasum`) and the managed read-only scanners (`gitleaks git`, `gitleaks dir`, `csstree-validator`, installed from Agent tools) and Playwright's `playwright screenshot` and `playwright pdf` so it can verify its own work; git, network tools and arbitrary shell stay denied, and a Read-mode story gets no shell. A Read-mode Claude story runs in plan mode and cannot run any command, so a step that must run a build, a server or a script belongs in a human or CI story; if a read-only story returns only a plan, the run is marked incomplete with that advice.
 
 ### What each agent can do in a project folder
 
@@ -211,7 +211,7 @@ costs more than you chose:
 - **Use Claude Haiku or Codex Luna** (your subscription, no per-token charge): the cost-aware Balanced models. For a read-only task you can also tick
   **edit mode**, which switches that one task to workspace execution on the project branch and needs a separate acknowledgement.
 - **Pay for this task** (API billing, this task only): a configured OpenRouter model that is not free, on a configured OpenClaw agent. It needs an
-  acknowledgement, no Google BYOK route is added, and any limits you turned on in Agents, Billing & rates, Spending & limits, and the free-only setting still apply when it starts, so it can stop
+  acknowledgement, no Google BYOK route is added, and any limits you turned on in Settings → AI & models → Accounts → Spending & limits, and the route policy still apply when it starts, so it can stop
   there with the reason.
 
 Each choice keeps the story's scope, workspace, dependencies and acceptance, supersedes any pending output continuation, and records an operator decision in
@@ -267,6 +267,7 @@ planner/return/dispatch validation, revision conflicts, duplicate dispatch, depe
 operator acceptance, pause/resume, finite quota handoffs (including stderr-only failures),
 workspace separation, accepted prerequisite integration, conflicts and reviewed snapshots.
 Browser verification uses an isolated loopback preview with dispatch/collection disabled;
+see [Remote project preview access](configuration/remote-project-previews.md) for the reserved 41350–41399 port group and Tailscale SSH review tunnel.
 the example map is not a submitted live project.
 
 Verification: API 237 tests, web 155 tests and MCP 13 tests; production type-check/build pass. Frozen project dependencies are enforced even through curated agent draft tools, and managed workspace symlinks cannot escape the approved root. No real planning/model turn was invoked during verification.
@@ -309,6 +310,16 @@ Open a task to inspect its definition of done and latest result, then use its bl
 
 The full artifact review remains available under Projects → Stories & runs. Failed and dependency-blocked stories do not offer these approval shortcuts.
 
+## Template store
+
+Optional project templates for one kind of deliverable (a upubhub class, for example) can be added from **Settings → Template store**. A template is planner guidance, plan checks and format guides, published in a pack; it never runs code. You choose only its settings when you start a project. See [Pipeline packs](configuration/pipeline-packs.md).
+
+## Project totals
+
+Once any of a project's tasks has run, the project page shows its totals above the tabs ("Totals so far" while it runs, "Project totals" when it is complete). They cover every run of every task, planning included: agent time and elapsed time, tokens in, out and cached, and one row per agent and model with how it was billed.
+
+Cost is shown two ways. **Actual cost** is what was charged: membership and free-model runs count as $0, and API runs count at the cost the agent reported or, when it reported only tokens (Codex), the tokens at catalog API rates. **API-rate cost** prices every run at published API rates, so membership use can be compared with paying per token. Both include the Media studio's fal estimate for images generated in the project folder. Billing modes are the ones saved for each agent now, and runs with no published rate are counted and left out. The totals are worked out from the run records and the media ledger each time and never stored.
+
 ## Closing a project without finishing it
 
 **Close project…** (Projects, in the project heading) ends a project that will not be finished, for example
@@ -333,4 +344,4 @@ history. The project becomes **Closed**, never Complete: Complete is for project
 
 ## A story that reports itself unfinished
 
-When an agent finishes a run but its report says work is unfinished or a check could not run, the story fails with that report and blocks what depends on it. **Retry same story** runs it again. If the missing part genuinely cannot be done where the agent works (for example rendering pages in a browser, which agent sandboxes do not have), use **Accept anyway** on the story (in Stories & runs, or in the board's task panel beside Rerun) and give a reason. Your reason and the agent's own report (with its gaps) are recorded as the handoff and in the project ledger, the run stays failed in the history, and dependent stories are released. A story that crashed or timed out has no report to accept and needs a retry. Plan checks for the project type now flag agent stories that ask for browser rendering so the plan avoids the problem.
+When an agent finishes a run but its report says work is unfinished or a check could not run, the story fails with that report and blocks what depends on it. **Retry same story** runs it again. If the missing part genuinely cannot be done where the agent works (for example rendering pages in a browser, which agent sandboxes do not have), use **Accept anyway** on the story (in Stories & runs, or in the board's task panel beside Rerun) and give a reason. Your reason and the agent's own report (with its gaps) are recorded as the handoff and in the project ledger, the run stays failed in the history, and dependent stories are released. An approved read-only continuation that finishes but still reports unfinished work waits in review; **Approve handoff** refuses it, and **Accept anyway** is offered there too. A story that crashed or timed out has no report to accept and needs a retry. Plan checks for the project type now flag agent stories that ask for browser rendering so the plan avoids the problem.

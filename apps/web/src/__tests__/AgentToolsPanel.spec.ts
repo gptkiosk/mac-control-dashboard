@@ -2,9 +2,10 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import AgentToolsPanel from '@/components/AgentToolsPanel.vue'
+import { resetManagedRuntimes } from '@/lib/routes'
 import { calls, stubFetch } from './helpers'
 
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers() })
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); resetManagedRuntimes() })
 
 const LOGIN = {
   'claude-code': 'claude auth login', codex: 'codex login --device-auth', openclaw: 'openclaw onboard', hermes: 'hermes model', grok: 'grok login --device-code',
@@ -41,7 +42,7 @@ it('lists the five tools with Install buttons that show the pinned version, and 
   expect(w.findAll('button').map(b => b.text())).toEqual(['Install 1.0.0', 'Install 1.0.0', 'Install 1.0.0', 'Install 1.0.0', 'Install 1.0.0'])
   expect(w.get('[data-test="host"]').text()).toContain('3.8 GB memory')
   expect(w.get('[data-test="host"]').text()).toContain('20.0 GB free disk')
-  expect(f.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${url}`)).toEqual(['GET /api/agent-installs'])
+  expect(f.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${url}`).filter(c => c !== 'GET /api/routes/policy')).toEqual(['GET /api/agent-installs'])
   expect(w.text()).toContain('nothing here signs in to a tool or touches a key')
   w.unmount()
 })
@@ -242,6 +243,19 @@ it('shows and copies the sign-in command with the tool’s full path when its fo
   w.unmount()
 })
 
+it('shows no sign-in line for a verification tool that needs none, and keeps it for a tool that does', async () => {
+  const gitleaks = tool('gitleaks', 'Gitleaks', { installed: true, installed_version: '8.30.1', path: '/home/pi/.local/share/rcd-agent-tools/bin/gitleaks',
+    login: null, login_command: null, actions: { install: null, update: null, remove: [], rollback: null } })
+  const codex = tool('codex', 'Codex CLI', { installed: true, installed_version: '0.162.1', path: '/home/pi/.local/share/rcd-agent-tools/bin/codex',
+    actions: { install: null, update: null, remove: [], rollback: null } })
+  stubFetch(url => url === '/api/agent-installs' ? { body: status({}, [gitleaks, codex]) } : undefined)
+  const w = mount(AgentToolsPanel, stubs); await flushPromises()
+  expect(w.find('[data-login="gitleaks"]').exists()).toBe(false)
+  expect(w.find('[data-login="codex"]').exists()).toBe(true)
+  expect(w.get('[data-tool="gitleaks"]').text()).toContain('Gitleaks')
+  w.unmount()
+})
+
 it('shows each installed tool as a card with its version, runs a read-only health check on request and lists the next steps', async () => {
   const installed = tool('hermes', 'Hermes', { installed: true, installed_version: '0.21.5', installation_source: 'native', path: '/home/pi/.local/bin/hermes', actions: { install: null, update: [], remove: null, rollback: null }, pinned_version: '0.22.0' })
   const f = stubFetch(url => {
@@ -275,5 +289,13 @@ it('offers Repair for a managed tool whose command wrapper is out of date, and a
   await repair.trigger('click'); await flushPromises()
   expect(JSON.parse(String(calls(f, 'POST', '/api/agent-installs/plan')[0]![1]!.body))).toEqual({ tool: 'hermes', action: 'repair' })
   expect(w.get('[data-test="confirm"]').text()).toContain('nothing is downloaded')
+  w.unmount()
+})
+
+it('hides the runtimes an installation-managed route policy removes and says so', async () => {
+  stubFetch(url => url === '/api/agent-installs' ? { body: status() } : url === '/api/routes/policy' ? { body: { managed_runtimes: ['grok', 'hermes'] } } : undefined)
+  const w = mount(AgentToolsPanel, stubs); await flushPromises()
+  expect(w.findAll('[data-tool]').map(e => e.attributes('data-tool'))).toEqual(['hermes', 'grok'])
+  expect(w.get('[data-testid="managed-hidden"]').text()).toContain("Hidden by this installation's route policy: Claude, Codex, OpenClaw")
   w.unmount()
 })

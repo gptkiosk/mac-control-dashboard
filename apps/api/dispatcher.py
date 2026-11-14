@@ -49,7 +49,7 @@ from idempotency import refuse_timeout_retry
 from models import Card, CardDependency, ChatMessage, ChatThread, Run, RunEvent
 from profiles import SAVED_KEY_AGENTS, saved_openrouter_key
 from operator_boundary import runner_env
-from settings import tool_search_dirs
+from settings import managed_playwright_env, tool_search_dirs
 
 logger = logging.getLogger("mac_control.dispatcher")
 
@@ -254,6 +254,9 @@ class Dispatcher:
                 if refuse_timeout_retry(s, card, now):
                     continue
                 link = projects.binding(s, card.id)
+                import workspace_handoff
+                if workspace_handoff.blocking(s, card.working_dir):
+                    continue
                 # Second line of defence for standalone cards: only an unused, unexpired grant
                 # for this exact route pin may start a run. Anything else needs a new approval.
                 problem = approval.grant_problem(card, now) if card.needs_approval and not link else None
@@ -358,6 +361,7 @@ class Dispatcher:
         if spec is not None:
             env.update(spec.env)   # for example Grok's telemetry and trace upload switches, always off
         env["PATH"] = ":".join((*EXTRA_PATH, env.get("PATH", "/usr/bin:/bin")))
+        env.update(managed_playwright_env())       # browser checks from Agent tools, once installed
         # Codex invokes shell commands as `bash -lc`; a login profile can
         # overwrite PATH. BASH_ENV restores this tool-only path afterwards.
         env["DASHBOARD_AGENT_RUNTIME_PATH"] = env["PATH"]
@@ -373,8 +377,10 @@ class Dispatcher:
             try:
                 source = db.get(Card, row.card_id) if row.card_id else db.get(ChatThread, row.thread_id)
                 current_class = _reviewed_route_class(db, self.settings, source, row.model_requested) if source else None
-                evidence = admit_dispatch(self.settings, row, argv, default_free_only=False, current_price_class=current_class,
-                                          limits=billing_limits(db, self.settings))
+                import route_policy
+                policy_reason = route_policy.run_reason(db, self.settings, source, row.model_requested) if source else "the run has no task or chat"
+                evidence = admit_dispatch(self.settings, row, argv, current_price_class=current_class,
+                                          limits=billing_limits(db, self.settings), route_policy_reason=policy_reason)
             except DispatchDenied as exc:
                 db.add(RunEvent(run_id=run_id, ts=_now(), kind="note", text=f"dispatch denied: {exc}"))
                 problem = str(exc)
@@ -628,6 +634,9 @@ class Dispatcher:
             if thread is None or spec is None:
                 return None
             active = list(s.scalars(select(Run).where(Run.stage == "running")))
+            import workspace_handoff
+            if workspace_handoff.blocking(s, thread.working_dir):
+                return None
             if any(r.card_id and projects.binding(s, r.card_id) and (projects.overlap(thread.working_dir, r.working_dir) or (thread.agent==r.agent=="openclaw" and (s.get(Card,r.card_id).agent_target or "mm-main")==(thread.agent_target or "mm-main"))) for r in active):
                 return None
             model_requested = thread.model or spec.default_model()

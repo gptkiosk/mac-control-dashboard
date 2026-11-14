@@ -21,7 +21,7 @@ The map is synthetic preview data, not a submitted live project or evidence of c
 ### From goal to work
 
 1. Create a project with a name, goal, constraints/exclusions and an allowlisted working directory. Set **Story assignment preference**, centered on Balanced by default, and save the draft.
-2. Review **Plan with Hermes**. Hermes coordinates an approved subscription planner, MCD runs the selected CLI and Hermes reviews the returned proposal. Paid API planning needs its own approval. A validated plan returns for your review; it does not begin story execution.
+2. Review **Plan** (the button names your planner). Hermes, the Coordinator, coordinates an approved subscription planner, MCD runs the selected CLI and Hermes reviews the returned proposal. Paid API planning needs its own approval. A validated plan returns for your review; it does not begin story execution.
 3. Edit phases and stories on the map. Use Arrange/Fit map; review instructions, scope, definition of done, dependencies, agent/model, OpenClaw target and Read/Edit mode. Add ordered alternate model routes if wanted. Circular dependencies are refused.
 4. Use **Review & submit** to freeze the reviewed revision, workspace, assignments and routes. Hermes proposes a dependency-respecting order; MCD materializes each story once on the board.
 5. In **Stories & runs**, inspect each successful result against its definition of done. Review the handoff summary and artifact files before accepting. Human stories require the actual operator decision. Dependents wait for acceptance, not just a successful process exit.
@@ -71,7 +71,7 @@ This passes agent-reported completion into shared memory, not independent artifa
 ## Troubleshooting
 
 - **Everything is queued:** find the earliest unaccepted handoff or human decision in Stories & runs. Sequential mode waits even when later stories have no original explicit dependency.
-- **Planning failed:** open the failed planning run from Stories & runs for its error. MCD retries coordinator, planner or plan-review failures on the next approved route; free-only dispatch uses reviewed-free Hermes routes. When routes are exhausted, edit the brief or route and retry the retained project. Planning retries never start project stories. **Resume saved plan** remains available when a successful proposal only needs validation again.
+- **Planning failed:** open the failed planning run from Stories & runs for its error. MCD retries coordinator, planner or plan-review failures on the next approved route the route policy allows, with paid API last. When routes are exhausted, edit the brief or route and retry the retained project. Planning retries never start project stories. **Resume saved plan** remains available when a successful proposal only needs validation again.
 - **Missing instructions/scope/definition of done:** complete the named story's required fields and review the proposal again. Do not accept an incomplete artifact to release the queue.
 - **Retired target or changed branch:** restore the approved state or prepare a new reviewed plan; do not silently reroute running work.
 - **Changed artifact hash:** review the current output and refresh the evidence. A stale/missing output cannot be accepted.
@@ -87,3 +87,9 @@ This passes agent-reported completion into shared memory, not independent artifa
 ## Model lock
 
 In a submitted active or paused project, open **Stories & runs** and enable **Model lock**. Failed tasks stay on their assigned model and stop for review instead of automatically retrying or switching to an approved equivalent. The default is off, retaining the project's reviewed quota alternatives and transport retry policy. The toggle is revision-checked, persists on the approved project snapshot and records the operator decision in shared memory. It applies to subsequent failure/retry decisions; it does not cancel a running task or undo a previous model change. Explicit manual retry or reviewed reassignment remains available.
+
+## Planning activity
+
+While a plan is being prepared, the panel below the project title shows the current Coordinator stage: review the brief, build the map, then check the plan. Completed stages and the current task's queued, running or approval state come from the project status, refreshed every three seconds. Open the linked planning task for its log and result. No model reasoning or estimated percentage is shown.
+
+The spinner stops when approval, recovery or plan review is needed. Reduced-motion settings stop the animation. The ordinary story counter appears after dispatch; planning an empty map is not shown as “Not started, 0 / 0.” This display adds no provider calls or prompt tokens.

@@ -1,0 +1,187 @@
+{
+  "id": "local-website",
+  "label": "Local website (illustrated site reviewed on this host)",
+  "summary": "Create an illustrated static website and review it in an isolated preview on this computer. Includes themed pages, reviewed media and browser checks. Choose this for a local demonstration or prototype; public hosting and deployment are outside this template.",
+  "suggest": [
+    "static (web)?site",
+    "landing page",
+    "home page",
+    "theme",
+    "dark mode|light mode",
+    "art|illustration|icons?\\b",
+    "animation|transition|motion",
+    "design reference|concept",
+    "local website",
+    "static site",
+    "landing page",
+    "theme"
+  ],
+  "keys": [
+    "agent",
+    "fal",
+    "openrouter"
+  ],
+  "guides": [
+    "container-app-delivery.md",
+    "practices.md",
+    "website-design-delivery.md",
+    "website-spacing-and-timing.md",
+    "readme-and-docs.md"
+  ],
+  "planner_text": "Plan the requested website only; saved brief, exclusions, reference art and confirmed model preferences outrank examples. Never add a contact form, account, visitor storage, tracking or application backend by default. Local static preview serving is compatible with a no-backend site. Containers, CI, cloud deployment and pull requests are conditional on the selected delivery and saved requirements, not mandatory extras.\nUse an image-capable design story to read actual references and write a compact DESIGN.md with original characters, palette/type/spacing/motion tokens, responsive composition and the requested world states. Preserve the confirmed content, narrative and storage boundaries. Implement the pages, interactions and accessible reduced-motion alternative. Use drawn fallbacks during construction, never as evidence that requested final artwork shipped.\nWhen generated final artwork is requested, use separate media_stage stories in this dependency order: inventory (agent, Edit: list each scene/state/placement, alt text, dimensions, source/reference, prompt, resolution and estimate in media/slots.json); generate (human decision that uses dashboard Media Studio fal.ai, confirms displayed spend, then runs Generate all missing; it creates real candidates, not just a plan); publish (human selects and publishes the candidates through the same Media tab); integrate (agent uses the published files in the actual page regions and theme states). Candidate selection is after generation. Link both meaningful decisions directly to the project's Media tab. Agents never receive the fal key or generate media. Existing-assets-only briefs skip paid generation, validate those sources and integrate them. Reuse approved stills as style references; make dependent video only after its reference still is published. Generate one take at a time, use per-slot economical resolution, and never silently buy another take. The operator may edit ungenerated prompts, purpose and sizing in Media Studio; adding/removing/renaming assets or changing placement requires a reviewed inventory amendment so integration remains consistent.\nBefore final review, an agent checks static file validity, real asset references, both-world wiring, no secret/visitor data and the requested accessibility boundaries. Empty directory placeholders are not required content assets. A preparation story writes tools/preview.sh and tools/verify-preview.sh plus /health.txt. Set host_action to \"preview-verify\" for the dashboard's Verify checkpoint, and host_action \"preview-review\" for the persistent preview and final human visual decision. Both depend on file checks after asset integration. The fixed script accepts PREVIEW_PORT, binds 127.0.0.1 in reserved ports 41350–41399, records actual PID/port/SHA in .preview/preview.state, fetches required pages/assets and captures declared browser evidence, and uses a trap/PID-specific stop on failure/cancellation. Verify saves evidence and stops; Start keeps review running until Stop. The remote operator uses authenticated dashboard proxy links and captured output, never SSH, a host terminal or the operator's localhost. Use representative phone/tablet/desktop widths and both worlds; keep the final review combined unless a real decision needs separation.\nDeliver the checked commit to the selected project branch and verify its remote SHA when repository delivery was requested; never auto-merge main. Repository creation, clone and branch grant are app-owned approved setup, never an agent story. Keep concise README, operation/handoff and media provenance notes; add pipeline/release/deployment work only when relevant. Preserve the Bamcio LLC branded footer with version and commit identifiers. Check coordinator readiness first and repair bounded project facts through the app; route unknown or privileged setup to its existing approval control, not repeated command tasks. The repository is private for proprietary company/product work unless the operator explicitly chose public/open-source delivery.",
+  "failure_points": [
+    "A media-selection or publication story cannot create the missing candidates: generation needs its own dashboard fal.ai stage after inventory/spend approval.",
+    "Template examples must not add forms, backend/data collection, containers or deployment excluded by the saved brief.",
+    "Saved primary story-model preferences outrank assignment bias and free-only boilerplate; unavailable preferred routes require setup, not silent substitution.",
+    "A story's own report that art or media exists is not proof; generated files can be empty. Verify the files, then show them on a preview before asking a person to approve.",
+    "A container or pipeline story planned before the pages exist cannot smoke-test anything; order it after the pages.",
+    "A Dockerfile that copies only html, css and js ships a site with no assets; the container story must copy the assets folder and the smoke test must fetch an asset.",
+    "Agents cannot build or run containers: building the image, compose and the Colima checks are one final human story.",
+    "A route that cannot view images cannot follow concept art; the design direction story must run on one that can.",
+    "A human approval of how it looks has nothing to judge without a live preview and clickable URLs.",
+    "Original art only: no names, logos or assets from the concept images or any franchise; reference images stay out of the container image.",
+    "Free models cannot be trusted with taste or motion work; use a strong model for design direction, the theme engine and the transitions.",
+    "A story that asks an agent to render pages, read a browser console or take screenshots cannot be done in an agent sandbox (no browser, no loopback server); it reports itself unfinished and blocks everything behind it. Agent verification is static (files, references, syntax, tests); rendering is checked by a person in the preview.",
+    "Mixing picture styles (engraved or cartoon cards beside photographic heroes) reads as unfinished; decide one visual language in the design direction story and use the approved hero still as the style reference for every other slot.",
+    "A close-up or macro clip used as a banner background reads as a crop of rust; clips are wide establishing shots, and an ambient loop is a low-opacity blended texture over a still.",
+    "Setting an inline background-image from script replaces the layered backgrounds a theme draws and drops size and position; always set size, position and repeat with it.",
+    "A fixed grid row count that does not match the children leaves stray rows and a squashed picture; let rows follow the content.",
+    "A theme sheet's display rule outranks a plain responsive hide, so decorative plaques collide with the nav on mid-size screens; make the hide outrank the theme rule and size the breakpoints from measurements.",
+    "Product status written from guesswork (live products marked coming soon, beta products unmarked) is a content bug; record the owner's facts in the brief and update the tests that encode them.",
+    "Timing and spacing left to each build story drift: a 1-second theme crossing reads as rushed and header parts collide. Record the numbers as tokens in DESIGN.md first (see the spacing and timing guide).",
+    "A menu that only reflows at phone width, or media queries in px, break for readers with larger text: collapse the menu behind an accessible button below 760 px (visible without script) and write media queries in em.",
+    "A project run in a scratch folder with no git remote finishes with nothing pushed: no pull request and no pipeline run, so the image or app build and tests never ran where they are meant to. When the brief names a repository, the working folder must be a clone of it, and delivery (push the project branch, open the pull request, read the pipeline result) must be stories in the plan.",
+    "A README with only install commands tells a new person nothing about the application. Add a Mermaid architecture and data-flow diagram when it is more than a local install, a screenshot and a short how-to for each application area beyond installation and sign-in, and make the screenshots with a Playwright script that a person or the pipeline runs (an agent cannot run a browser).",
+    "A preview with no address to open and no way to check it is running makes the human look sign-off guesswork: use the dashboard-managed preview action: it records host output and exposes an authenticated remote link while the service remains bound to 127.0.0.1; the operator must never need a host terminal, SSH, Tailscale or port forwarding.",
+    "Every slot at the tier's full resolution multiplies the bill: pictures shown small do not need 2K and retro clips do not need 768p. Set a per-slot resolution, skip art the code can draw, and let the plan list each slot with its resolution and estimate before any generation."
+  ],
+  "visual_checks": "Always: a file-level verification story, then an automated preview-verification checkpoint with captured URLs and screenshots where available that shuts down cleanly, then the human look sign-off. Changes loop back through verification and preview.",
+  "human_signoffs": [
+    "Approve media spending and select/publish candidates in the project Media tab",
+    "Approve the illustrated result in the authenticated live preview",
+    "Consequential release/security decisions only when the approved scope needs them"
+  ],
+  "checks": [
+    {
+      "id": "design-direction-first",
+      "severity": "warn",
+      "kind": "has_story",
+      "match": "design direction|design\\.md|art direction",
+      "message": "No design direction story. Start with one that reads the concept images and writes DESIGN.md."
+    },
+    {
+      "id": "verification-story",
+      "severity": "warn",
+      "kind": "has_story",
+      "match": "verif.{0,30}(file|asset|theme|site)|check.{0,20}(files|assets)",
+      "message": "No file-level verification story. Add one that proves the promised files exist, are not empty and are used."
+    },
+    {
+      "id": "preview-checkpoint",
+      "severity": "warn",
+      "kind": "has_story",
+      "match": "preview",
+      "message": "Add a dashboard-managed preview verifier after static checks and asset integration; use its fixed Verify/Start/Stop actions and authenticated remote link.",
+      "assignee": "agent"
+    },
+    {
+      "id": "container-after-pages",
+      "severity": "warn",
+      "kind": "order",
+      "first": "pages?\\b|html|restyle",
+      "then": "container|dockerfile|pipeline",
+      "message": "The container or pipeline story is planned before the pages exist."
+    },
+    {
+      "id": "container-needs-human",
+      "severity": "block",
+      "kind": "not_agent_for",
+      "match": "docker (build|compose|run)|compose up|colima|smoke test (against|on) (a )?running|build the (container )?image",
+      "message": "A story needs a container engine, which agents cannot run. Split static container files from the final human local verification story."
+    },
+    {
+      "id": "container-runtime-verification",
+      "severity": "block",
+      "kind": "requires_story",
+      "match": "container|dockerfile|docker compose|compose",
+      "requires_match": "(local|container|docker|compose).{0,50}(verification|test|check|review)|verification.{0,50}(container|docker|compose)",
+      "assignee": "human",
+      "message": "A container plan needs a final human runtime verification story that builds or runs the checked-out repository with Docker/Compose.",
+      "scope": "title"
+    },
+    {
+      "id": "browser-checks-need-a-person",
+      "severity": "block",
+      "kind": "not_agent_for",
+      "match": "console errors|render(s|ed|ing)? (in|without|correctly)|in a browser|browser (render|check|test)|\\b(run|launch|execute|take|capture|generate|make)s?\\s+(the\\s+|a\\s+|all\\s+|some\\s+)?(playwright|puppeteer|lighthouse|screenshots?)\\b",
+      "message": "A story asks an agent to render pages or check a browser console, which no agent sandbox can do. It will report itself unfinished. Keep agent verification to static checks and move rendering to the human preview."
+    },
+    {
+      "id": "responsive-review",
+      "severity": "warn",
+      "kind": "has_story",
+      "match": "responsive|polish|layout.{0,20}(review|audit)|spacing",
+      "message": "No responsive and polish review. Add a human story that reviews the preview at phone, tablet and wide desktop widths in both themes for sideways scroll, overlapping header pieces, text spacing and art that does not fill its box."
+    },
+    {
+      "id": "readme-story",
+      "severity": "warn",
+      "kind": "has_story",
+      "match": "readme|documentation|\\bdocs\\b|how-?tos?",
+      "message": "No README or documentation story. Add one that writes the README with a Mermaid architecture and data-flow diagram (when it is more than a local install) and a how-to for each application area."
+    }
+  ],
+  "media_default_tiers": {
+    "video": "draft"
+  },
+  "customize": [
+    {
+      "id": "pages",
+      "label": "Pages and interactions",
+      "prompt": "Which pages and features should visitors use? Include any theme or world switching.",
+      "type": "text",
+      "max": 1200,
+      "required": true
+    },
+    {
+      "id": "visual_style",
+      "label": "Look and references",
+      "prompt": "Describe the visual style, brand and theme states. What should uploaded references guide or avoid?",
+      "type": "text",
+      "max": 1200,
+      "required": true
+    },
+    {
+      "id": "media_source",
+      "label": "Media source",
+      "type": "choice",
+      "options": [
+        "existing assets only",
+        "generate in Media studio",
+        "both"
+      ],
+      "prompt": "Where the artwork comes from. Generating in Media studio always waits for your spending approval."
+    },
+    {
+      "id": "media",
+      "label": "Artwork and media details",
+      "prompt": "Use existing assets, generate with fal.ai, or both? Describe the required images/clips, placement and budget preference. Generation requires separate approval.",
+      "type": "text",
+      "max": 1200,
+      "required": true
+    }
+  ],
+  "requires": {
+    "app_min": "0.6.88",
+    "agents": [
+      "claude",
+      "codex",
+      "grok",
+      "openclaw"
+    ],
+    "system_tools": [
+      "node",
+      "docker"
+    ]
+  }
+}

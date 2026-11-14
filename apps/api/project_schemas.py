@@ -2,6 +2,8 @@
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
+from route_policy import Policy as RoutePolicy
+
 class Strict(BaseModel):
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
 
@@ -34,8 +36,13 @@ class Node(Strict):
     estimate_minutes: int | None = Field(default=None, ge=1, le=100000)
     route_reason: str = Field(default='', max_length=300)
     assignee_user: str = Field(default='', max_length=120, pattern=r'^([A-Za-z0-9][A-Za-z0-9._@+-]{0,119})?$')  # for human stories: who they are for
+    # Dashboard-owned, host-side operation.  This is a finite allowlist, never a shell command supplied by a plan.
+    host_action: Literal['preview-verify', 'preview-review'] | None = None
     # Used only when the project builds in parallel (see project_schedule.py). `touches` lists the files or folders a story changes, so two stories
     # that can run together can be checked for overlap; `integration` marks a story that joins the branches of the stories it depends on.
+    media_stage: Literal['inventory', 'generate', 'publish', 'integrate'] | None = None
+    media_batch: Literal['reference', 'scenes'] | None = None  # reference-first dependency passes
+    verification_stage: Literal['static'] | None = None  # semantic role, not host/browser permission
     touches: list[str] = Field(default_factory=list, max_length=20)
     integration: bool = False
 
@@ -76,6 +83,16 @@ class Document(Strict):
     dispatch_mode: Literal['sequential','parallel'] = 'sequential'
     # The kind of project (see project_types.py). Optional: a project without one is planned exactly as before.
     project_type: str | None = Field(default=None, pattern=r'^[a-z0-9][a-z0-9-]{0,39}$')
+    intake_answers: dict[str, str] = Field(default_factory=dict, max_length=10)
+
+    @field_validator('intake_answers')
+    @classmethod
+    def bounded_intake(cls, value):
+        from project_intake import answers
+        return answers(value)
+
+    story_route: Route | None = None  # Explicit operator story preference; planning route remains separate.
+    route_policy: RoutePolicy | None = None  # None: same as the app policy. A project policy can only narrow it (route_policy.py).
     repository: Repository | None = None
     nodes: list[Node] = Field(default_factory=list, max_length=100)
 

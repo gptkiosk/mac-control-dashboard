@@ -187,6 +187,33 @@ def test_tools_the_dashboard_installed_are_put_on_the_shell_path_on_request_and_
     assert by_id(hr.report(settings))["tools_path"]["status"] == "ok"
 
 
+def test_the_path_fix_includes_managed_node_and_is_offered_again_when_node_arrives_later(host, tmp_path, monkeypatch):
+    home, settings = host
+    managed = _managed(tmp_path, monkeypatch)
+    hr.apply(settings, "add_tools_to_path")
+    assert by_id(hr.report(settings))["tools_path"]["status"] == "ok"
+    node = managed / "tools" / "node" / "current" / "bin"
+    node.mkdir(parents=True)
+    (node / "node").write_text("#!/bin/sh\n")
+    check = by_id(hr.report(settings))["tools_path"]                                         # the old block lists only the wrappers folder
+    assert check["status"] == "warn" and "node" in check["detail"] and check["fix"]["action"] == "add_tools_to_path"
+    assert "Node.js" in hr.apply(settings, "add_tools_to_path")
+    for name in (".profile", ".bashrc"):
+        text = (home / name).read_text()
+        assert text.count(hr.PATH_BEGIN) == 1 and f'export PATH="{managed}/bin:{node}:$PATH"' in text
+    assert by_id(hr.report(settings))["tools_path"]["status"] == "ok"
+
+
+def test_a_missing_verification_tool_points_at_agent_tools_and_an_installed_one_is_found(host, tmp_path, monkeypatch):
+    home, settings = host
+    for name in ("gitleaks", "csstree-validator"):
+        assert hr._how_to_get(name)["kind"] == "agent_tools"
+    _managed(tmp_path, monkeypatch, "gitleaks")
+    rows = {t["id"]: t for t in by_id(hr.report(settings))["tools"]["tools"]}
+    assert rows["gitleaks"]["installed"] is True and "secret scan" in rows["gitleaks"]["needed_for"]
+    assert "csstree-validator" in rows
+
+
 def test_an_existing_profile_is_kept_when_the_path_block_is_added(host, tmp_path, monkeypatch):
     home, settings = host
     (home / ".profile").write_text('export EDITOR=vi\n')
@@ -515,7 +542,8 @@ def test_the_system_tools_panel_lists_versions_and_offers_install_all_only_with_
     rows = {r["id"]: r for r in body["tools"]}
     assert body["platform"] == "mac" and body["brew"]["installed"] and body["can_install_all"] and body["can_upgrade_all"]
     assert rows["colima"]["installed"] and rows["docker"]["installed"] is False and rows["docker"]["version"] is None
-    assert set(body["missing"]) == {"python3", "node", "ffmpeg", "docker", "gh"}
+    assert set(body["missing"]) == {"python3", "node", "ffmpeg", "docker", "gh", "gitleaks", "csstree-validator", "playwright"}
+    assert rows["gitleaks"]["formulae"] == [] and rows["csstree-validator"]["formulae"] == []          # they come from Agent tools, so Homebrew's Install (All) leaves them out
     present.discard("brew")
     nobrew = hr.system_tools(settings)
     assert nobrew["brew"]["installed"] is False and nobrew["brew"]["install_command"] == hr.BREW_INSTALL
@@ -562,3 +590,8 @@ def test_the_health_check_reports_a_stopped_docker_engine_with_the_next_step(mac
     checks = {c["id"]: c for c in hr.system_tools_health(settings)["checks"]}
     assert checks["docker"]["ok"] is False and checks["docker"]["version"] == "29.3.0"
     assert any("Start Colima" in step for step in checks["docker"]["next"])
+
+
+def test_a_managed_tool_whose_command_differs_from_its_catalog_id_still_gets_its_verified_latest_version():
+    assert hr._agent_tool_version(hr.AGENT_TOOL_IDS.get("csstree-validator", "csstree-validator")) == "4.0.1"
+    assert hr._agent_tool_version("gitleaks") == "8.30.1"

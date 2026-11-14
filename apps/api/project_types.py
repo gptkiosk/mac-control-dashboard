@@ -2,7 +2,7 @@
 
 A type is a small data file (packs/project-types/<id>.json, or the operator's own copy in <data>/project-types/ which wins) holding planner text, known
 failure points, the human sign-offs and visual checks, and a few named checks that run over a proposed plan. Checks only inspect the plan's stories;
-they warn and never block, and they never run model output. Failure points are meant to grow: when a project fails for a reason that could have been
+they warn or block submission according to severity, and never run model output. Failure points are meant to grow: when a project fails for a reason that could have been
 planned around, add it to the type so the next plan avoids it.
 """
 from __future__ import annotations
@@ -11,15 +11,20 @@ import json
 import re
 from pathlib import Path
 
+from pipeline_packs import NAME_RE, REQUIRE_KINDS
+
 CHECK_KINDS = {"has_story", "order", "not_agent_for", "requires_story"}
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 MAX_BYTES = 40_000
+LEGACY_TYPES = {'web-app', 'website-property'}
 
 
 def _dirs(settings):
     from settings import REPO_ROOT
     mine = Path(settings.data_dir) / "project-types" if settings is not None else None
-    return [d for d in (mine, Path(REPO_ROOT) / "packs" / "project-types") if d is not None]
+    import pipeline_packs
+    installed = pipeline_packs.type_dirs(settings) if settings is not None else []
+    return [d for d in (mine, *installed, Path(REPO_ROOT) / "packs" / "project-types") if d is not None]
 
 
 def _valid(t):
@@ -31,6 +36,19 @@ def _valid(t):
             if not isinstance(t.get(key, []), list) or not all(isinstance(x, str) for x in t.get(key, [])):
                 return False
         tiers = t.get("media_default_tiers", {})
+        from project_intake import valid_fields, valid_questions
+        if not valid_questions(t.get('intake_questions', [])):
+            return False
+        if 'customize' in t and (not valid_fields(t['customize']) or 'intake_questions' in t):
+            return False
+        if not _valid_requires(t.get('requires', {})):
+            return False
+        # A placeholder names a setting with a closed value set; free text never enters the plan text.
+        closed = {f['id'] for f in t.get('customize', []) if f['type'] != 'text'}
+        for text in (t['planner_text'], t.get('visual_checks', ''), *t.get('failure_points', []), *t.get('human_signoffs', [])):
+            if not isinstance(text, str) or text.count('{{') != len(re.findall(r'\{\{([a-z0-9_]+)\}\}', text)) or \
+                    set(re.findall(r'\{\{([a-z0-9_]+)\}\}', text)) - closed:
+                return False
         if not isinstance(tiers, dict) or not all(k in {"image", "video"} and v in {"draft", "standard", "premium"} for k, v in tiers.items()):
             return False
         for pattern in t.get("suggest", []):
@@ -52,6 +70,69 @@ def _valid(t):
         return False
 
 
+PLACEHOLDER = re.compile(r"\{\{([a-z0-9_]+)\}\}")
+
+
+def _valid_requires(r):
+    if not isinstance(r, dict) or set(r) - {'app_min', *REQUIRE_KINDS}:
+        return False
+    if 'app_min' in r and not (isinstance(r['app_min'], str) and re.fullmatch(r"\d{1,4}\.\d{1,4}\.\d{1,6}", r['app_min'])):
+        return False
+    return all(isinstance(r.get(k, []), list) and len(r.get(k, [])) <= 12 and all(isinstance(x, str) and NAME_RE.fullmatch(x) for x in r.get(k, []))
+               for k in REQUIRE_KINDS)
+
+
+LINKS = {'app': '/profile#updates', 'agents': '/profile#agent-tools', 'system_tools': '/profile#system-tools', 'checks': '/profile#updates',
+         'providers': '/profile#credentials-profile', 'services': ''}
+
+
+def tool_status(kind, name, settings=None, saved=None):
+    """(status, detail) for one approved tool on this host: ready, missing, unknown (this dashboard does not know it) or info.
+    Local reads only. Provider keys are checked only when the caller passes the user's saved credential names."""
+    import host_readiness
+    import pipeline_packs
+    if kind == 'agents':
+        from agents import REGISTRY
+        if name not in REGISTRY:
+            return 'unknown', f'{name} is not an agent this dashboard version runs; update the dashboard.'
+        have = settings is not None and REGISTRY[name].available(settings)
+        return ('ready', f'{name} is installed.') if have else ('missing', f'{name} is not installed; add it in Agent tools.')
+    if kind == 'system_tools':
+        if name not in host_readiness.SYSTEM_TOOLS:
+            return 'unknown', f'{name} is not a tool this dashboard version manages; update the dashboard.'
+        return ('ready', f'{name} is installed.') if host_readiness._tool(name, settings) else ('missing', f'Needs {name}: install it in System tools.')
+    if kind == 'checks':
+        return ('ready', f'The dashboard runs the {name} check.') if name in pipeline_packs.KNOWN_CHECKS else \
+            ('unknown', f'Needs a dashboard that knows the {name} check.')
+    if kind == 'providers':
+        if saved is None:
+            return 'info', f'Uses a {name} key saved in Private credentials when a story needs it.'
+        return ('ready', f'Your {name} key is saved.') if name in saved else ('missing', f'Needs your {name} key in Private credentials.')
+    return 'info', f'Delivers to {name}; uploading stays your step unless a connector says otherwise.'
+
+
+def requirements(t, settings=None, saved=None):
+    """What a template says it needs and whether this host has it. A template's `agents` are alternatives: one installed is enough."""
+    import pipeline_packs
+    from version import __version__
+    req = t.get('requires', {})
+    rows = []
+    def add(kind, id_, status, detail):
+        rows.append({'kind': kind, 'id': id_, 'status': status, 'detail': detail, 'link': LINKS[kind]})
+    if req.get('app_min'):
+        newer = pipeline_packs._version_tuple(req['app_min']) > pipeline_packs._version_tuple(__version__)
+        add('app', req['app_min'], 'missing' if newer else 'ready', f"Needs dashboard {req['app_min']} or newer." if newer else 'Dashboard version fits.')
+    if req.get('agents'):
+        found = [tool_status('agents', a, settings) for a in req['agents']]
+        status = 'ready' if any(f[0] == 'ready' for f in found) else 'missing' if any(f[0] == 'missing' for f in found) else 'unknown'
+        have = [a for a, f in zip(req['agents'], found) if f[0] == 'ready']
+        add('agents', ', '.join(req['agents']), status, f"Runs on {', '.join(have)}." if have else f"Needs one of {', '.join(req['agents'])} installed.")
+    for kind in ('system_tools', 'checks', 'providers', 'services'):
+        for name in req.get(kind, []):
+            add(kind, name, *tool_status(kind, name, settings, saved))
+    return rows
+
+
 def load(settings=None):
     """All usable types by id, shipped ones first and the operator's own copies replacing them."""
     found = {}
@@ -71,33 +152,97 @@ def load(settings=None):
 
 
 def listing(settings=None):
+    """Types offered for new plans. Legacy type ids remain readable for existing projects."""
+    def needs(t):
+        return [r for r in requirements(t, settings) if r['status'] in ('missing', 'unknown')]
+    import pipeline_packs
+    local = {tid for p in pipeline_packs.installed(settings) if p["source"] for tid in p["manifest"].get("project_types", [])} if settings is not None else set()
     return [{"id": t["id"], "label": t["label"], "summary": t["summary"], "keys": t.get("keys", []), "failure_points": t.get("failure_points", []),
-             "human_signoffs": t.get("human_signoffs", []), "visual_checks": t.get("visual_checks", "")} for t in load(settings).values()]
+             "human_signoffs": t.get("human_signoffs", []), "visual_checks": t.get("visual_checks", ""),
+             "customize": [f["label"] for f in t.get("customize", [])], "needs": needs(t), "local": t["id"] in local} for t in sorted(load(settings).values(), key=lambda t: ({'packaged-app':0,'gcp-hosted-app':1,'local-website':2,'gcp-hosted-website':3,'other':99}.get(t['id'],50),t['label'])) if t["id"] not in LEGACY_TYPES]
 
 
-MEDIA_RULES = ("Generated media (images, clips) is made by the operator in MCD's Media tab with their own fal key, never by an agent: plan it as a human story after the wiring story, "
-               "and make the site complete on its fallbacks first. Website clips start on the cheapest video tier; a slot with generations waiting "
-               "for review is not generated again unless the operator asks for another take.")
+GENERAL_GUIDES = ('practices.md', 'security.md', 'readme-and-docs.md')
+GUIDE_LABELS = {'practices.md': 'Development practice', 'security.md': 'Application security',
+    'readme-and-docs.md': 'Documentation', 'web-app-delivery.md': 'Delivering a hosted web app',
+    'packaged-app-delivery.md': 'Delivering a packaged app', 'container-app-delivery.md': 'Local container delivery',
+    'website-design-delivery.md': 'Website design', 'website-spacing-and-timing.md': 'Website spacing and timing'}
+GUIDANCE_BUDGET = 7000
+MEDIA_RULES = ("Generated media is made by the dashboard Media Studio with the operator's fal key, never by an agent. "
+               "Use distinct inventory, generation after spend acknowledgement, candidate publication and integration stages; link directly to the project's Media tab. "
+               "Website clips start on the cheapest video tier. Check existing candidates before another take.")
+
+
+def selected_guides(type_id, settings=None):
+    """General plus exactly one template. Other/unknown types never import all delivery guides. A pipeline pack's type may replace the general
+    (software) guides with its own choice, and may name guides the pack ships."""
+    import pipeline_packs
+    from standards import GUIDES
+    chosen = load(settings).get(type_id or '', {})
+    general = pipeline_packs.general_guides_for(type_id or '', settings) if settings is not None and type_id else None
+    usable = lambda name: name in GUIDES or (settings is not None and pipeline_packs.guide_path(name, settings) is not None)
+    return list(dict.fromkeys(name for name in (*(GENERAL_GUIDES if general is None else general), *chosen.get('guides', [])) if usable(name)))
+
+
+def guidance_packet(type_id, settings=None):
+    """Bounded, deterministic context for consultant and planner, with bytes/hash for inspection.
+    All guides share one budget so adding templates never inflates an existing project's prompt.
+    """
+    import hashlib
+    import standards
+    names = selected_guides(type_id, settings)
+    per_guide = min(1600, GUIDANCE_BUDGET // max(1, len(names)) - 90)
+    parts = []
+    for name in names:
+        text = standards.guide_text(name, getattr(settings, 'data_dir', None), limit=per_guide)
+        if text:
+            parts.append(f"{GUIDE_LABELS.get(name, name)} [{name}]:\n{text}")
+    text = '\n\n'.join(parts)[:GUIDANCE_BUDGET]
+    return {'mode': 'general_plus_selected_type', 'project_type': type_id,
+            'guides': names, 'text': text, 'bytes': len(text.encode()),
+            'sha256': hashlib.sha256(text.encode()).hexdigest()}
+
+
+def worker_reference(project_id, type_id, settings):
+    """On-demand private guide packet; small stable pointer, no full guide repetition per task."""
+    import hashlib
+    import os
+    import tempfile
+    packet = guidance_packet(type_id, settings)
+    text = packet['text']
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    folder = Path(settings.data_dir)/'project-ledgers'
+    path = folder/f'project-{project_id}-guidance-{digest[:16]}.md'
+    out = {k:v for k,v in packet.items() if k != 'text'}
+    try:
+        folder.mkdir(mode=0o700,parents=True,exist_ok=True)
+        if not path.is_file() or path.is_symlink() or path.read_text('utf-8') != text:
+            with tempfile.NamedTemporaryFile(mode='w',encoding='utf-8',dir=folder,delete=False) as f:
+                f.write(text)
+                temporary=f.name
+            os.replace(temporary,path)
+        out['path']=str(path)
+    except OSError:
+        # Preserve available guidance if a private sidecar is unwritable; do not invent a path.
+        out['text']=text
+    return out
 
 
 def consultant_text(settings=None, limit=1300, type_id=None):
-    """A bounded description of the project types for the consultant chat, so it can say which type a goal fits and what the plan must contain.
-    With `type_id` it is focused on the type the operator chose (how it is planned, where a person signs off, where it has failed). Advice for the
-    conversation; it authorizes nothing."""
+    """Only the selected type; an untyped conversation gets a short selector, not all rules."""
     types = load(settings)
-    chosen = types.get(type_id or "")
-    if chosen:
-        lines = [f"The operator chose the project type {chosen['label']}. {chosen['summary']}", chosen["planner_text"][:420].rstrip() + ("..." if len(chosen["planner_text"]) > 420 else "")]
-        if chosen.get("human_signoffs"):
-            lines.append("A person signs off: " + "; ".join(x[:50] for x in chosen["human_signoffs"][:3]) + ".")
-        lines += ["Known failure: " + fp[:140] for fp in chosen.get("failure_points", [])[:2]]
-        lines.append("If what they describe does not fit this type, say so and suggest another type or Other; the type is changed in the review step.")
-        return "\n".join(lines)[:max(0, 1700 - len(MEDIA_RULES) - 1)] + "\n" + MEDIA_RULES
-    lines = ["Project types (the operator picks one in New project; a plan for a typed project is checked against it):"]
-    for t in types.values():
-        signoffs = "; ".join(x[:40].rstrip() for x in t.get("human_signoffs", [])[:2])
-        lines.append(f"- {t['label'].split(' (')[0]}: {t['summary'][:60].rstrip()}... A person signs off: {signoffs}.")
-    return "\n".join(lines)[:max(0, limit - len(MEDIA_RULES) - 1)] + "\n" + MEDIA_RULES
+    chosen = types.get(type_id or '')
+    if not chosen:
+        labels = '; '.join(t['label'].split(' (')[0] for t in types.values() if t['id'] not in LEGACY_TYPES)
+        return ("Choose one project type: " + labels +
+                ". Until selected, load general practices only. Other records which delivery gates apply; do not load every template.")[:limit]
+    lines = [f"The operator chose the project type {chosen['label']}. {chosen['summary']}",
+             'Meaningful decisions: ' + '; '.join(chosen.get('human_signoffs', [])[:3]) + '.',
+             'Known failure: ' + '; '.join(chosen.get('failure_points', [])[:2]),
+             'If the goal does not fit this type, suggest another type or Other in the review step.']
+    if chosen.get('media_default_tiers'):
+        lines.append(MEDIA_RULES)
+    return '\n'.join(lines)[:1700]
 
 
 def media_default_tiers(type_id, settings=None):
@@ -109,19 +254,33 @@ def media_default_tiers(type_id, settings=None):
 def suggest(text, settings=None):
     """The type whose patterns match the text most often, or None. A suggestion only: the operator chooses."""
     lowered = (text or "").lower()
+    cloud = re.search(r'\b(gcp|google cloud|cloud run|app engine)\b', lowered)
+    if cloud and re.search(r'\b(website|static site|landing page)\b', lowered) and 'gcp-hosted-website' in load(settings):
+        return 'gcp-hosted-website'
     best, score = None, 0
     for t in load(settings).values():
+        if t["id"] in LEGACY_TYPES:
+            continue
         n = sum(1 for p in t.get("suggest", []) if re.search(p, lowered))
         if n > score:
             best, score = t["id"], n
     return best if score >= 2 else None
 
 
-def planner_section(type_id, settings=None):
+def fill(text, values):
+    """Put the project's closed-set settings into template text. A setting with no answer and no default stays visible as unset."""
+    return PLACEHOLDER.sub(lambda m: values.get(m.group(1), f"(unset: {m.group(1)})"), text)
+
+
+def planner_section(type_id, settings=None, values=None):
     """The text added to the planner prompt for a typed project: how to plan it, where it fails, where a person looks and signs off."""
     t = load(settings).get(type_id or "")
     if not t:
         return ""
+    if t.get("customize"):
+        t = {**t, "planner_text": fill(t["planner_text"], values or {}), "visual_checks": fill(t.get("visual_checks", ""), values or {}),
+             "failure_points": [fill(x, values or {}) for x in t.get("failure_points", [])],
+             "human_signoffs": [fill(x, values or {}) for x in t.get("human_signoffs", [])]}
     lines = [f"Project type: {t['label']}.", t["planner_text"],
              "Execution readiness is part of the plan. Use the installation facts supplied with this request before assigning a story. An agent story may require only tools available inside its sandbox and may only use the checked-out project workspace. When a repository is selected, the dashboard creates the private repository, clone and setup branch before dispatch; every agent story works in that clone, never in a scratch folder. Split file creation and static checks from runtime verification. Docker/Compose engines, browsers, target hardware, signing, credentials, billing, cloud applies and other host-only actions are human or CI work with a clear prerequisite and acceptance check. Do not put an unavailable tool or privileged host access in an agent story's definition of done.",
              "Known failure points for this type; plan around each one:"]
@@ -138,7 +297,8 @@ def _text(n, scope="title"):
     read the title so a passing mention in a long description is not mistaken for the gate; not_agent_for reads everything because the risky
     command is usually in the description."""
     keys = ("title", "description", "acceptance") if scope == "all" else ("title",)
-    return " ".join(str(n.get(k) or "") for k in keys).lower()
+    text = " ".join(str(n.get(k) or "") for k in keys).lower()
+    return text
 
 
 def _ancestors(by_key, key):
@@ -157,6 +317,33 @@ def _who(n, assignee):
     return human if assignee == "human" else (not human) if assignee == "agent" else True
 
 
+def browser_execution(node, pattern):
+    """Keep positive execution requirements; ignore scoped negation and authored future behavior.
+    Role labels never exempt direct browser commands. Mixed author/run instructions still block.
+    """
+    if node.get('host_action') in {'preview-verify','preview-review'}:
+        return False  # Host executor owns rendering; the separate ownership gate still applies.
+    author = bool(re.search(r'\b(?:write|author|prepare|create|implement)\b', node.get('title', ''), re.I)
+                  and re.search(r'script|verifier|preview', node.get('title', ''), re.I))
+    negative = re.compile(r"\b(?:do not|does not|must not|will not|cannot|never|don't|won't|not required to|without (?:running|executing|launching))\b", re.I)
+    for field in ('title', 'description', 'acceptance'):
+        # A contrast or follow-up command must not inherit an earlier negation.
+        for clause in re.split(r'[;\n.!?]|\b(?:but|however|then|also)\b', str(node.get(field) or ''), flags=re.I):
+            matches = list(re.finditer(pattern, clause, re.I))
+            for match in matches:
+                prefix = clause[:match.start()]
+                if negative.search(prefix) or re.search(r'\b(?:no\s*|non[- ])$', prefix, re.I):
+                    continue
+                if field == 'acceptance' and node.get('work_kind') == 'implement' and match.group().lower().startswith('render') and not re.search(r'\b(?:verify|check|assert|open|run|browser|console)\b', clause, re.I):
+                    continue  # Desired artifact appearance is judged by the downstream preview.
+                # A program subject before the operation describes future script behavior,
+                # not the author executing it. A separate imperative remains blocked.
+                if author and field != 'title' and re.search(r'\b(?:scripts?|runner|they)\b', prefix, re.I) and not re.search(r'\b(?:and|then)\s+(?:run|launch|execute|take|capture|generate|make)\b', prefix, re.I):
+                    continue
+                return True
+    return False
+
+
 def check(type_id, nodes, settings=None):
     """Findings for a plan: [{id, severity, message, stories}]. Empty when the plan fits the type or no type is chosen."""
     t = load(settings).get(type_id or "")
@@ -168,12 +355,22 @@ def check(type_id, nodes, settings=None):
     for c in t.get("checks", []):
         kind, bad = c["kind"], []
         if kind == "has_story":
-            ok = any(re.search(c["match"], _text(n, c.get("scope", "title"))) and _who(n, c.get("assignee")) for n in stories) if c.get("match") else any(_who(n, c.get("assignee")) for n in stories)
+            import project_contract
+            def role_match(n):
+                if c['id'] == 'design-direction-first':
+                    return n.get('work_kind') in {'plan','research'} and bool(re.search(r'\b(?:write|create|specify)\b.{0,80}\bdesign\.md\b', n.get('description',''), re.I))
+                if c['id'] == 'readme-story':
+                    return n.get('work_kind') == 'docs'
+                if c['id'] == 'verification-story':
+                    return project_contract.static_verification(n)
+                return False
+            ok = any((role_match(n) or re.search(c["match"], _text(n, c.get("scope", "title")))) and _who(n, c.get("assignee")) for n in stories) if c.get("match") else any(_who(n, c.get("assignee")) for n in stories)
             if not ok:
                 findings.append({"id": c["id"], "severity": c.get("severity", "warn"), "message": c["message"], "stories": []})
             continue
         if kind == "not_agent_for":
-            bad = [n["key"] for n in stories if n.get("assignee") != "human" and re.search(c["match"], _text(n, c.get("scope", "all")))]
+            bad = [n["key"] for n in stories if n.get("assignee") != "human" and
+                   (browser_execution(n, c["match"]) if c['id'] == 'browser-checks-need-a-person' else re.search(c["match"], _text(n, c.get("scope", "all"))))]
         elif kind == "requires_story":
             triggered = any(re.search(c["match"], _text(n, c.get("scope", "all"))) for n in stories)
             ok = any(re.search(c["requires_match"], _text(n, c.get("requires_scope", "title"))) and _who(n, c.get("assignee")) for n in stories)
@@ -196,3 +393,8 @@ def blocking_findings(type_id, nodes, settings=None):
     """The small safety subset that must be repaired before dispatch, rather than
     predictably consuming a run on unavailable or privileged host access."""
     return [f for f in check(type_id, nodes, settings) if f["severity"] == "block"]
+
+
+def check_document(document, settings=None):
+    import project_contract
+    return check(document.get('project_type'), document.get('nodes', []), settings) + project_contract.findings(document)

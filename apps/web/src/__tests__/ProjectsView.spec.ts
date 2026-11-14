@@ -46,7 +46,7 @@ async function setup(state='draft', tasks: import('@/lib/projects').ProjectTask[
 it('resumes a saved failed proposal without requesting a new subscription plan',async()=>{
  const {w,f}=await setup('planning_failed')
  await w.findAll('button').find(b=>b.text()==='Resume saved plan')!.trigger('click');await flushPromises()
- const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')
+ const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')
  expect(writes.map(([url])=>url)).toEqual(['/api/projects/1/resume-plan'])
  expect(JSON.parse(String(writes[0]![1]?.body))).toEqual({revision:1})
  expect(w.text()).toContain('Submitted to Hermes');w.unmount()
@@ -58,9 +58,9 @@ it('edits the visual map without starting a model; saved revisions retain assign
  await w.get('[aria-label="story: Bounded implementation"]').trigger('click')
  await w.get('.node-editor input').setValue('Reviewed slice')
  expect(w.text()).toContain('Unsaved edits')
- expect(w.findAll('button').find(b=>b.text()==='Plan with Hermes')?.attributes('disabled')).toBeDefined()
+ expect(w.findAll('button').find(b=>b.text().startsWith('Plan ('))?.attributes('disabled')).toBeDefined()
  await w.findAll('button').find(b=>b.text()==='Save revision')!.trigger('click');await flushPromises()
- const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')
+ const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')
  expect(writes.map(([url])=>url)).toEqual(['/api/projects/1'])
  expect(JSON.parse(String(writes[0]![1]?.body)).document.nodes[1].routes[0].model).toBe('claude-sonnet-5-5')
  expect(w.text()).toContain('REVISION 2');w.unmount()
@@ -91,7 +91,8 @@ it('does not offer Delete on a live project',async()=>{
 it('offers Accept anyway only on a failed story whose agent reported it unfinished, and records the operator reason',async()=>{
  const task:import('@/lib/projects').ProjectTask={card_id:5,node_key:'s',role:'story',revision:1,title:'Verification',column:'failed',run_id:42,run_stage:'failed',incomplete_reason:'The agent explicitly reported unfinished work.',agent:'codex',model:'m'} as never
  const crash:import('@/lib/projects').ProjectTask={card_id:6,node_key:'t',role:'story',revision:1,title:'Crashed',column:'failed',run_id:43,run_stage:'failed',incomplete_reason:null,agent:'codex',model:'m'} as never
- const {w}=await setup('active',[task,crash])
+ const reviewed:import('@/lib/projects').ProjectTask={card_id:7,node_key:'u',role:'story',revision:1,title:'Readiness',column:'review',run_id:44,run_stage:'succeeded',incomplete_reason:'The agent explicitly reported unfinished work.',agent:'claude',model:'m'} as never   // an approved read-only continuation
+ const {w}=await setup('active',[task,crash,reviewed])
  await flushPromises()
  const inner=globalThis.fetch
  const posted:{url:string,body:unknown}[]=[]
@@ -101,7 +102,7 @@ it('offers Accept anyway only on a failed story whose agent reported it unfinish
  })
  const tab=w.findAll('nav.tabs button').find(b=>b.text()==='Stories & runs')!;await tab.trigger('click');await flushPromises()
  const buttons=w.findAll('[data-testid=accept-anyway]')
- expect(buttons).toHaveLength(1)                                                              // not on the story that crashed
+ expect(buttons).toHaveLength(2)                                                              // not on the story that crashed; also on the reviewed continuation
  const prompt=vi.spyOn(window,'prompt').mockReturnValueOnce('short').mockReturnValueOnce('Rendering is checked in the preview.')
  await buttons[0]!.trigger('click');await flushPromises()
  expect(posted).toEqual([])                                                                   // a short reason sends nothing
@@ -146,6 +147,15 @@ it('offers the Media studio for reference art even without media slots, and says
  expect(w.get('[data-testid=no-media-slots]').text()).toContain('media/slots.json')
  w.unmount()
 })
+it('says why a slots file it found cannot be used, instead of claiming there are no slots',async()=>{
+ mediaProject={available:false,error:'Every slot needs a unique lowercase name.'}
+ const {w}=await setup('active')
+ await flushPromises()
+ await w.findAll('nav.tabs button').find(b=>b.text()==='Media studio')!.trigger('click'); await flushPromises()
+ expect(w.get('[data-testid=media-slots-invalid]').text()).toContain('Every slot needs a unique lowercase name.')
+ expect(w.find('[data-testid=no-media-slots]').exists()).toBe(false)
+ w.unmount()
+})
 it('asks for a missing key before creating the project, then creates it after the key is saved or skipped',async()=>{
  const {w,f}=await setup()
  const inner=globalThis.fetch
@@ -178,7 +188,7 @@ it('submits a new brief to Hermes after coordination approval and displays hones
  expect(submit.attributes('disabled')).toBeDefined()
  expect((modal.get('[data-testid=parallel-new]').element as HTMLInputElement).checked).toBe(false)         // parallel build is off unless chosen
  await modal.get('input[type=checkbox]:not([data-testid])').setValue(true);await modal.get('form').trigger('submit');await flushPromises()
- const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')
+ const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')
  expect(writes.map(([url])=>url)).toEqual(['/api/projects','/api/projects/1/plan'])
  expect(JSON.parse(String(writes[0]![1]?.body)).planning_bias).toBe(50)
  expect(JSON.parse(String(writes[0]![1]?.body)).dispatch_mode).toBe('sequential')
@@ -192,7 +202,7 @@ it('submission opens a concrete review and requires coordination acknowledgment 
  expect(w.text()).toContain('Review project submission');expect(w.text()).toContain('claude-sonnet-5-5')
  const submit=w.findAll('button').find(b=>b.text()==='Submit approved revision')!
  expect(submit.attributes('disabled')).toBeDefined()
- expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')).toHaveLength(0);w.unmount()
+ expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')).toHaveLength(0);w.unmount()
 })
 it('locks an approved map but retains the pause and context controls',async()=>{
  const {w}=await setup('active')
@@ -234,13 +244,13 @@ it('saves a new project preference without starting models',async()=>{
  await modal.get('input[data-autofocus]').setValue('Economical project')
  await modal.get('textarea').setValue('A bounded project brief')
  const slider=modal.get('input[type=range]');expect((slider.element as HTMLInputElement).value).toBe('50')
- await slider.setValue('0');expect(slider.attributes('aria-valuetext')).toBe('Economy · OpenClaw first')
+ await slider.setValue('0');expect(slider.attributes('aria-valuetext')).toBe('Economy')
  await modal.findAll('button').find(b=>b.text()==='Save draft')!.trigger('click');await flushPromises()
- const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')
+ const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')
  expect(writes).toHaveLength(1);expect(writes[0]![0]).toBe('/api/projects')
  expect(JSON.parse(String(writes[0]![1]?.body)).planning_bias).toBe(0);w.unmount()
 })
-it('changing a mapped preference leaves existing routes intact and sets new story defaults',async()=>{
+it('changing a mapped threshold leaves existing routes intact and uses an installed agent for manual stories',async()=>{
  const {w,f}=await setup()
  await w.get('input[type=range]').setValue('0')
  expect(w.text()).toContain('Save and replan')
@@ -250,9 +260,9 @@ it('changing a mapped preference leaves existing routes intact and sets new stor
  const doc=JSON.parse(String(write[1]?.body)).document
  expect(doc.planning_bias).toBe(0)
  expect(doc.nodes[1].assignee).toBe('codex');expect(doc.nodes[1].routes[0].model).toBe('claude-sonnet-5-5')
- expect(doc.nodes[2].assignee).toBe('openclaw');expect(doc.nodes[2].model).toBe('')
+ expect(doc.nodes[2].assignee).toBe('codex');expect(doc.nodes[2].model).toBe('')
  await w.findAll('button').find(b=>b.text()==='Review & submit')!.trigger('click');await flushPromises()
- expect(document.body.textContent).toContain('Story preference');expect(document.body.textContent).toContain('Economy · OpenClaw first');w.unmount()
+ expect(document.body.textContent).toContain('Story preference');expect(document.body.textContent).toContain('Economy');w.unmount()
 })
 
 it('retries a failed story only through an explicitly selected reviewed route',async()=>{
@@ -260,9 +270,9 @@ it('retries a failed story only through an explicitly selected reviewed route',a
  const {w,f}=await setup('active',[{card_id:5,node_key:'a',role:'story',revision:1,column:'failed',title:'Inventory',agent:'openclaw',model:'openrouter/thinkingmachines/inkling:free',run_id:6,run_stage:'timeout',retry_routes:[choice]}])
  await w.findAll('button').find(b=>b.text()==='Stories & runs')!.trigger('click');await flushPromises()
  expect(w.text()).toContain('Run #6 · Timed out')
- expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')).toHaveLength(0)
+ expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')).toHaveLength(0)
  await w.findAll('button').find(b=>b.text()==='Retry with Claude · claude-haiku-5-5')!.trigger('click');await flushPromises()
- const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')
+ const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')
  expect(writes.map(([url])=>url)).toEqual(['/api/projects/1/stories/5/retry'])
  expect(JSON.parse(String(writes[0]![1]?.body))).toEqual({revision:1,route:choice})
  w.unmount()
@@ -279,10 +289,10 @@ it('requires explicit output approval and never offers handoff acceptance for an
  expect(modal.text()).toContain('/private/project-outputs/inventory.md')
  expect(modal.text()).toContain('agent remains read-only')
  expect(modal.findAll('button').find(b=>b.text()==='Approve & continue')!.attributes('disabled')).toBeDefined()
- expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')).toHaveLength(0)
+ expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')).toHaveLength(0)
  await modal.get('input[type=checkbox]').setValue(true)
  await modal.get('form').trigger('submit');await flushPromises()
- const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')
+ const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')
  expect(writes.map(([url])=>url)).toEqual(['/api/projects/1/stories/5/continue-output'])
  expect(JSON.parse(String(writes[0]![1]?.body))).toEqual({revision:1,run_id:7,approve_output:true})
  w.unmount()
@@ -301,7 +311,7 @@ it('previews the saved output and requires document review before sending its ha
  expect(modal.findAll('button').find(b=>b.text()==='Accept handoff')!.attributes('disabled')).toBeDefined()
  await modal.get('input[type=checkbox]').setValue(true)
  await modal.get('form').trigger('submit');await flushPromises()
- const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')
+ const writes=f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')
  expect(writes).toHaveLength(1)
  expect(JSON.parse(String(writes[0]![1]?.body)).output_sha256).toBe(output.sha256)
  expect(w.text()).toContain('STORY · Done');w.unmount()
@@ -313,7 +323,7 @@ it('opens the exact output review from the task board without submitting approva
  const dialog=document.querySelector('[role=dialog]')!
  expect(dialog.textContent).toContain('Approve output & continue')
  expect((dialog.querySelector('input[type=checkbox]') as HTMLInputElement).checked).toBe(false)
- expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')).toHaveLength(0)
+ expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')).toHaveLength(0)
  w.unmount()
 })
 
@@ -325,7 +335,7 @@ it('never treats automatic display layout or opening a project as unsaved edits'
  expect(w.text()).toContain('View only')
  await w.get('.project-link').trigger('click');await flushPromises()
  expect(confirm).not.toHaveBeenCalled()
- expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')).toHaveLength(0)
+ expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')).toHaveLength(0)
  w.unmount()
 })
 
@@ -348,7 +358,7 @@ it('updates live story, phase and project colors from polling without writing th
  await vi.advanceTimersByTimeAsync(3000);await flushPromises()
  expect(w.get('.map-node.phase').classes()).toContain('status-done')
  expect(w.text()).toContain('1 / 1 stories done')
- expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')).toHaveLength(0);w.unmount()
+ expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')).toHaveLength(0);w.unmount()
 })
 
 it('shows the bulk scope and requires acknowledgment before enabling automatic handoffs',async()=>{
@@ -359,7 +369,7 @@ it('shows the bulk scope and requires acknowledgment before enabling automatic h
  expect(modal.text()).toContain('Requires human input or approval')
  expect(modal.text()).toContain('Human-required tasks remain excluded.')
  expect(modal.findAll('button').find(b=>b.text()==='Enable automatic handoffs')!.attributes('disabled')).toBeDefined()
- expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')).toHaveLength(0)
+ expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')).toHaveLength(0)
  await modal.findAll('input[type=checkbox]')[1]!.setValue(true)
  await modal.get('form').trigger('submit');await flushPromises()
  const write=f.mock.calls.find(([url])=>url==='/api/projects/1/handoff-policy')!
@@ -383,7 +393,7 @@ it('reruns an unaccepted successful story while the project is paused without ac
  const {w,f}=await setup('paused',[{card_id:5,node_key:'a',role:'story',revision:1,column:'review',title:'Inventory',agent:'codex',model:'gpt-6.1-sol',run_id:6,run_stage:'succeeded'}])
  await w.findAll('button').find(b=>b.text()==='Stories & runs')!.trigger('click');await flushPromises()
  await w.findAll('button').find(b=>b.text()==='Rerun same story')!.trigger('click');await flushPromises()
- const writes=f.mock.calls.filter(([u,init])=>init?.method==='POST'&&u!=='/api/keys/check')
+ const writes=f.mock.calls.filter(([u,init])=>init?.method==='POST'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')
  expect(writes.map(([url])=>url)).toEqual(['/api/projects/1/stories/5/retry'])
  expect(JSON.parse(String(writes[0]![1]?.body))).toEqual({revision:1})
  w.unmount()
@@ -437,11 +447,11 @@ it('offers no close action for a completed or planning project',async()=>{
  }
 })
 
-it('keeps the economy worker default free of a subscription-only model',()=>{
+it('keeps manual draft models unselected at every classification threshold',()=>{
  const economy=newNode('story',0,null,45)
- expect(economy.assignee).toBe('openclaw');expect(economy.model).toBe('')
+ expect(economy.assignee).toBe('codex');expect(economy.model).toBe('')
  const balanced=newNode('story',0,null,50)
- expect(balanced.assignee).toBe('codex');expect(balanced.model).toBe('gpt-6-luna')
+ expect(balanced.assignee).toBe('codex');expect(balanced.model).toBe('')
 })
 
 it('locks models at project level and restores approved failover when unlocked',async()=>{
@@ -465,7 +475,7 @@ it('opens the consultant proposal as an editable brief without starting project 
  expect((dialog.get('input[data-autofocus]').element as HTMLInputElement).value).toBe('Consulted goal')
  expect((dialog.get('textarea').element as HTMLTextAreaElement).value).toContain('definitions of done')
  expect(dialog.findAll('button').find(b=>b.text()==='Submit to Hermes')!.attributes('disabled')).toBeDefined()
- expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check')).toHaveLength(0)
+ expect(f.mock.calls.filter(([u,init])=>(init?.method??'GET')!=='GET'&&u!=='/api/keys/check'&&u!=='/api/routes/preview')).toHaveLength(0)
  w.unmount()
 })
 
@@ -478,4 +488,19 @@ it('builds in parallel only when the person turns it on when creating the projec
  await modal.get('input[type=checkbox]:not([data-testid])').setValue(true);await modal.get('form').trigger('submit');await flushPromises()
  const created=f.mock.calls.find(([url,init])=>url==='/api/projects'&&init?.method==='POST')!
  expect(JSON.parse(String(created[1]?.body)).dispatch_mode).toBe('parallel');w.unmount()
+})
+it('shows planning under the project header and brings it into view as soon as Start planning is accepted',async()=>{
+ const scrolled:string[]=[]
+ Element.prototype.scrollIntoView=function(this:Element){scrolled.push((this as HTMLElement).dataset.testid??this.className)}
+ const {w}=await setup()
+ await w.findAll('button').find(b=>b.text().startsWith('Plan ('))!.trigger('click');await flushPromises()
+ const {DOMWrapper}=await import('@vue/test-utils');const dialog=new DOMWrapper(document.querySelector('[role=dialog]')!)
+ await dialog.findAll('input[type=checkbox]').find(c=>c.element.parentElement?.textContent?.includes('approve this Coordinator'))!.setValue(true)
+ await dialog.findAll('button').find(b=>b.text()==='Start planning')!.trigger('click');await flushPromises()
+ const pane=document.querySelector('[data-testid="planning-progress"]')!, settings=document.querySelector('[data-testid="route-strip"]')!
+ expect(pane).not.toBeNull()
+ expect(pane.compareDocumentPosition(settings)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()   // progress comes before Project settings
+ expect(scrolled).toContain('planning-progress')
+ expect(document.activeElement).toBe(pane)
+ w.unmount()
 })

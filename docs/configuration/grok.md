@@ -10,7 +10,7 @@ Code or Codex: as a task or chat agent, as a project story agent, and as an appr
    The vendor's manual installer is available separately at https://docs.x.ai/build/overview.
 2. Sign in on the host: `grok login`, or `grok login --device-code` on a machine without a browser. MCD never
    sees the sign-in. `XAI_API_KEY` is an alternative, but see Billing below.
-3. Agents, then Billing & rates: set Grok Build to **Subscription** and save. Until then MCD refuses to start
+3. Settings → AI & models → Accounts → Billing & rates: set Grok Build to **Subscription** and save. Until then MCD refuses to start
    it. Setting the path is only needed when `grok` is not in `~/.grok/bin`: `MAC_CONTROL_GROK_PATH`.
 
 ## Billing: subscription only
@@ -44,7 +44,7 @@ Use Grok only on work you are willing to share with xAI.
 |---|---|
 | Task, chat, project story agent, approved fallback | yes |
 | Operator-granted git push to a project branch | yes (same rules as Claude Code) |
-| Project planner (Hermes, Claude Code or Codex plan; auto assignment by planning bias) | no: only chosen by hand |
+| Project planner (Hermes, Claude Code or Codex plan; automatic planner choice independent of story threshold) | no: only chosen by hand |
 | Usage and cost | from the runs MCD dispatches (tokens and the CLI's reported cost); the CLI's own session history is not read |
 | Subscription limit notice and reroute | no (the CLI's limit wording is not known yet) |
 | MCP server management from MCD | no |

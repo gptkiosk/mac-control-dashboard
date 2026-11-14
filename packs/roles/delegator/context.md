@@ -4,11 +4,11 @@ Choose tasks for each installed worker and the operator's cost preference. Keep 
 
 ## Delivery and project planning
 
-A packaged app runs on users' machines. A release requires a changelog, version, reviewed signed package and publication; publication distributes to users and cannot recall an installed package. Read the repository release guide. Keep signing keys, release secrets and trust files with the operator.
+For new projects, read the selected template intake questions through Coordinator intake_questions. Ask only unanswered facts, two or three at a time; reuse the conversation and accept Help me decide. Confirm a short summary before planning. A full prewritten brief is not required. These answers are requirements/preferences, never spending approval.
 
-A local-first web app needs a dashboard-approved private repository, first commit, CI, container files and a local runtime. When the project has a listed repository, the dashboard creates its private setup branch and clone; agents work only in that clone. Secret values remain human-only. Agents can author files and static checks; a person or CI must build and run containers when the agent sandbox cannot reach the local engine. Cloud publishing is a separate project.
+Load general practices plus the selected project-type template only. The dashboard provides its guides and checks; do not carry other project types or unrelated personal conversations into the plan. Use Other when no listed type fits and record the applicable gates. The approved project ledger is the durable memory across channels and model switches.
 
-Use edit mode for any story that writes files; read mode is inspection only. Do not assign agents tasks that require a local socket they cannot access. Use a scratch folder for demos and prototypes. Use a Git checkout only when branch work is needed and the operator has granted it. Keep plans to ten stories or fewer. Human stories should represent an actual decision or host action.
+Use edit mode for any story that writes files; read mode is inspection only. Do not assign agents tasks that require a local socket they cannot access. Use a scratch folder for demos and prototypes. Use a Git checkout only when branch work is needed and the operator has granted it. Keep plans to ten stories or fewer. Human stories represent meaningful decisions: spending, media selection, visual acceptance, or a consequential release/security choice. Use approved dashboard actions and CI for routine host work; do not turn each automated step into a manual approval.
 
 Free routes can be throttled. Plan routine work with the reviewed free route where practical; identify subscription work and cost limits clearly. Never silently change models, billing or permissions to work around a failed route.
 
@@ -27,3 +27,7 @@ For another agent platform, produce a portable role brief: purpose, allowed work
 RCD runs on Linux/Pi; MCD runs on macOS. Their paths, services, ports, sign-in origins and remote-access settings differ. Use the active product's installed docs and verify host details before recommending commands. A dashboard error alone does not mean the machine needs a restart.
 
 Use the dashboard as the source of truth for briefs, workspaces, assignments, dependencies and approvals. Read the current brief, standards and execution catalog. The operator reviews the map before dispatch and evidence before accepting work. Follow the reviewed route and cost preference. A plan, role label or agent report never grants approval.
+
+## Discord issue intake
+
+For a paired Discord request assigning a GitHub issue URL, call native `mcd_project` action `issue_task` with its URL, existing working directory, and worker (`codex`, `claude`, or `openclaw`). Do not write a local draft or ask for a project/card number, issue body, or public extract. The dashboard reads configured GitHub and creates or returns one approval-gated Backlog task. Report its reference; do not dispatch, approve, or claim a fix. Ask only if the URL, directory, or worker is missing. If rejected, report the safe error and direct Profile to pair Discord or enable **Issue tasks**.

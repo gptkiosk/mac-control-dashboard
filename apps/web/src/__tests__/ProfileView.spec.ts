@@ -71,19 +71,25 @@ it('keeps Settings first and opens the group that holds a linked section, so old
   const again=await setup()
   expect(again.w.get('[data-tab="maintenance"]').attributes('aria-selected')).toBe('true')
   again.w.unmount();window.location.hash=''
+  window.location.hash='#pipeline-packs'                                       // the store moved to its own tab; old links follow it
+  const store=await setup()
+  expect(store.w.get('[data-tab="templates"]').attributes('aria-selected')).toBe('true')
+  expect(store.w.get('[role="tabpanel"][aria-label="Updates and installs"]').find('#pipeline-packs').exists()).toBe(false)
+  store.w.unmount();window.location.hash=''
 })
 
-it('follows direct recovery and primary-AI links within the same settings view',async()=>{
+it('opens AI & models for every model link, old ones included, within the same settings view',async()=>{
   const initial=await setup();initial.w.unmount()
   const router=createRouter({history:createMemoryHistory(),routes:[{path:'/profile',component:ProfileView},{path:'/:pathMatch(.*)*',component:{template:'<div />'}}]})
   await router.push('/profile#route-recovery');await router.isReady()
   const w=mount(ProfileView,{global:{plugins:[createPinia(),router]}});await flushPromises()
-  expect(w.get('[data-tab="coordinator"]').attributes('aria-selected')).toBe('true')
-  await router.push('/profile#ai-settings');await flushPromises()
-  expect(w.get('[data-tab="settings"]').attributes('aria-selected')).toBe('true')
-  await w.get('[data-tab="coordinator"]').trigger('click');await flushPromises()
+  expect(w.findAll('[aria-label="Settings sections"] [role="tab"]').map(b=>b.text())).toEqual(['General','AI & models','Installs & updates','Template store','Maintenance'])
+  expect(w.get('[data-tab="ai"]').attributes('aria-selected')).toBe('true')
+  await w.get('[data-tab="settings"]').trigger('click');await flushPromises()
   expect(router.currentRoute.value.hash).toBe('')
-  await router.push('/profile#route-recovery');await flushPromises()
-  expect(w.get('[data-tab="coordinator"]').attributes('aria-selected')).toBe('true')
+  for (const hash of ['#ai-settings','#agent-roles','#coordinator-bootstrap','#accounts','#models-providers']) {
+    await w.get('[data-tab="settings"]').trigger('click');await router.push('/profile'+hash);await flushPromises()
+    expect(w.get('[data-tab="ai"]').attributes('aria-selected'),hash).toBe('true')
+  }
   w.unmount()
 })

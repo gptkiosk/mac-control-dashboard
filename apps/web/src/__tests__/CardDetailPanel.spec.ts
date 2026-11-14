@@ -68,6 +68,40 @@ describe('CardDetailPanel', () => {
     second.w.unmount()
   })
 
+  it('renders the definition of done as Markdown in its own labelled, focusable box', async () => {
+    const detail: CardDetail = { ...card({id:47,column:'backlog',acceptance:'Each page loads.\n\n- Welcome\n- Garden\n\n```\nnpm test\n```'}), runs:[] }
+    const {w}=mountPanel(detail)
+    await flushPromises()
+    const box = w.get('[data-testid="card-acceptance"]')
+    expect(box.attributes('role')).toBe('region')
+    expect(box.attributes('aria-label')).toBe('Definition of done')
+    expect(box.attributes('tabindex')).toBe('0')
+    expect(box.findAll('li')).toHaveLength(2)
+    expect(box.find('pre code').text()).toBe('npm test')
+  })
+
+  it('says so when there is no definition of done yet', async () => {
+    const {w}=mountPanel({ ...card({id:48,column:'backlog',acceptance:null}), runs:[] } as CardDetail)
+    await flushPromises()
+    expect(w.find('[data-testid="card-acceptance"]').exists()).toBe(false)
+    expect(w.text()).toContain('No definition of done yet.')
+  })
+
+  it('shows a long rendered result in a labelled, focusable region so it scrolls inside its own box', async () => {
+    const detail: CardDetail = { ...card({id:46,column:'review'}), runs:[
+      run({id:50,card_id:46,stage:'succeeded',error:null,result_text:'## Result\n\n- first\n- second\n\n```\nnpm test\n```'}),
+    ] }
+    const {w}=mountPanel(detail)
+    await flushPromises()
+    const box = w.get('[data-testid="run-result"]')
+    expect(box.attributes('role')).toBe('region')
+    expect(box.attributes('aria-label')).toBe('Run result')
+    expect(box.attributes('tabindex')).toBe('0')
+    expect(box.find('h2').text()).toBe('Result')
+    expect(box.findAll('li')).toHaveLength(2)
+    expect(box.find('pre code').text()).toBe('npm test')
+  })
+
   it('identifies an older failure and returns to the latest active run without changing the task', async () => {
     const detail: CardDetail = { ...card({id:45,column:'running'}), runs:[
       run({id:48,card_id:45,stage:'running',ended_at:null,error:null,result_text:null}),
@@ -213,6 +247,24 @@ describe('CardDetailPanel', () => {
     await flushPromises()
     expect(calls(f, 'DELETE', '/api/cards')).toHaveLength(0)
     w.unmount()
+  })
+
+  it('labels a model and cost MCD worked out as derived, and keeps a reported cost as reported', async () => {
+    // Pilot 2026-10-29: Codex reports tokens but no model or price, so its runs read "not reported" beside Claude runs.
+    const detail: CardDetail = {
+      ...card({ id: 7, column: 'done' }),
+      runs: [run({ id: 72, card_id: 7, agent: 'codex', model_requested: 'gpt-6.1-sol', model_reported: null, model_derived: 'gpt-6.1-sol', cost_usd: null, cost_derived_usd: 0.0913, cost_basis: 'standard API estimate' })],
+    }
+    const { w } = mountPanel(detail)
+    await flushPromises()
+    expect(w.get('[data-testid="model-derived"]').text()).toBe('gpt-6.1-sol (derived)')
+    const cost = w.get('[data-testid="cost-derived"]')
+    expect(cost.text()).toContain('(derived)')
+    expect(cost.attributes('title')).toContain('standard API estimate')
+    w.unmount()
+    const reported = mountPanel({ ...card({ id: 8, column: 'done' }), runs: [run({ id: 73, card_id: 8, cost_usd: 0.2679, cost_derived_usd: null })] })
+    await flushPromises()
+    expect(reported.w.find('[data-testid="cost-derived"]').exists()).toBe(false)
   })
 
   it('shows run metadata with "not reported" for null values', async () => {

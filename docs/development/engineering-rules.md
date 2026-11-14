@@ -43,3 +43,13 @@ These rules come from operator decisions and from real failures on hardware. A c
 ## Tests
 - At least one test of each external-command path uses the real runner, not only a fake. A fake runner hid MCD's broken setup environment in 0.6.40–0.6.41.
 - A test that depends on product defaults (MCD subscription billing, MCD free-only) pins those defaults itself.
+
+## Saved project intent
+- Template examples are subordinate to confirmed exclusions, requested media and explicit story-model choices. Do not introduce a form/backend/container/CI feature simply because a template example had one.
+- Generated-media plans have actual inventory → dashboard generation/spend acknowledgement → candidate publication → integration → verification dependencies. A selection task is not generation. Agents never receive the provider key.
+- Coordinator setup is a deterministic app read with bounded facts and existing repair links. Safe plan-default repair proposes a new revision; host permissions, credentials, paid runs and approved work remain behind their existing controls.
+
+## Coordinator model matching
+- The slider is a provider-neutral classification threshold. Model specialty, task complexity/risk, tools/vision/context, dated research, local outcomes, cost and speed determine recommendations; no slider position pins a vendor or grants spending.
+- Planner/reviewer quality is independent of the story slider. Automatic membership candidates and retries remain installed/allowed, bounded, explicit and separately approved from API charges. Never return a stronger automatic planner's map to a weaker default for review.
+- Old proposal text is not saved scope. Replans keep the complete source privately for cancellation but send bounded summaries to models. Model process exit0 is not a successful semantic plan or accepted artifact.

@@ -1,8 +1,10 @@
 """Operator-only project review and planning. Agent tokens cannot approve or dispatch."""
 import json
+from pathlib import Path
 import re
+import time
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import exists, or_, select, text
 from sqlalchemy.orm import Session
@@ -12,6 +14,7 @@ from settings import get_settings
 from models import Project, ProjectTask, Card, CardDependency, Run
 from project_schemas import QueuedRouteChange, Route, AcceptDespiteReport, Close, Document, Save, Action, Replan, Retry, GoFree, ContinueOutput, Note, Accept, HandoffPolicy, Retier, RepairExecution, ModelLock, LowCostRetry, PayRetry
 import agent_git
+import project_preview
 import projects
 import standards
 
@@ -61,11 +64,64 @@ def add_git_grant(project_id:int,body:GitGrantIn,request:Request,s:Session=Depen
 
 @router.get('/consultant-context')
 def consultant_context(working_dir:str,request:Request,project_type:str|None=None,s:Session=Depends(get_session)):
-    actor(request);return {'text':projects.consultant_context(s,get_settings(),working_dir,project_type if project_type and re.fullmatch(r'[a-z0-9][a-z0-9-]{0,39}',project_type) else None)}
+    actor(request)
+    import project_types
+    chosen=project_type if project_type and re.fullmatch(r'[a-z0-9][a-z0-9-]{0,39}',project_type) else None
+    packet=project_types.guidance_packet(chosen,get_settings())
+    return {'text':projects.consultant_context(s,get_settings(),working_dir,chosen),
+        'context_manifest':{k:v for k,v in packet.items() if k!='text'}}
+
+@router.get('/coordinator')
+def coordinator_read_view(request:Request,operation:str,project_id:int|None=None,task_id:int|None=None,
+        working_dir:str='',project_type:str|None=None,s:Session=Depends(get_session)):
+    import coordinator_read
+    owner=actor(request)
+    return coordinator_read.read(s,get_settings(),operation,owner,project_id=project_id,task_id=task_id,
+        working_dir=working_dir,project_type=project_type)
+
+class PacketImport(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    working_dir:str=Field(min_length=1,max_length=500)
+    copy_references:bool=True
+
+@router.post('/packet-import',status_code=201)
+async def inspect_packet(request:Request):
+    """Upload a project packet (.zip) as the raw request body. It is validated and staged for review; nothing is created yet."""
+    import project_packet_import as pi
+    who=actor(request)
+    declared=request.headers.get('content-length')
+    if declared and declared.isdigit() and int(declared)>pi.UPLOAD_LIMIT:
+        raise HTTPException(413,f'A packet can be at most {pi.UPLOAD_LIMIT//1048576} MB.')
+    data=bytearray()
+    async for chunk in request.stream():
+        data+=chunk
+        if len(data)>pi.UPLOAD_LIMIT: raise HTTPException(413,f'A packet can be at most {pi.UPLOAD_LIMIT//1048576} MB.')
+    return pi.inspect(get_settings(),bytes(data),who)
+
+@router.post('/packet-import/{import_id}/create',status_code=201)
+def create_from_packet(import_id:str,body:PacketImport,request:Request,s:Session=Depends(get_session)):
+    """Create the continuation draft from a reviewed packet. No tasks, approvals, routes or grants carry over."""
+    import project_packet_import as pi
+    who=actor(request);write(s)
+    p=pi.create(s,get_settings(),import_id,body.working_dir,body.copy_references,who);s.commit();return projects.detail(s,p)
 
 @router.get('/{project_id}')
 def get_project(project_id:int,request:Request,s:Session=Depends(get_session)):
     actor(request);return projects.detail(s,projects.get(s,project_id))
+
+from workspace_schemas import Reservation, Handoff
+
+@router.post('/{project_id}/workspace/reserve')
+def reserve_workspace(project_id:int,body:Reservation,request:Request,s:Session=Depends(get_session)):
+    import coordinator_read, workspace_handoff
+    who=actor(request);write(s);p=coordinator_read.owned(s,project_id,who)
+    result=workspace_handoff.reserve(s,p,get_settings(),body,who);s.commit();return result
+
+@router.post('/{project_id}/workspace/handoff')
+def record_workspace_handoff(project_id:int,body:Handoff,request:Request,s:Session=Depends(get_session)):
+    import coordinator_read, workspace_handoff
+    who=actor(request);write(s);p=coordinator_read.owned(s,project_id,who)
+    result=workspace_handoff.record(s,p,get_settings(),body,who);s.commit();return result
 
 @router.get('/{project_id}/standards')
 def standards_for(project_id:int,request:Request,s:Session=Depends(get_session)):
@@ -143,6 +199,107 @@ def note(project_id:int,body:Note,request:Request,s:Session=Depends(get_session)
     identity=actor(request);write(s);p=projects.get(s,project_id)
     if not body.text.strip(): raise HTTPException(422,'Write a project decision or note.')
     projects.memory(s,p,'decision',body.text.strip(),identity);s.commit();return projects.detail(s,p)
+
+@router.get('/{project_id}/stories/{card_id}/host-preview')
+def host_preview_status(project_id:int,card_id:int,request:Request,s:Session=Depends(get_session)):
+    actor(request);p=projects.get(s,project_id);link=projects.binding(s,card_id);c=s.get(Card,card_id)
+    if not link or link.project_id!=p.id or link.role!='story' or not c: raise HTTPException(404,'Story not found in this project.')
+    base=f'/api/projects/{project_id}/stories/{card_id}/host-preview/content'
+    blocks=projects.dependency_blocks(s,c.id)
+    # The same check the action runs, so the panel can say why instead of offering a button the server will refuse.
+    return {**project_preview.describe(p,c,link,proxy_base=base),'last_verify':projects.last_host_verify(s,p,c.id),
+            'blocked_by':[b['reason'] for b in blocks]}
+
+class HostPreviewAction(BaseModel):
+    action: str = Field(pattern=r'^(verify|serve|stop)$')
+
+@router.post('/{project_id}/stories/{card_id}/host-preview')
+def host_preview_action(project_id:int,card_id:int,body:HostPreviewAction,request:Request,s:Session=Depends(get_session)):
+    identity=actor(request);p=projects.get(s,project_id);link=projects.binding(s,card_id);c=s.get(Card,card_id)
+    if not link or link.project_id!=p.id or link.role!='story' or not c: raise HTTPException(404,'Story not found in this project.')
+    if projects.dependency_blocks(s,c.id): raise HTTPException(409,'Finish this story’s prerequisites first.')
+    base=f'/api/projects/{project_id}/stories/{card_id}/host-preview/content'
+    result=project_preview.run(p,c,link,body.action,proxy_base=base)
+    write(s)
+    outcome='passed' if result['ok'] else (f"failed (exit {result['exit_code']})" if result['exit_code'] else 'failed (Start/Stop check)')
+    projects.memory(s,p,'checkpoint',f"Dashboard host preview action `{body.action}` {outcome}.\n\n{result['output']}",identity,c.id)
+    # A host verifier is an operator-started, exact-command run.  Replacing a
+    # failed agent attempt with this successful receipt lets its normal handoff
+    # review release dependents; it never auto-accepts the story.
+    if body.action=='verify' and result['ok'] and c.assignee_type!='human':
+        ended=int(time.time()); started=max(0,ended-int(result['duration_s']))
+        receipt=Run(card_id=c.id,agent='host-preview',model_requested='host-preview',model_reported='host-preview',provider='dashboard',stage='succeeded',
+                    started_at=started,ended_at=ended,duration_s=result['duration_s'],exit_code=0,working_dir=str(c.working_dir or projects.document(p)['working_dir']),
+                    command=json.dumps(['bash','tools/verify-preview.sh','verify']),log_path='',result_text=result['output'],error=None)
+        s.add(receipt);s.flush();c.column='review';c.updated_at=ended
+        projects.memory(s,p,'proposal','Dashboard host verifier succeeded. Review this exact output and accept the handoff to release dependent work.',identity,c.id,receipt.id)
+        result['run_id']=receipt.id
+    s.commit()
+    return result
+
+@router.api_route('/{project_id}/stories/{card_id}/host-preview/content/{asset_path:path}',methods=['GET','HEAD'])
+@router.api_route('/{project_id}/stories/{card_id}/host-preview/content',methods=['GET','HEAD'])
+def host_preview_content(project_id:int,card_id:int,request:Request,s:Session=Depends(get_session),asset_path:str=''):
+    actor(request);p=projects.get(s,project_id);link=projects.binding(s,card_id);c=s.get(Card,card_id)
+    if not link or link.project_id!=p.id or link.role!='story' or not c: raise HTTPException(404,'Story not found in this project.')
+    root=project_preview._root(p,c,link)
+    status,body,content_type=project_preview.proxy(root,asset_path,request.method)
+    return Response(content=body,status_code=status,media_type=content_type.split(';',1)[0],headers={'Cache-Control':'no-store'})
+
+def _upubhub_story(s,project_id,card_id):
+    """The project, story and node of a push story: a human story whose title says push and upubhub (not approve), in a project whose
+    template enables the upubhub-push connector. Anything else is a 404, so the panel never appears on another story."""
+    import pipeline_packs
+    p=projects.get(s,project_id);link=projects.binding(s,card_id);c=s.get(Card,card_id)
+    if not link or link.project_id!=p.id or link.role!='story' or not c: raise HTTPException(404,'Story not found in this project.')
+    doc=projects.document(p)
+    if 'upubhub-push' not in pipeline_packs.connectors_for(doc.get('project_type') or '',get_settings()):
+        raise HTTPException(404,'This project’s template does not push to upubhub.')
+    node=next((n for n in json.loads(p.approved_manifest or '{}').get('document',{}).get('nodes',[]) if n['key']==link.node_key),{})
+    title=str(node.get('title','')).lower()
+    # The push story ("Push the course to upubhub"), never the sign-off before it ("Approve the course for upubhub"): the push must
+    # wait for that sign-off, which the dependency check below enforces.
+    if c.assignee_type!='human' or 'upubhub' not in title or 'push' not in title or 'approve' in title:
+        raise HTTPException(404,'Push to upubhub is on the project’s upubhub push story.')
+    return p,c,doc
+
+@router.get('/{project_id}/stories/{card_id}/upubhub-push')
+def upubhub_push_status(project_id:int,card_id:int,request:Request,s:Session=Depends(get_session)):
+    """What a push would send and whether it can run now: prerequisites (the final sign-off), the saved token and the package check."""
+    import course_package, profiles, upubhub_push
+    identity=actor(request);p,c,doc=_upubhub_story(s,project_id,card_id);settings=get_settings()
+    root=Path(c.working_dir or doc['working_dir']);answers=doc.get('intake_answers') or {}
+    try: info=upubhub_push.plan(root)
+    except upubhub_push.PushError as exc: info={'error':str(exc)}
+    check=course_package.check(root,course_package.expected_code(answers),provided=answers.get('content_source')=='provided')
+    return {'plan':info,'blocked_by':[b['reason'] for b in projects.dependency_blocks(s,c.id)],
+            'token_saved':profiles.credential(s,identity,'upubhub',settings) is not None,'target':settings.upubhub_url,
+            'problems':check['problems'],'last':upubhub_push.last_receipt(settings,p.id)}
+
+@router.post('/{project_id}/stories/{card_id}/upubhub-push')
+def upubhub_push_action(project_id:int,card_id:int,request:Request,s:Session=Depends(get_session)):
+    """Push the course package to upubhub as private drafts. Operator only, after every earlier story (the final sign-off) is done.
+    The token is read here and goes only to upubhub; the receipt (ids and links, never the token) is kept in the dashboard's data."""
+    import course_package, profiles, upubhub_push
+    identity=actor(request);p,c,doc=_upubhub_story(s,project_id,card_id);settings=get_settings()
+    if projects.dependency_blocks(s,c.id): raise HTTPException(409,'Finish the earlier stories, including the final sign-off, before pushing to upubhub.')
+    token=profiles.credential(s,identity,'upubhub',settings)
+    if not token: raise HTTPException(409,'Save a upubhub token in General → Private credentials first. Create it in upubhub Connections and tick Also allow pushing classes.')
+    answers=doc.get('intake_answers') or {}
+    try:
+        receipt=upubhub_push.push(Path(c.working_dir or doc['working_dir']),token,base=settings.upubhub_url,expected_code=course_package.expected_code(answers),
+                                  provided=answers.get('content_source')=='provided',tool=settings.product_name,previous=upubhub_push.last_receipt(settings,p.id))
+    except upubhub_push.PushError as exc:
+        raise HTTPException(exc.status,str(exc)) from None
+    finally:
+        token=None
+    upubhub_push.save_receipt(settings,p.id,receipt)
+    write(s)
+    made=[x for x in (receipt.get('textbook'),*(receipt.get('lesson_plans') or []),receipt.get('class')) if x]
+    projects.memory(s,p,'checkpoint',f"Pushed the {receipt['kind'].replace('_',' ')} to {settings.upubhub_url} as private drafts: "
+                    +'; '.join(f"{x.get('external_id')} → {x.get('url_path')}" for x in made)+'.',identity,c.id)
+    s.commit()
+    return receipt
 
 @router.post('/{project_id}/stories/{card_id}/accept')
 def accept(project_id:int,card_id:int,body:Accept,request:Request,s:Session=Depends(get_session)):
@@ -250,9 +407,31 @@ def continue_output(project_id:int,card_id:int,body:ContinueOutput,request:Reque
     identity=actor(request);write(s);p=projects.get(s,project_id)
     projects.continue_output(s,p,card_id,body,get_settings(),identity);s.commit();return projects.detail(s,p)
 
+@router.get('/{project_id}/packet')
+def project_packet_view(project_id:int,request:Request,refresh_source:bool=False,s:Session=Depends(get_session)):
+    """The project's continuation packet, brought up to date. Writes only the app's private packet folder."""
+    import coordinator_read, project_packet
+    p=coordinator_read.owned(s,project_id,actor(request))
+    return project_packet.view(s,p,get_settings(),refresh_source)
+
+@router.get('/{project_id}/packet.zip')
+def project_packet_zip(project_id:int,request:Request,include_media:bool=False,s:Session=Depends(get_session)):
+    """Download the packet: documents, living docs and reference art; published media only when asked. No source code."""
+    import coordinator_read, project_packet
+    from fastapi.responses import StreamingResponse
+    p=coordinator_read.owned(s,project_id,actor(request))
+    handle,name,size=project_packet.export(s,p,get_settings(),include_media)
+    def chunks():
+        try:
+            while part:=handle.read(65536): yield part
+        finally: handle.close()
+    return StreamingResponse(chunks(),media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="{name}"','Content-Length':str(size),'Cache-Control':'no-store'})
+
 @router.get('/{project_id}/context',response_class=PlainTextResponse)
 def context(project_id:int,request:Request,s:Session=Depends(get_session)):
-    actor(request);return projects.context(s,projects.get(s,project_id))
+    actor(request)
+    name=f'{get_settings().product_short_name.lower()}-project-{project_id}-context.md'
+    return PlainTextResponse(projects.context(s,projects.get(s,project_id)),headers={'Content-Disposition':f'attachment; filename="{name}"'})
 
 @router.post('/{project_id}/close')
 def close(project_id:int,body:Close,request:Request,s:Session=Depends(get_session)):
@@ -291,25 +470,24 @@ def delete_project(project_id:int,body:DeleteIn,request:Request,s:Session=Depend
 
 @router.get('/{project_id}/checks')
 def plan_checks(project_id:int,request:Request,s:Session=Depends(get_session)):
-    """What the project's type expects of a plan and where this plan falls short. Warnings only; nothing here blocks a submit."""
+    """What the project's type expects of a plan and where this plan falls short. Context-aware required findings block submission; inspection itself changes nothing."""
     actor(request);p=projects.get(s,project_id);doc=projects.document(p)
     import project_types
     kind=doc.get('project_type')
-    return {'project_type':kind,'findings':project_types.check(kind,doc.get('nodes',[]),get_settings()) if kind else []}
+    return {'project_type':kind,'findings':project_types.check_document(doc,get_settings())}
 
 @router.post('/{project_id}/pause')
 def pause(project_id:int,body:Action,request:Request,s:Session=Depends(get_session)):
-    identity=actor(request);write(s);p=projects.get(s,project_id);projects.check_revision(p,body.revision)
-    if p.state=='paused': return projects.detail(s,p)
-    if p.state!='active': raise HTTPException(409,'Only active story execution can be paused.')
-    p.state='paused';projects.memory(s,p,'decision','Dispatch paused; running stories may finish in Review. No new story starts.',identity)
+    import workspace_handoff
+    identity=actor(request);write(s);p=projects.get(s,project_id)
+    workspace_handoff.dispatch_control(s,p,body.revision,'pause',identity)
     s.commit();return projects.detail(s,p)
 
 @router.post('/{project_id}/resume')
 def resume(project_id:int,body:Action,request:Request,s:Session=Depends(get_session)):
-    identity=actor(request);write(s);p=projects.get(s,project_id);projects.check_revision(p,body.revision)
-    if p.state!='paused': raise HTTPException(409,'This project is not paused.')
-    p.state='active';projects.memory(s,p,'decision','Operator resumed the same approved project revision.',identity)
+    import workspace_handoff
+    identity=actor(request);write(s);p=projects.get(s,project_id)
+    workspace_handoff.dispatch_control(s,p,body.revision,'resume',identity)
     s.commit();return projects.detail(s,p)
 
 @router.post('/{project_id}/retier')
@@ -375,3 +553,17 @@ def queued_route(project_id:int,card_id:int,body:QueuedRouteChange,request:Reque
     identity=actor(request);write(s);p=projects.get(s,project_id)
     projects.change_queued_route(s,p,card_id,body,get_settings(),identity)
     s.commit();return projects.detail(s,p)
+
+
+@router.get('/{project_id}/readiness')
+def project_readiness_view(project_id:int, request:Request, s:Session=Depends(get_session)):
+    import project_readiness
+    actor(request)
+    return project_readiness.report(s,projects.get(s,project_id),get_settings())
+
+
+@router.post('/{project_id}/repair-plan')
+def repair_plan_defaults(project_id:int,body:Action,request:Request,s:Session=Depends(get_session)):
+    identity=actor(request);write(s);p=projects.get(s,project_id)
+    result=projects.repair_plan_defaults(s,p,body.revision,get_settings(),identity)
+    s.commit();return {**projects.detail(s,p),'repaired':result}

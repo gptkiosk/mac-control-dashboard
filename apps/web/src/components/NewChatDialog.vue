@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { Profile } from '@/lib/profile'
 import { nextTick } from 'vue'
 import AppSelect from '@/components/AppSelect.vue'
 import AppIcon from '@/components/AppIcon.vue'
@@ -20,6 +19,7 @@ import {
   type WorkdirsPayload,
 } from '@/lib/api'
 import { isCoordinatorAgent } from '@/lib/cards'
+import { allowedModels, runtimeAllowed, useRoutes } from '@/lib/routes'
 
 const emit = defineEmits<{ close: []; created: [thread: ChatThread] }>()
 
@@ -43,8 +43,10 @@ const dir = computed(() => workdirs.value.find((w) => w.path === workingDir.valu
 const modelOptions = computed(() => {
   const a = agent.value
   if (!a) return []
-  return [...new Set([...(a.default_model ? [a.default_model] : []), ...a.suggested_models])]
+  // Only what AI & models allows for this feature (memberships first); the agent's own list until the catalog loads.
+  return allowedModels(routes.data.value, a.id, [...new Set([...(a.default_model ? [a.default_model] : []), ...a.suggested_models])])
 })
+const routes = useRoutes('chat')
 const editOnMain = computed(
   () => mode.value === 'edit' && (dir.value?.branch === 'main' || dir.value?.branch === 'master'),
 )
@@ -65,10 +67,12 @@ onMounted(async () => {
     ])
     agents.value = a.agents
     workdirs.value = w.workdirs
-    const defaults = await getJson<Profile>('/api/profile').catch(() => null)
-    agentId.value = defaults?.preferences.ai_agent || 'hermes'
+    // Start from the Chat default in AI & models (the policy's own default, else its first allowed route).
+    await routes.load()
+    const start = routes.data.value?.default
+    agentId.value = start?.runtime || 'hermes'
     await nextTick()
-    model.value = defaults?.preferences.ai_model || 'openrouter/free'
+    model.value = start?.model || ''
     workingDir.value = w.workdirs[0]?.path ?? ''
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
@@ -114,7 +118,7 @@ async function submit(): Promise<void> {
         <button type="button" class="btn close" aria-label="Close" @click="emit('close')"><AppIcon name="close" /></button>
       </header>
 
-      <p class="muted small">New AI work uses your profile defaults (OpenRouter free by default). <RouterLink to="/profile#ai-settings">Configure AI defaults</RouterLink>. Membership CLI sign-in and model approvals still apply. <RouterLink to="/help?topic=agent-chat">Chat and agent setup help</RouterLink></p>
+      <p class="muted small">Starts on the Chat default. <RouterLink to="/profile#models-providers">AI &amp; models</RouterLink>. Membership CLI sign-in and model approvals still apply. <RouterLink to="/help?topic=agent-chat">Chat and agent setup help</RouterLink></p>
       <p v-if="loading" class="muted" role="status">Loading agents…</p>
       <p v-if="loadError" class="error-text" role="alert">
         Could not load agents or working directories: {{ loadError }}
@@ -124,11 +128,12 @@ async function submit(): Promise<void> {
         <div class="field">
           <label for="nchat-agent">Agent</label>
           <AppSelect id="nchat-agent" v-model="agentId" class="input" required data-autofocus>
-            <option v-for="a in agents" :key="a.id" :value="a.id" :disabled="!a.available" :data-label="a.name" :data-description="a.available ? (a.role === 'manager' ? 'Coordinator' : 'Worker') : 'Not installed'">
+            <option v-for="a in agents" :key="a.id" :value="a.id" :disabled="!a.available || !runtimeAllowed(routes.data.value, a.id)" :data-label="a.name" :data-description="!a.available ? 'Not installed' : !runtimeAllowed(routes.data.value, a.id) ? 'Not allowed by AI & models' : (a.role === 'manager' ? 'Coordinator' : 'Worker')">
               {{ a.name }}{{ isCoordinatorAgent(a.id) ? ' (coordinator)' : ''
               }}{{ a.available ? '' : ' (not installed)' }}
             </option>
           </AppSelect>
+          <p v-if="routes.data.value?.empty_reason" class="notice-warn small" role="alert">{{ routes.data.value.empty_reason }} <RouterLink to="/profile#models-providers">AI &amp; models</RouterLink></p>
         </div>
 
         <div class="field">

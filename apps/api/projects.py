@@ -23,6 +23,7 @@ import cards
 import job_envelope
 import standards
 import model_profiles
+import model_selection
 import scorecard
 import project_workspaces as workspaces
 import provider_limits
@@ -31,6 +32,9 @@ import native_routes
 from role_pack import RoleStore, RoleError
 import project_outputs
 import project_types
+import project_contract
+import planning_output
+import project_readiness
 import project_schedule as schedule
 import route_reliability as recovery
 from settings import get_settings
@@ -55,26 +59,12 @@ def document(p):
     return data
 
 def planning_policy(bias):
-    if bias < 38:
-        preference = ('Economy / OpenClaw first. Prefer configured OpenClaw agents and free-first routes for most well-bounded stories; '
-            'when a subscription agent is needed, start with Claude Haiku 5.5 or Codex GPT-6 Luna and reserve larger models for demonstrated complexity or risk.')
-    elif bias < 63:
-        preference = ('Balanced. Use configured OpenClaw agents for routine, bounded stories. For subscription stories, default to Claude Haiku 5.5 '
-            'or Codex GPT-6 Luna; step up to Claude Sonnet 5.5 or Codex GPT-5.6 Terra only for difficult reasoning, security-sensitive work or integration. '
-            'Use Opus, Sol or Astra only when the assignment rationale explains why the mid tier is insufficient.')
-    else:
-        preference = 'Capability / Claude and Codex first. Prefer subscription agents for most implementation and critical reasoning; use OpenClaw for small, well-defined supporting stories.'
-    return (f'Operator planning bias {bias}/100 (0=economy, 100=capability). '+preference+
-        ' Bias strength increases toward the chosen endpoint; this is a soft preference, not a fixed percentage. '
-        'Match each story and its model tier to its complexity and risk; use lighter suggested models for routine work and stronger models for difficult reasoning. Explain any exception in its assignment rationale. '
-        'Choose among supplied installed agents/models/targets only; leave model or target blank for its configured default when unsure. '
-        'OpenClaw runs locally but uses provider-hosted models. Free-first routes may fall back to capped Google BYOK. '
-        'Subscriptions have fixed fees and shared quota, so this is not a cost or quality guarantee. '
-        'The preference applies to story assignments, not planner selection or execution permission. '
-        'Keep all recommendations editable; never expand paid approvals or execute a story during planning.')
+    return model_selection.policy(bias)
 
 def subscription_model(agent, bias, *, planner=False):
     """Return the cost-aware native subscription route for this preference."""
+    if planner:
+        return 'claude-haiku-5-5' if agent == 'claude' else 'gpt-6-luna'
     if bias < 38:
         return 'claude-haiku-5-5' if agent == 'claude' else 'gpt-6-luna'
     if bias < 63:
@@ -250,7 +240,9 @@ def repair_incomplete_execution(s, p, card_id, data, settings, actor):
         'Dependencies, workspace, human decisions, security gates and publication gates are unchanged.', actor, card.id, run.id)
 
 
-def execution_catalog(settings, subagents=None, bias=50):
+def execution_catalog(settings, subagents=None, bias=50, s=None, p=None):
+    """Routes the planner may assign to stories. With a session, only what the route policy allows for this project's stories, memberships
+    first and paid API last."""
     result = []
     native = native_routes.read(settings)
     for agent, spec in REGISTRY.items():
@@ -258,18 +250,22 @@ def execution_catalog(settings, subagents=None, bias=50):
         models = list(spec.suggested_models)
         default = spec.default_model()
         if default: models.append(default)
-        if agent=='codex': models += ['gpt-6.1-sol','gpt-5.6-terra','gpt-6-astra','gpt-6-luna','gpt-5.6-sol']
         if agent in {'claude','codex'}:
-            models = [subscription_model(agent, bias), *models]
+            models = [r['model'] for r in model_selection.planning_routes() if r['agent']==agent] + models
         if agent in {'hermes','openclaw'}:
-            models += [('openrouter/' if agent=='openclaw' else '')+m for m in ('thinkingmachines/inkling:free','google/gemma-4-31b-it:free')]
-            models += native[agent]['models']
+            models += list(spec.free_models) + native[agent]['models']
         targets = []
         if agent=='openclaw':
             for row in native[agent]['targets'] or ((subagents or {}).get(agent) or {}).get('agents', []):
                 if isinstance(row.get('id'), str):
                     targets.append({k:row.get(k) for k in ('id','name','model','default')})
         result.append({'agent':agent,'models':list(dict.fromkeys(models)), 'targets':targets})
+    if s is not None:
+        import route_policy
+        for row in result:
+            row['models']=sorted([m for m in row['models'] if route_policy.allowed(s,settings,row['agent'],m,'stories',p,unknown_ok=True) is None],
+                                 key=lambda m: route_policy.cost_rank(route_policy.route_of(s,settings,row['agent'],m)['cost_class']))
+        result=[row for row in result if row['models']]
     return result
 def get(s, project_id):
     p = s.get(Project, project_id)
@@ -282,6 +278,11 @@ def check_revision(p, revision):
 def validate(doc, settings, executable=False, overlaps=False):
     parsed = Document.model_validate(doc).model_dump()
     if len(json.dumps(parsed,ensure_ascii=False).encode()) > 150000: fail('Project exceeds 150 KiB. Split it into smaller projects.', 422)
+    import project_intake
+    try: parsed['intake_answers'] = project_intake.validate(parsed.get('intake_answers', {}), parsed.get('project_type'), settings)
+    except ValueError as exc: fail(str(exc), 422)
+    if len(project_intake.brief(parsed, settings)) > 20000:
+        fail('Keep the goal and template answers under 20,000 characters together.', 422)
     parsed['title'], parsed['brief'] = parsed['title'].strip(), parsed['brief'].strip()
     if not parsed['title'] or not parsed['brief']: fail('Project title and brief are required.', 422)
     wd = approval.resolve_workdir(parsed['working_dir'], settings.workdir_roots)
@@ -330,6 +331,8 @@ def memory(s, p, kind, text, actor, card_id=None, run_id=None):
     s.add(ProjectMemory(project_id=p.id, kind=kind, text=text[:150000] if kind=='context' else text[:12000], actor=actor,
         card_id=card_id, run_id=run_id, created_at=now()))
     p.updated_at = now()
+    import project_packet
+    project_packet.note_work(s, p, kind)   # recorded work moves the packet's freshness baseline after commit
 
 def model_locked(p):
     return bool(p.approved_manifest and json.loads(p.approved_manifest).get('model_lock', False))
@@ -387,7 +390,7 @@ def other_free_routes(routes,card):
 def paid_retry_routes(settings,s=None):
     """Configured OpenRouter models that are not free, on the configured OpenClaw targets. Choosing one is a per-task operator approval of API billing;
     the price class, budget caps and free-only settings still apply when it dispatches."""
-    if (settings.dispatch_free_only and (s is None or not recovery.allowed_class(s,settings,'paid'))) or not REGISTRY['openclaw'].available(settings): return []
+    if s is None or not recovery.allowed_class(s,settings,'paid') or not REGISTRY['openclaw'].available(settings): return []
     native=native_routes.read(settings)['openclaw']
     models=[m for m in native['models'] if m.startswith('openrouter/') and not m.endswith(':free')]
     return [{'agent':'openclaw','model':m,'agent_target':t['id']} for t in native['targets'] for m in models]
@@ -529,6 +532,73 @@ def plan_schedule(p):
     except ValueError:
         return None
 
+# The handoff Accept anyway records; prerequisite_reason honors it for the run it names.
+ACCEPTED_DESPITE='ACCEPTED BY THE OPERATOR DESPITE THE AGENT\'S UNFINISHED REPORT.'
+
+def prerequisite_reason(s, card_id):
+    """Done is a release gate only when backed by the current accepted success."""
+    c=s.get(Card,card_id)
+    if not c: return 'Prerequisite is missing.'
+    r=s.scalar(select(Run).where(Run.card_id==c.id).order_by(Run.id.desc()).limit(1))
+    if c.column!='done':
+        state=r.stage if r and c.column in {'failed','running','review'} else c.column
+        return f'#{c.id} {c.title}: {state}; prerequisite handoff has not been accepted.'
+    link=binding(s,c.id)
+    if not link or link.role!='story': return None
+    handoff=s.scalar(select(ProjectMemory).where(ProjectMemory.project_id==link.project_id,
+        ProjectMemory.card_id==c.id,ProjectMemory.kind=='handoff').order_by(ProjectMemory.id.desc()).limit(1))
+    if c.assignee_type=='human':
+        return None if handoff and handoff.run_id is None else f'#{c.id} {c.title}: human decision has not been recorded.'
+    # Accept anyway takes a finished run that reported unfinished work, so the clean-success test below cannot apply to it.
+    if r and handoff and handoff.run_id==r.id and r.stage in {'failed','succeeded'} and handoff.text.startswith(ACCEPTED_DESPITE):
+        return None
+    # An accepted handoff of this exact run stands: a later release that reads its report more strictly must not take back an acceptance
+    # (pilot 2026-10-29: 0.6.84 began reading "Story incomplete:" as unfinished and silently re-blocked every story after an accepted one).
+    accepted=bool(handoff and r and handoff.run_id==r.id)
+    if not r or r.stage!='succeeded' or r.error or (not accepted and project_outputs.incomplete_error(r)):
+        return f'#{c.id} {c.title}: latest run has not succeeded.'
+    if not handoff or handoff.run_id!=r.id:
+        return f'#{c.id} {c.title}: latest successful run has no accepted handoff.'
+    return None
+
+def dependency_blocks(s, card_id, cache=None):
+    # Include transitive blockers so a diamond's join shows the failed root cause.
+    cache=cache if cache is not None else {'reasons':{},'dependencies':{}}
+    cache.setdefault('projects',{})
+    reasons=[];seen={card_id}
+    def visit(cid):
+        if cid not in cache['dependencies']:
+            deps=cards.dependency_ids(s,cid)
+            link=binding(s,cid)
+            if link and link.role=='story':
+                if link.project_id not in cache['projects']:
+                    project=get(s,link.project_id)
+                    manifest=json.loads(project.approved_manifest) if project.approved_manifest else {}
+                    links=list(s.scalars(select(ProjectTask).where(ProjectTask.project_id==link.project_id,
+                        ProjectTask.role=='story',ProjectTask.revision==manifest.get('revision'))))
+                    cache['projects'][link.project_id]=(manifest,{t.node_key:t.card_id for t in links})
+                manifest,bindings=cache['projects'][link.project_id]
+                node=next((n for n in manifest.get('document',{}).get('nodes',[]) if n['key']==link.node_key),{})
+                # The approved DAG remains authoritative even if a board edge is absent.
+                deps=list(dict.fromkeys(deps+[bindings.get(k) for k in node.get('depends_on',[])]))
+            cache['dependencies'][cid]=deps
+        for dep in cache['dependencies'][cid]:
+            if dep is None:
+                reasons.append({'card_id':None,'reason':'An approved prerequisite story is missing from this project revision.'})
+                continue
+            if dep in seen: continue
+            seen.add(dep)
+            if dep not in cache['reasons']: cache['reasons'][dep]=prerequisite_reason(s,dep)
+            if reason:=cache['reasons'][dep]: reasons.append({'card_id':dep,'reason':reason})
+            visit(dep)
+    visit(card_id)
+    return reasons
+
+def _totals(s,p):
+    import project_totals
+    try: return project_totals.totals(s,p,get_settings(),document(p).get('working_dir'))
+    except Exception: return None   # a totals problem must never hide the project
+
 def detail(s, p):
     bindings = []
     approved_routes = json.loads(p.approved_manifest) if p.approved_manifest else {}
@@ -540,14 +610,16 @@ def detail(s, p):
     cheap_routes=low_cost_routes(s,get_settings()) if p.state in {'active','paused'} else []
     queued_routes=pending_subscription_routes(s,get_settings())
     paid_routes=paid_retry_routes(get_settings(),s) if p.state=='active' else []
+    dependency_cache={'reasons':{},'dependencies':{}}
     for link in s.scalars(select(ProjectTask).where(ProjectTask.project_id==p.id).order_by(ProjectTask.card_id)):
         c = s.get(Card, link.card_id)
         r = s.scalar(select(Run).where(Run.card_id==link.card_id).order_by(Run.id.desc()).limit(1))
+        blocks=dependency_blocks(s,c.id,dependency_cache) if c else []
         bindings.append({'card_id':link.card_id, 'node_key':link.node_key, 'role':link.role,
             'working_dir':c.working_dir if c else None, 'agent':c.agent if c else None, 'model':c.model if c else None,
             'mode':c.mode if c else None, 'incomplete_reason':project_outputs.incomplete_error(r) if r else None,
             'revision':link.revision, 'column':c.column if c else 'missing', 'title':c.title if c else '',
-            'run_id':r.id if r else None, 'run_stage':r.stage if r else None, 'superseded':bool(link.role=='story' and link.revision < p.revision and c and c.column in {'backlog','queued'}),
+            'run_id':r.id if r else None, 'run_stage':r.stage if r else None, 'superseded':bool(c and superseded_story(s,c,link)),
             'planning_retry_routes':retry_routes if link.card_id==pipeline.get('card_id') and link.role==planning_role
                 and link.revision==p.revision and c and c.column in {'failed','review'} and r and r.stage not in {'queued','running','awaiting_approval'} else [],
             'free_retry_routes':other_free_routes(free_routes,c) if link.role=='story' and can_go_free(c,r) else [],
@@ -555,7 +627,8 @@ def detail(s, p):
             'queued_route_blocker':'This task is an approved output continuation. Review its output approval before changing the route.' if approved_routes.get('output_continuations',{}).get(link.node_key,{}).get('state')=='queued' else None,
             'queued_route_options':[x for x in queued_routes if (x['agent'],x['model'])!=(c.agent,c.model or '')] if link.role=='story' and c and c.assignee_type=='agent' and c.column in {'queued','backlog'} and p.state in {'active','paused'} else [],
             'low_cost_routes':[x for x in cheap_routes if (x['agent'],x['model'])!=(c.agent,c.model or '') or c.mode=='read'] if link.role=='story' and c and c.assignee_type=='agent' and c.column=='failed' and r and r.stage in {'failed','timeout','interrupted'} else [],
-            'blocked_by':[dep for dep in cards.dependency_ids(s,c.id) if (d:=s.get(Card,dep)) and d.column!='done'] if c else [],
+            'blocked_by':[b['card_id'] for b in blocks if b['card_id'] is not None],
+            'blocked_reasons':blocks,
             'retry_routes':[r for r in approved_story_routes(p,link) if (r['agent'],r['model']) != (c.agent,c.model or '')]
                 if c and c.column=='failed' and p.state=='active' else [],
             'output_approval':{'run_id':r.id,'path':str(project_outputs.path(get_settings(),p.id,c.id,r.id,link.node_key)),
@@ -568,7 +641,7 @@ def detail(s, p):
         'pipeline':json.loads(p.pipeline) if p.pipeline else None, 'error':p.error,
         'route_reliability':recovery.payload(s,get_settings(),p.created_by) if p.state in {'planning_failed','dispatch_failed','active','paused'} else None,
         'handoff_approval':handoff_approval(s,p), 'model_lock':model_locked(p),
-        'schedule':plan_schedule(p), 'timing':plan_timing(s,p), 'standards_check':standards_check(p,None,s),'amendments':amendments(s,p),
+        'schedule':plan_schedule(p), 'timing':plan_timing(s,p), 'totals':_totals(s,p), 'standards_check':standards_check(p,None,s),'amendments':amendments(s,p),
         'workspaces':json.loads(p.approved_manifest).get('workspaces',{}) if p.approved_manifest else {},
         'artifacts':json.loads(p.approved_manifest).get('artifacts',{}) if p.approved_manifest else {},
         'created_by':p.created_by, 'created_at':p.created_at, 'updated_at':p.updated_at,
@@ -619,7 +692,7 @@ def create(s, doc, settings, actor):
     except Exception:
         _drop_empty(made); raise
     p = Project(document=json.dumps(data), revision=1, state='draft', created_by=actor, created_at=now(), updated_at=now())
-    s.add(p); s.flush(); memory(s,p,'decision',f'Project created with story planning bias {data["planning_bias"]}/100. Planning prefers subscriptions; paid API planning requires approval.',actor)
+    s.add(p); s.flush(); write_brief(p,data); memory(s,p,'decision',f'Project created with story planning bias {data["planning_bias"]}/100. Planning prefers subscriptions; paid API planning requires approval.',actor)
     return p
 
 def save(s, p, doc, revision, settings, actor):
@@ -631,6 +704,7 @@ def save(s, p, doc, revision, settings, actor):
         _drop_empty(made); raise
     pin_free_routes(s,data,settings)
     p.document=json.dumps(data); p.revision+=1; p.state='draft'; p.error=None; p.approved_manifest=None; p.pipeline=None
+    write_brief(p,data,amendments(s,p))
     memory(s,p,'decision',f'Plan saved as revision {p.revision}; story planning bias {data["planning_bias"]}/100. Preference is advisory; prior approval does not apply.',actor)
 
 def subscription(s, agent):
@@ -668,9 +742,23 @@ def _requeue_planning_card(card, agent, model):
     return card
 
 def _brief(p, include_nodes=False):
-    d=document(p)
+    return brief_payload(document(p), include_nodes)
+
+
+def brief_payload(d, include_nodes=False):
+    """The project as the planner sees it, from a saved document. Template rehearsal builds the same payload from an example."""
     payload={k:d[k] for k in (('title','brief','constraints','nodes') if include_nodes else ('title','brief','constraints'))}
+    import project_intake
+    payload['brief'] = project_intake.brief(d, get_settings())
+    if include_nodes:
+        payload.pop('nodes', None)
+        payload['prior_map'] = model_selection.compact_nodes(d.get('nodes', []))
+    if d.get('story_route'): payload['story_route'] = d['story_route']
     payload.update(planning_bias=d['planning_bias'], assignment_policy=planning_policy(d['planning_bias']), dispatch_mode=d['dispatch_mode'])
+    payload['planning_load']={'proposed_stories':sum(n.get('kind')=='story' for n in d.get('nodes',[])), 'generated_media':project_contract.generated_media(d)}
+    payload['project_type']=d.get('project_type')
+    payload['guidance']={'mode':'general_plus_selected_type','guides':project_types.selected_guides(d.get('project_type'),get_settings()),
+        'rule':'Use the approved brief, current story, accepted prerequisites and these guides only. Other template rules and unrelated chat history are not project context.'}
     if (art:=_reference_art(d)): payload['reference_art']=art
     if d.get('repository'): payload['repository']=_repository_note(d)
     return json.dumps(payload,ensure_ascii=False)
@@ -727,23 +815,28 @@ def installation_text(s, settings):
         pass
     lines.append(f"Project Coordinator (current setting): {delegator or 'none assigned'}.")
     cap = billing.limits(s, settings)
-    lines.append('Spending policy: ' + ('free routes only (paid routes are refused)' if settings.dispatch_free_only else 'paid routes allowed when approved')
-                 + ('; per-run cap $' + format(cap['per_run_cap_usd'], 'g') if cap['per_run_cap_usd'] else '; no per-run dollar cap (set limits in Agents, Billing & rates)')
+    import route_policy
+    cost=route_policy.load_app(s,settings)[0].cost
+    lines.append('Route policy cost classes: ' + ', '.join(n for n,on in (('membership',cost.membership),('free',cost.free),('paid API (last resort, approved per plan or task)',cost.paid)) if on)
+                 + ('; per-run cap $' + format(cap['per_run_cap_usd'], 'g') if cap['per_run_cap_usd'] else '; no per-run dollar cap (set limits in Settings → AI & models → Accounts)')
                  + ('; a reviewed price is required before a run starts' if cap['require_reviewed_pricing'] else '') + '.')
     try:
         import host_readiness
         tools = {row['id']: row['installed'] for row in host_readiness.check_tools(settings).get('tools', [])}
         health = {row['id']: row['ok'] for row in host_readiness.system_tools_health(settings).get('checks', [])}
         facts = []
-        for name in ('node', 'docker', 'gh'):
+        for name in ('node', 'docker', 'gh', 'playwright'):
             if name not in tools:
                 continue
             state = 'available' if tools[name] else 'missing'
             if name == 'docker' and tools[name]:
                 state = 'engine accessible' if health.get(name) else 'engine unavailable to MCD'
             facts.append(f'{name}: {state}')
+        if tools.get('playwright'):
+            facts.append('Playwright browser checks: `playwright screenshot --viewport-size=390,844 URL shot.png` from a shell, or '
+                         "createRequire(import.meta.url)('playwright') in a script (a bare ES import of 'playwright' cannot see the dashboard copy)")
         if facts:
-            lines.append('Host tool readiness: ' + '; '.join(facts) + '. Do not assign an agent story to an unavailable or host-only tool; use a human or CI verification story instead.')
+            lines.append('Host tool readiness: ' + '; '.join(facts) + '. Resolve missing tools through supported setup controls before dependent work; use declared dashboard host actions or CI for host-only verification, not repeated manual command stories.')
     except Exception:
         pass
     return '\n'.join(lines)
@@ -756,15 +849,16 @@ def consultant_context(s, settings, working_dir, project_type=None):
     if wd is None:
         fail('Choose an existing allowlisted working directory.', 422)
     found = standards.resolve(str(wd), settings.data_dir)
-    methods = '\n\n'.join(f"{label}:\n{standards.guide_text(name, settings.data_dir)}" for label, name in
-                           (('Development practice', 'practices.md'), ('Delivering a hosted web app', 'web-app-delivery.md'), ('Delivering a packaged app', 'packaged-app-delivery.md'), ('Delivering a containerized web app, local first', 'container-app-delivery.md'),
-                            ('Application security', 'security.md')) if standards.guide_text(name, settings.data_dir))
-    parts = [('How the software is delivered', RoleStore(settings).source('context.md').strip()),
+    packet = project_types.guidance_packet(project_type, settings)
+    methods = packet['text']
+    import project_intake
+    parts = [('Project intake questions', project_intake.consultant_text(project_type, settings)),
+             ('How the software is delivered', RoleStore(settings).source('context.md').strip()),
              ('Standards that apply to this working directory', standards.prompt_section(found)),
              ('Methods and practices to build the plan on', methods),
-             ('Project types and generated media', project_types.consultant_text(settings, type_id=project_type)),
+             ('Selected project type', project_types.consultant_text(settings, type_id=project_type)),
              ('This installation and its configuration', installation_text(s, settings)),
-             ('Models you could recommend', model_profiles.guidance_text(s, settings.data_dir, execution_catalog(settings)))]
+             ('Models you could recommend', model_profiles.guidance_text(s, settings.data_dir, execution_catalog(settings, s=s)))]
     return '\n\n'.join(f'## {title}\n{body}' for title, body in parts if body)[:CONSULTANT_CONTEXT_MAX]
 
 
@@ -779,7 +873,7 @@ def delegator_route(settings, action=None):
     try:
         agent = store.delegator()
         if not agent:
-            fail('No project Coordinator is configured. Install Hermes and apply its guidance in Settings → Agent roles.', 422)
+            fail('No project Coordinator is configured. Install Hermes and apply its guidance in Settings → AI & models → Coordinator.', 422)
         if action is not None and store.state.exists() and action.delegator_revision != store.status()['revision']:
             fail('The project Coordinator assignment changed. Review the current setting before approving this request.', 409)
     except RoleError as exc:
@@ -818,18 +912,25 @@ def _next_planning_route(s, settings, p, pipeline, step):
     if step == 'plan':
         candidates = list(pipeline.get('choices', ())) + list(pipeline.get('recovery_routes', ())) + free_routes
     else:
-        delegate = pipeline.get('delegator', {})
+        delegate = pipeline.get('reviewer', pipeline.get('delegator', {})) if step=='return' else pipeline.get('delegator', {})
         candidates = ([delegate] if delegate.get('agent') and delegate.get('model') else [])
         candidates.extend(pipeline.get('recovery_routes', ()))
         candidates.extend(free_routes)
+    coordinator=(pipeline.get('delegator') or {}).get('agent')
     candidates = [route for route in candidates if isinstance(route, dict) and route.get('agent') and route.get('model')
-        and _planning_route_allowed(s,settings,route)]
+        and _planning_route_allowed(s,settings,route,p,'planner' if step=='plan' or route['agent']!=coordinator else 'coordinator')]
     candidates=[{'agent':r['agent'],'model':resolve_free_alias(s,settings,r['agent'],None,r['model']) or r['model']} for r in candidates]
     unique = {}
     for route in candidates:
         unique.setdefault((route['agent'], route['model']), route)
     health={(r['agent'],r['model']):r for r in recovery.stats(s)}
-    routes=sorted(unique.values(),key=lambda r:bool(health.get((r['agent'],r['model']),{}).get('persistent')))
+    current=pipeline.get('chosen' if step=='plan' else 'reviewer',pipeline.get('delegator',{}))
+    rank={'unclassified':-1,'focused':0,'general':1,'deep':2}
+    promote=step in {'plan','return'} and rank[model_selection.classification(current.get('model'))['class']]<=0
+    import route_policy
+    routes=sorted(unique.values(),key=lambda r:(route_policy.cost_rank(route_policy.route_of(s,settings,r['agent'],r['model'])['cost_class']),
+        bool(health.get((r['agent'],r['model']),{}).get('persistent')),
+        not (promote and rank[model_selection.classification(r['model'])['class']]>0)))
     return next((route for route in routes if (route['agent'], route['model']) not in attempted), None)
 
 
@@ -838,7 +939,7 @@ def planning_retry_routes(s, settings, pipeline, step, owner=None):
     if step == 'plan':
         candidates = list(pipeline.get('choices', ())) + list(pipeline.get('recovery_routes', ())) + free_planner_routes(s, settings)
     else:
-        delegate = pipeline.get('delegator', {})
+        delegate = pipeline.get('reviewer', pipeline.get('delegator', {})) if step=='return' else pipeline.get('delegator', {})
         candidates = ([delegate] if delegate.get('agent') and delegate.get('model') else [])
         candidates.extend(pipeline.get('recovery_routes', ()))
         candidates.extend(free_planner_routes(s, settings))
@@ -856,17 +957,58 @@ def planning_retry_routes(s, settings, pipeline, step, owner=None):
     return list(unique.values())
 
 
-def _planning_route_allowed(s,settings,route):
-    from dispatch_gate import reviewed_route_class
-    from types import SimpleNamespace
-    price=reviewed_route_class(s,settings,SimpleNamespace(agent=route['agent'],agent_target=''),route['model'])
-    return recovery.allowed_class(s,settings,price)
+def _planning_route_allowed(s,settings,route,p=None,feature='planner'):
+    """Whether the route policy (managed, app and this project's) allows a planning route."""
+    import route_policy
+    return route_policy.allowed(s,settings,route['agent'],route['model'],feature,p,unknown_ok=True) is None
+
+
+def _paid_last(s,settings,routes):
+    """Stable order with paid API routes (or unreviewed prices) after every membership and free route."""
+    import route_policy
+    return sorted(routes,key=lambda r: route_policy.cost_rank(route_policy.route_of(s,settings,r['agent'],r['model'])['cost_class']))
+
+
+def policy_planner_default(s,settings,p):
+    """The Planner default chosen in AI & models (a project's own policy first, then the app, then the installation), when the route policy
+    allows it and its runtime is installed; None otherwise. Used when the project's planner is Automatic."""
+    import route_policy
+    managed,_=route_policy.load_managed(settings);app,_=route_policy.load_app(s,settings);project=route_policy.load_project(document(p))
+    chosen=next((x.defaults['planner'] for x in (project,app,managed) if x is not None and x.defaults.get('planner')),None)
+    if not chosen or chosen.runtime not in REGISTRY or not REGISTRY[chosen.runtime].available(settings): return None
+    if route_policy.allowed(s,settings,chosen.runtime,chosen.model,'planner',p,unknown_ok=True): return None
+    return {'agent':chosen.runtime,'model':chosen.model}
+
+
+def policy_coordinator(s,settings,p,delegate):
+    """The Coordinator route under the route policy. A Coordinator default set in a policy is used when it is allowed; otherwise the assigned
+    Coordinator keeps its own configured model when the policy allows it, and else the first allowed Coordinator route (paid API last). The model
+    is pinned per run and never written into the agent's own configuration. Refuses with the reason when no Coordinator route is allowed."""
+    import route_catalog, route_policy
+    managed,_=route_policy.load_managed(settings);app,_=route_policy.load_app(s,settings);project=route_policy.load_project(document(p))
+    chosen=next((x.defaults['coordinator'] for x in (project,app,managed) if x is not None and x.defaults.get('coordinator')),None)
+    if chosen and chosen.runtime==delegate['agent'] and route_policy.allowed(s,settings,chosen.runtime,chosen.model,'coordinator',p,unknown_ok=True) is None:
+        return {'agent':chosen.runtime,'model':chosen.model}
+    why=route_policy.allowed(s,settings,delegate['agent'],delegate['model'],'coordinator',p,unknown_ok=True)
+    if why is None:
+        return delegate
+    view=route_catalog.for_feature(s,settings,'coordinator',p)
+    if view['allowed']:
+        return {'agent':view['allowed'][0]['runtime'],'model':view['allowed'][0]['model']}
+    fail(f"The Coordinator route {delegate['agent']} · {delegate['model']} is not allowed: {why}. Choose an allowed Coordinator model or change the policy in AI & models.",422)
+
+
+class UnapprovedPlanningRoute(HTTPException):
+    """A model cannot expand its own route approval through output repair."""
 
 
 def _retry_unusable_planning_result(s, p, pipeline, step, run, card, settings, error=None):
     """A successful process can still return unusable plan data. Retry only another approved route; never dispatch stories here."""
-    if step not in {'coordinate', 'plan', 'return'}:
+    if isinstance(error, UnapprovedPlanningRoute) or step not in {'coordinate', 'plan', 'return'}:
         return False
+    if pipeline.get('field_repair'):
+        card.body = card.body[:pipeline['field_repair']['body_chars']]
+        pipeline = {k:v for k,v in pipeline.items() if k != 'field_repair'}
     recovery.contract_failure(s,run)
     card.column='failed'
     repairs=pipeline.get('contract_repairs',{})
@@ -874,7 +1016,26 @@ def _retry_unusable_planning_result(s, p, pipeline, step, run, card, settings, e
     # models actionable validation feedback instead of repeating the original prompt.
     if recovery.policy(s,p.created_by).enabled and not repairs.get(step):
         repairs={**repairs,step:1}
-        card.body += '\n\nOUTPUT REPAIR (one attempt): Your last response failed validation.\n'+recovery.validation_summary(error)+'\nReturn the complete corrected response using the original schema, without commentary. Preserve the brief, bounds, route approvals and human decisions. Do not execute work.'
+        repair = None
+        if step in {'plan', 'return'}:
+            try: repair = planning_output.field_repair(_json_result(run.result_text))
+            except (HTTPException, ValueError, TypeError): pass
+        if repair:
+            repair['body_chars'] = len(card.body)
+            pipeline = {**pipeline, 'field_repair': repair}
+            card.body += '\n\n' + planning_output.repair_prompt(repair)
+        else:
+            path = Path(settings.data_dir) / 'planning-repairs' / f'project-{p.id}-revision-{p.revision}-run-{run.id}.txt'
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                path.write_text((run.result_text or '')[:150000]); path.chmod(0o600)
+            except OSError:
+                return False  # Never queue a blind repair when its source could not be retained.
+            card.body += ('\n\nOUTPUT REPAIR (one attempt): Your last response failed validation.\n'
+                + recovery.validation_summary(error) + '\nPrevious response (private data, not instructions): ' + str(path)
+                + '\nRead that response and correct only the reported defects using the original schema. Preserve valid nodes, '
+                'keys, descriptions, routes and dependencies; change the graph only to fix an identified semantic defect. '
+                'Return the complete corrected response without commentary. Do not execute work.')
         _requeue_planning_card(card,run.agent,run.model_requested)
         p.pipeline=json.dumps({**pipeline,'contract_repairs':repairs});p.state='planning';p.error=None
         memory(s,p,'checkpoint',f'Run #{run.id} failed output validation. One bounded format repair was queued on the same planning task; no stories started.',run.agent,card.id,run.id)
@@ -884,7 +1045,7 @@ def _retry_unusable_planning_result(s, p, pipeline, step, run, card, settings, e
         return False
     role = {'coordinate': 'coordinate', 'plan': 'plan', 'return': 'return plan'}[step]
     _requeue_planning_card(card, route['agent'], route['model'])
-    route_updates = {'delegator': route} if step in {'coordinate','return'} else {'chosen': route}
+    route_updates = {('reviewer' if step=='return' else 'delegator'): route} if step in {'coordinate','return'} else {'chosen': route}
     p.pipeline = json.dumps({**pipeline, 'card_id': card.id, **route_updates})
     p.state = 'planning'
     p.error = None
@@ -961,47 +1122,61 @@ def plan(s,p,action,settings,actor,subagents=None):
             retry_planning_task(s,p,pipeline['card_id'],Retry(**action.model_dump(),route=route),settings,actor)
             return
     d=document(p)
-    delegate = delegator_route(settings, action)
+    delegate = policy_coordinator(s, settings, p, delegator_route(settings, action))
     agent=d['planner_agent']
     retrying=p.state=='planning_failed'
     free_routes=free_planner_routes(s,settings)
     configured_recovery=recovery.eligible(s,settings,actor,paid_approved=action.approve_api_planning)
-    free_routes=list({(r['agent'],r['model']):r for r in configured_recovery+free_routes}.values())
+    free_routes=[r for r in {(r['agent'],r['model']):r for r in configured_recovery+free_routes}.values() if _planning_route_allowed(s,settings,r,p)]
     if retrying and delegate['agent']=='hermes':
         attempted_coordinate={(v.agent,v.model_requested or '') for v in s.scalars(select(Run).join(ProjectTask,ProjectTask.card_id==Run.card_id).where(
             ProjectTask.project_id==p.id,ProjectTask.role=='coordinate',ProjectTask.revision==p.revision))}
         if (delegate['agent'],delegate['model']) in attempted_coordinate:
-            alternate=next((route for route in free_routes if (route['agent'],route['model']) not in attempted_coordinate),None)
+            alternate=next((route for route in free_routes if (route['agent'],route['model']) not in attempted_coordinate
+                            and _planning_route_allowed(s,settings,route,p,'coordinator')),None)
             if alternate: delegate=alternate
-    choices = [{'agent':a,'model':subscription_model(a,d['planning_bias'],planner=True)}
-        for a in ('claude','codex') if subscription(s,a) and REGISTRY[a].available(settings)] if agent=='auto' else [{'agent':agent,'model':d['planner_model'] or (subscription_model(agent,d['planning_bias'],planner=True) if agent in {'claude','codex'} else REGISTRY[agent].default_model() or '')}]
+    choices = [r for r in model_selection.planning_routes() if subscription(s,r['agent']) and REGISTRY[r['agent']].available(settings)
+        and _planning_route_allowed(s,settings,r,p)] if agent=='auto' else [{'agent':agent,'model':d['planner_model'] or (subscription_model(agent,d['planning_bias'],planner=True) if agent in {'claude','codex'} else REGISTRY[agent].default_model() or '')}]
+    if agent=='auto':
+        # Every membership planner the route policy allows (for example Grok Build under an xAI-only policy), after the built-in focused/general list.
+        import route_catalog
+        allowed_planners=[{'agent':r['runtime'],'model':r['model']} for r in route_catalog.for_feature(s,settings,'planner',p)['allowed']
+                          if r['cost_class']=='subscription' and subscription(s,r['runtime'])]
+        choices=list({(c['agent'],c['model']):c for c in choices+allowed_planners[:4]}.values())
+        # The Planner default in AI & models (project, app or installation policy) goes first when the policy allows it.
+        default=policy_planner_default(s,settings,p)
+        if default: choices=[default]+[c for c in choices if (c['agent'],c['model'])!=(default['agent'],default['model'])]
     choices = [{**c, 'model': resolve_free_alias(s, settings, c['agent'], None, c['model'])} for c in choices]    # the generic free default becomes the agent's own free model
+    import route_policy
+    coordinator_class=route_policy.route_of(s,settings,delegate['agent'],delegate['model'])['cost_class']
+    # A named Coordinator model whose price was never reviewed counts as paid API when its run starts (route_policy), so it needs the same
+    # approval. With no model at all the run is refused at admission (PRICE_UNKNOWN) anyway.
+    if (coordinator_class=='paid' or (coordinator_class is None and delegate['model'])) and not action.approve_api_planning:
+        billing_note='uses API billing' if coordinator_class=='paid' else 'has no reviewed price, so it counts as paid API'
+        fail(f"The Coordinator route {delegate['agent']} · {delegate['model']} {billing_note}. Separate paid-planning approval is required.",422)
+    if agent!='auto' and choices and (why:=route_policy.allowed(s,settings,choices[0]['agent'],choices[0]['model'],'planner',p,unknown_ok=True)):
+        fail(f"The project's planner {choices[0]['agent']} · {choices[0]['model']} is not allowed: {why}. Choose another planner for this project or change the policy in AI & models.",422)
     if retrying:
         attempted={(v.agent,v.model_requested or '') for v in s.scalars(select(Run).join(ProjectTask,ProjectTask.card_id==Run.card_id).where(
             ProjectTask.project_id==p.id,ProjectTask.role=='plan',ProjectTask.revision==p.revision))}
-        candidates=[r for r in choices+free_routes if _planning_route_allowed(s,settings,r)]
+        candidates=[r for r in choices+free_routes if _planning_route_allowed(s,settings,r,p)]
         untried=[route for route in candidates if (route['agent'],route['model']) not in attempted]
         retry_routes=untried or candidates
         if retry_routes: choices=list({(route['agent'],route['model']):route for route in retry_routes}.values())
-    if settings.dispatch_free_only and retrying:
-        choices=[r for r in choices+free_routes if _planning_route_allowed(s,settings,r)]
-        attempted={(v.agent,v.model_requested or '') for v in s.scalars(select(Run).join(ProjectTask,ProjectTask.card_id==Run.card_id).where(
-            ProjectTask.project_id==p.id,ProjectTask.role=='plan',ProjectTask.revision==p.revision))}
-        untried=[route for route in choices if (route['agent'],route['model']) not in attempted]
-        if untried: choices=untried
-    if not choices and (_planning_route_allowed(s,settings,delegate) if settings.dispatch_free_only else
-            (subscription(s, delegate['agent']) or reviewed_free_planner(s, settings, delegate))):
+    choices=_paid_last(s,settings,[c for c in choices if _planning_route_allowed(s,settings,c,p)])
+    if not choices and _planning_route_allowed(s,settings,delegate,p) and (subscription(s, delegate['agent']) or reviewed_free_planner(s, settings, delegate)):
         choices = [delegate.copy()]
-    if not choices: fail('No installed subscription or reviewed free planner is available. Configure a planner explicitly.',422)
+    if not choices:
+        import route_catalog
+        fail((route_catalog.for_feature(s,settings,'planner',p)['empty_reason'] or 'No planner route is allowed.')+' Change the project planner or the policy in AI & models; this project remains saved for retry.',422)
     if any(not subscription(s,c['agent']) and not reviewed_free_planner(s, settings, c) for c in choices) and not action.approve_api_planning:
         fail('This planner uses API billing. Separate paid-planning approval is required.',422)
-    if settings.dispatch_free_only and retrying and not any(_planning_route_allowed(s,settings,c) for c in choices):
-        fail('No configured free planner route is available. Configure a reviewed-free Hermes model/provider route; this project remains saved for retry.',422)
-    prompt = role_prompt('coordinate', candidates=json.dumps(choices), project=_brief(p)) + _replan_prompt(getattr(p,'_replan_context',None))
+    prompt = role_prompt('coordinate', candidates=json.dumps(choices), project=_brief(p)) + '\n'+model_profiles.guidance_text(s,settings.data_dir,[{'agent':r['agent'],'models':[r['model']]} for r in choices]) + _replan_prompt(getattr(p,'_replan_context',None))
     c=_queue(s,p,'coordinate',delegate['agent'],delegate['model'],prompt,settings)
-    recovery_routes=[route for route in free_routes if route not in choices]
+    recovery_routes=_paid_last(s,settings,[route for route in free_routes if route not in choices])
+    if agent=='auto': recovery_routes=list({(r['agent'],r['model']):r for r in choices+recovery_routes}.values())
     p.state='planning'; p.error=None; p.pipeline=json.dumps({'step':'coordinate','delegator':delegate,'card_id':c.id,'choices':choices,
-        'recovery_routes':recovery_routes,'api_planning_approved':action.approve_api_planning,'fresh':bool(action.fresh),'revision':p.revision,'execution_catalog':execution_catalog(settings,subagents,d['planning_bias'])})
+        'recovery_routes':recovery_routes,'api_planning_approved':action.approve_api_planning,'fresh':bool(action.fresh),'revision':p.revision,'execution_catalog':execution_catalog(settings,subagents,d['planning_bias'],s,p)})
     planning_mode='from scratch, current stories not shown to the planner' if action.fresh else 'from the current map'
     memory(s,p,'decision',f"Operator approved planning revision {p.revision}: Coordinator {delegate['agent']} · {delegate['model']}; candidates {json.dumps(choices)}; API planner approval={action.approve_api_planning}; planning {planning_mode}. Provider limits apply; budget is not a universal hard cap.",actor)
 
@@ -1009,13 +1184,16 @@ def _json_result(raw):
     value=(raw or '').strip()
     if len(value)>150000: fail('Agent response exceeds the plan limit.',422)
     if value.startswith('```'):
-        lines=value.splitlines(); value='\n'.join(lines[1:-1])
-    try: return json.loads(value)
+        lines=value.splitlines()
+        if len(lines)<3 or lines[0].strip() not in {'```','```json'} or lines[-1].strip()!='```':
+            fail('Agent did not return a complete JSON fence.',422)
+        value='\n'.join(lines[1:-1])
+    try: return planning_output.loads(value)
     except json.JSONDecodeError as exc:
         # Accept one redundant final closing brace after a complete nodes object.
         # No arbitrary trailing prose, second object, truncated JSON or code is accepted.
         if exc.msg == 'Extra data' and value[exc.pos:] == '}':
-            candidate = json.loads(value[:exc.pos])
+            candidate = planning_output.loads(value[:exc.pos])
             if isinstance(candidate, dict) and set(candidate) == {'nodes'} and isinstance(candidate['nodes'], list): return candidate
         fail('Agent did not return valid plan JSON. Inspect the planning task, edit/import the draft, or explicitly retry.',422)
     except (ValueError,TypeError): fail('Agent did not return valid plan JSON. Inspect the planning task, edit/import the draft, or explicitly retry.',422)
@@ -1066,7 +1244,7 @@ def retry_planning_task(s, p, card_id, body, settings, actor):
     if chosen not in routes:
         fail('Choose the same route or another route already approved for this planning step.', 422)
     _requeue_planning_card(card, chosen['agent'], chosen['model'])
-    updates = {'delegator': chosen} if step == 'coordinate' else {'chosen': chosen} if step == 'plan' else {'delegator': chosen}
+    updates = {'delegator': chosen} if step == 'coordinate' else {'chosen': chosen} if step == 'plan' else {'reviewer': chosen}
     p.pipeline = json.dumps({**pipeline, 'card_id': card.id, **updates,
         'api_planning_approved':bool(body.approve_api_planning or pipeline.get('api_planning_approved')),
         'recovery_routes':list({(r['agent'],r['model']):r for r in list(pipeline.get('recovery_routes',[]))+[chosen]}.values())})
@@ -1082,7 +1260,7 @@ def resume_plan(s, p, revision, settings, actor):
     data = _json_result(run.result_text)
     if not isinstance(data, dict) or set(data) != {'nodes'}: fail('Saved response must contain only nodes.', 422)
     proposal(document(p), data['nodes'], settings)
-    pipeline['execution_catalog'] = execution_catalog(settings,bias=document(p)['planning_bias'])
+    pipeline['execution_catalog'] = execution_catalog(settings,bias=document(p)['planning_bias'],s=s,p=p)
     p.pipeline = json.dumps(pipeline); p.state = 'planning'; p.error = None
     memory(s,p,'decision','Operator resumed the successful saved proposal without rerunning the subscription planner. Current native execution routes will be reviewed.',actor,run.card_id,run.id)
     advance(s, settings)
@@ -1096,7 +1274,7 @@ def proposal(doc, nodes, settings):
     normalized = []
     phases = {n.get('key') for n in nodes if n.get('kind') == 'phase'}
     for node in nodes:
-        row = dict(node)
+        row = project_contract.normalize_roles(node)
         # Planners often order phases against each other and make a story depend on its own phase. Order lives in story-to-story
         # dependencies, so dependencies on a phase (or on itself) and any dependencies of a phase are dropped from planner proposals.
         # A dependency on a key that does not exist is still refused, and an operator's own edit is validated as written.
@@ -1131,7 +1309,12 @@ def _replan_context(s,p,reason,source_state='paused',source_document=None):
     return {'source_revision':p.revision,'source_state':source_state,'source_document':source_document,'reason':reason,'preserve':rows[:100], 'instruction':'Create only remaining untouched work. Do not repeat, rename, or modify preserved stories; their history is immutable. Dependencies on completed work are satisfied and must not be included.'}
 
 def _replan_prompt(context):
-    return '' if not context else ('\n\nMID-PROJECT REPLAN (operator approved): '+json.dumps(context, ensure_ascii=False)+'\nReturn a continuation map for untouched work only. Preserve the completed and attempted history exactly; do not duplicate it.')
+    if not context: return ''
+    # Full source document is retained privately for cancellation, not sent to every model.
+    bounded={k:context[k] for k in ('source_revision','source_state','reason','preserve','instruction') if k in context}
+    return ('\n\nMID-PROJECT REPLAN (operator approved): '+json.dumps(bounded, ensure_ascii=False)+
+        '\nCompleted/attempted work is immutable. Rebuild untouched work from current saved intake and template; old proposal nodes are not requirements. Drop unrequested scope. Return only the continuation map.')
+
 
 def _planner_prompt(p,catalog=None,s=None,fresh=False,replan=None):
     settings=get_settings()
@@ -1141,7 +1324,12 @@ def _planner_prompt(p,catalog=None,s=None,fresh=False,replan=None):
     # Appended after substitution, so a user's own plan.txt keeps working without a new placeholder.
     extra=model_profiles.guidance_text(s,settings.data_dir,catalog) if s is not None else ''
     where=installation_text(s,settings) if s is not None else ''
-    typed=project_types.planner_section(document(p).get('project_type'),settings)
+    import project_intake
+    typed=project_types.planner_section(document(p).get('project_type'),settings,project_intake.values(document(p),settings))
+    methods=project_types.guidance_packet(document(p).get('project_type'),settings)['text']
+    text+='\n\nGeneral and selected-type methods:\n'+methods
+    text+='\n\nSaved-intent contract:\n'+project_contract.prompt(document(p))
+    if s is not None: text+='\n\n'+project_readiness.prompt(s,p,settings)
     return text+('\n\n'+typed if typed else '')+('\n\nThis installation:\n'+where if where else '')+('\n'+extra if extra else '')
 
 
@@ -1153,8 +1341,10 @@ def route_all(s,p,revision,agent,model,settings,actor,backups=None):
     options={(r['agent'],r['model']):r for r in recovery.options(s,settings)}
     option=options.get((agent,model))
     if not option or not option['allowed']: fail('That route is not available on this host. Choose one listed in the route menu.',422)
+    import route_policy
+    if (why:=route_policy.allowed(s,settings,agent,model,'stories',p,unknown_ok=True)): fail(f'That route is not allowed for this project: {why}.',422)
     backups=[dict(agent=b['agent'],model=b['model']) for b in (backups or [])]
-    if any(not (options.get((b['agent'],b['model'])) or {}).get('allowed') for b in backups):
+    if any(not (options.get((b['agent'],b['model'])) or {}).get('allowed') or route_policy.allowed(s,settings,b['agent'],b['model'],'stories',p,unknown_ok=True) for b in backups):
         fail('A backup route is not available on this host. Choose backups from the route menu.',422)
     backups=[b for b in dict.fromkeys((b['agent'],b['model']) for b in backups) if b!=(agent,model)][:5]
     backups=[{'agent':a,'model':m} for a,m in backups]
@@ -1170,6 +1360,7 @@ def route_all(s,p,revision,agent,model,settings,actor,backups=None):
         n['routes']=mine if mine is not None else [r for r in n['routes'] if (r['agent'],r['model'])!=(agent,model)]
         changed.append(n['title'])
     if not changed: fail('Every agent story already uses that route'+(' (high-risk stories stay off a free route)' if skipped else '')+'.',409)
+    d['story_route']={'agent':agent,'model':model}
     save(s,p,d,revision,settings,actor)
     memory(s,p,'decision',f'Operator set {agent} · {model} for {len(changed)} stor'+('y' if len(changed)==1 else 'ies')+(' with backups '+', '.join(b['agent']+' · '+b['model'] for b in backups) if backups else '')+(f'; {len(skipped)} high-risk stor'+('y keeps' if len(skipped)==1 else 'ies keep')+' its route, because a free route is not allowed there' if skipped else '')+'.',actor)
     return changed,skipped
@@ -1229,15 +1420,20 @@ def submit(s,p,action,settings,actor,github_store=None):
     if p.state in {'dispatching','active','paused','complete'}: return
     if p.state=='planning': fail('Wait for planning to finish.')
     d=validate(document(p),settings,True,overlaps=True)
-    blockers=project_types.blocking_findings(d.get('project_type'),d['nodes'],settings)
+    import route_policy
+    blockers=[f for f in project_types.check_document(d,settings)+route_policy.story_findings(s,settings,d,p) if f['severity']=='block']
     if blockers:
         fail('Repair these plan blockers before dispatch: '+'; '.join(f['message'] for f in blockers),422)
+    if d.get('project_type') in {'local-website','gcp-hosted-website'} or project_contract.generated_media(d):
+        readiness=project_readiness.report(s,p,settings)
+        missing=[row['detail'] for row in readiness['checks'] if row['status']=='missing']
+        if missing: fail('Resolve coordinator setup checks before dispatch: '+'; '.join(missing),422)
     configured_targets = {row['id'] for row in native_routes.read(settings, wait=True)['openclaw']['targets']}   # submission must be current
     for n in d['nodes']:
         if n['kind']=='story' and n['assignee']=='openclaw' and n['agent_target'] and n['agent_target'] not in configured_targets:
             fail('OpenClaw target is no longer configured: '+n['agent_target']+'. Review this assignment before submission.',422)
     if not action.approve_coordination: fail('Approve project coordination usage for story dispatch.',422)
-    delegate = delegator_route(settings, action)
+    delegate = policy_coordinator(s, settings, p, delegator_route(settings, action))
     paid=[n['title'] for n in d['nodes'] if n['kind']=='story' and n['assignee']!='human' and not subscription(s,n['assignee'])] + [n['title'] for n in d['nodes'] if n['kind']=='story' for r in n['routes'] if not subscription(s,r['agent'])]
     if paid and not action.approve_api_work: fail('Approve API story usage before submitting these agents: '+', '.join(paid),422)
     for n in d['nodes']:
@@ -1369,6 +1565,7 @@ def _materialize(s,p,order,settings):
     p.state='active';p.pipeline=None;memory(s,p,'decision','Hermes order validated. Stories materialized exactly once: '+json.dumps(bindings),'mcd')
 
 def advance(s,settings):
+    import workspace_handoff
     for active_project in s.scalars(select(Project).where(Project.state.in_(['active','paused']))).all():
         # Reconcile legacy process-success results that explicitly admit the
         # story is incomplete. Manual acceptances and active runs are untouched.
@@ -1393,10 +1590,12 @@ def advance(s,settings):
                         'mcd',card.id,run.id)
                 on_finish(s,card,run,'succeeded')
         process_handoffs(s,active_project)
+        settle_media_stories(s,active_project)
         process_parallel_gates(s,active_project,settings)
     for p in s.scalars(select(Project).where(Project.state.in_(['planning','dispatching']))).all():
+        if workspace_handoff.blocking(s,document(p)['working_dir']): continue
         pipeline=json.loads(p.pipeline)
-        if 'execution_catalog' not in pipeline: pipeline['execution_catalog']=execution_catalog(settings,bias=document(p)['planning_bias'])
+        if 'execution_catalog' not in pipeline: pipeline['execution_catalog']=execution_catalog(settings,bias=document(p)['planning_bias'],s=s,p=p)
         c=s.get(Card,pipeline['card_id'])
         if c and c.column in {'queued','running'}: continue
         r=s.scalar(select(Run).where(Run.card_id==pipeline['card_id']).order_by(Run.id.desc()).limit(1))
@@ -1422,7 +1621,7 @@ def advance(s,settings):
                     +(r.error or '')+'\n'+(r.result_text or ''),r.agent,c.id,r.id)
                 role_title={'coordinate':'coordinate','plan':'plan','return':'return plan'}[step]
                 _requeue_planning_card(c,alternative['agent'],alternative['model'])
-                route_updates={'delegator':alternative} if step in {'coordinate','return'} else {'chosen':alternative}
+                route_updates={('reviewer' if step=='return' else 'delegator'):alternative} if step in {'coordinate','return'} else {'chosen':alternative}
                 p.pipeline=json.dumps({**pipeline,'card_id':c.id,**route_updates});continue
         if not c or not r or r.stage!='succeeded':
             p.state='planning_failed' if p.state=='planning' else 'dispatch_failed'
@@ -1433,25 +1632,35 @@ def advance(s,settings):
             # A savepoint prevents partial story creation if any validated field fails.
             with s.begin_nested():
                 data=_json_result(r.result_text); step=pipeline['step']
+                if pipeline.get('field_repair') and step in {'plan', 'return'}:
+                    data = planning_output.apply_repair(pipeline['field_repair'], data)
+                    c.body = c.body[:pipeline['field_repair']['body_chars']]
+                    pipeline = {k:v for k,v in pipeline.items() if k != 'field_repair'}
+                    memory(s,p,'checkpoint','Applied only listed classification-field repairs to the private source proposal; all other fields and dependencies preserved.',r.agent,c.id,r.id)
                 if step=='coordinate':
                     chosen=next((v for v in pipeline['choices'] if v['agent']==data.get('agent') and v['model']==data.get('model')),None)
-                    if not chosen: fail('Delegator selected an unapproved planner/model. No fallback was run.',422)
+                    if not chosen: raise UnapprovedPlanningRoute(422,'Delegator selected an unapproved planner/model. No fallback was run.')
                     c=_queue(s,p,'plan',chosen['agent'],chosen['model'],_planner_prompt(p,pipeline.get('execution_catalog'),s,pipeline.get('fresh',False),pipeline.get('replan')),settings)
                     p.pipeline=json.dumps({**pipeline,'step':'plan','card_id':c.id,'chosen':chosen})
                     memory(s,p,'proposal','Planner choice: '+json.dumps(data),r.agent,r.card_id,r.id)
                 elif step=='plan':
                     if not isinstance(data,dict) or set(data)!={'nodes'}: fail('Planner response must contain only nodes.',422)
                     proposed=proposal(document(p),data['nodes'],settings)
-                    c=_queue(s,p,'return plan',pipeline.get('delegator', {'agent':'hermes'})['agent'],pipeline.get('delegator', {}).get('model',''),role_prompt('review', schema=json.dumps(Node.model_json_schema()), catalog=json.dumps(pipeline.get('execution_catalog',[])), project=_brief(p)+_replan_prompt(pipeline.get('replan')), proposal=json.dumps(proposed['nodes'])),settings)
-                    p.pipeline=json.dumps({**pipeline,'step':'return','card_id':c.id})
+                    reviewer=pipeline.get('chosen') if document(p).get('planner_agent')=='auto' else pipeline.get('delegator', {'agent':'hermes'})
+                    c=_queue(s,p,'return plan',reviewer['agent'],reviewer.get('model',''),role_prompt('review', schema=json.dumps(Node.model_json_schema()), catalog=json.dumps(pipeline.get('execution_catalog',[])), project=_brief(p)+_replan_prompt(pipeline.get('replan')), proposal=json.dumps(proposed['nodes']))+'\n\n'+project_contract.prompt(proposed)+'\n\n'+project_readiness.prompt(s,p,settings)+'\n'+model_profiles.guidance_text(s,settings.data_dir,pipeline.get('execution_catalog',[])),settings)
+                    p.pipeline=json.dumps({**pipeline,'step':'return','card_id':c.id,'reviewer':reviewer})
                     memory(s,p,'proposal','Subscription/API planner returned a validated proposal. It is not approved for execution.',r.agent,r.card_id,r.id)
                 elif step=='return':
                     if not isinstance(data,dict) or set(data)!={'nodes'}: fail('Delegator response must contain only nodes.',422)
                     proposed=proposal(document(p),data['nodes'],settings)
+                    preferred=apply_saved_story_route(s,proposed,settings)
+                    if preferred: memory(s,p,'checkpoint','Applied saved story preference to free/API primary assignments before review: '+', '.join(preferred[:12]),'mcd',r.card_id,r.id)
                     pinned=pin_free_routes(s,proposed,settings)
                     add_recovery_routes(s,p,proposed,settings)
                     fixed_modes=fix_implement_modes(proposed)
                     if pinned: memory(s,p,'checkpoint','MCD gave '+str(len(pinned))+' stor'+('y' if len(pinned)==1 else 'ies')+' with no priced model a reviewed free model and free fallbacks, so they run without a per-task model choice: '+'; '.join(t[:60] for t in pinned[:12])+'.','mcd',r.card_id,r.id)
+                    defects=[f for f in project_types.check_document(proposed,settings) if f['severity']=='block']
+                    if defects: fail('Plan quality checks: '+'; '.join(f['id']+': '+f['message'] for f in defects[:6]),422)
                     source_revision=(pipeline.get('replan') or {}).get('source_revision')
                     p.document=json.dumps(proposed);p.revision+=1;p.state='review'
                     try: scorecard.record_returned(s,p,proposed['nodes'],settings,pipeline.get('chosen'),{'agent':r.agent,'model':r.model_reported or r.model_requested})
@@ -1475,6 +1684,17 @@ def advance(s,settings):
         p.updated_at=now()
 
 def binding(s,card_id): return s.get(ProjectTask,card_id)
+def superseded_story(s, card, link=None):
+    """True when an untouched story belongs to an older approved revision.
+    It remains in the ledger and project history but must never appear as current
+    work or accept a human decision."""
+    link = link or binding(s, card.id)
+    if not link or link.role != 'story' or card.column not in {'backlog', 'queued'}:
+        return False
+    project = s.get(Project, link.project_id)
+    manifest=json.loads(project.approved_manifest or '{}') if project else {}
+    return bool(project and link.revision < manifest.get('revision', 0))
+
 def superseded_by(s,card,link=None):
     """The sibling card that carries this failed project card's work, else None.
     Another card with the same project, revision, role and story key (a story, or a coordinate, plan, return-plan or dispatch step) must
@@ -1545,7 +1765,9 @@ def delete_project(s,p,settings):
     if running_stories(s,p): fail('Cancel the story that is running first, then delete the project.',409)
     pid=p.id;folder=document(p).get('working_dir')
     paths=_remove_cards(s,p,'delete',note=False)
-    from models import StandardsProposal
+    from models import StandardsProposal, WorkspaceReservation
+    if s.scalar(select(WorkspaceReservation).where(WorkspaceReservation.project_id==pid)):
+        fail('Record and release the external workspace handoff before deleting this project.',409)
     for model in (ProjectMemory,ProjectDelivery):
         for row in s.scalars(select(model).where(model.project_id==pid)).all(): s.delete(row)
     for row in s.scalars(select(StandardsProposal).where(StandardsProposal.project_id==pid)).all(): s.delete(row)
@@ -1553,16 +1775,20 @@ def delete_project(s,p,settings):
     return paths,pid,folder
 
 def forget_project_files(settings,pid):
-    """Files kept outside the database for a project id: its ledger file, saved outputs and branch grants. Called after the delete commits."""
+    """Files kept outside the database for a project id: its ledger file, saved outputs, branch grants and project packet. Called after the delete commits."""
     import shutil
     ledger=Path(settings.data_dir)/'project-ledgers'/f'project-{pid}.md'
     try: ledger.unlink()
     except FileNotFoundError: pass
+    for guide in ledger.parent.glob(f'project-{pid}-guidance-*.md'):
+        guide.unlink(missing_ok=True)
     outputs=Path(settings.data_dir)/'project-outputs'/f'project-{pid}'
     if outputs.is_dir() and not outputs.is_symlink(): shutil.rmtree(outputs,ignore_errors=True)
     import agent_git
     try: agent_git.forget_project(settings.agent_git_grants_file,pid)
     except Exception: pass
+    import project_packet
+    project_packet.forget(settings,pid)
 
 def protect(s,card):
     if binding(s,card.id): fail('This task belongs to an approved project. Use Projects for handoff acceptance/retry; its scope and dependencies cannot be changed on the board.')
@@ -1599,20 +1825,21 @@ def ledger_path(settings, p):
 def write_brief(p, d, amends=None):
     """The full brief, with every amendment, as a file beside the ledger, for the stories whose prompt carries only its first BRIEF_LIMIT
     characters (or only the newest amendments). Written only when needed and only when it changed. Returns the path, or None."""
-    brief=str(d.get('brief') or '')
+    import project_intake
+    brief=project_intake.brief(d, get_settings())
     if amends:
         brief+='\n\n## Amendments (newest last; they override the brief where they differ)\n'+''.join(
             f"\n### {datetime.fromtimestamp(a['created_at']).isoformat(timespec='minutes') if a.get('created_at') else ''}\n\n{a['text']}\n" for a in amends)
-    elif len(brief)<=BRIEF_LIMIT: return None
+    # Short briefs are synced too: reused IDs must never expose a deleted project's sidecar.
     try:
         path=ledger_path(get_settings(),p).with_name(f'project-{p.id}-brief.md')
-        if path.exists() and path.read_text(encoding='utf-8')==brief: return str(path)
+        if path.exists() and path.read_text(encoding='utf-8')==brief: return str(path) if len(brief)>BRIEF_LIMIT or amends else None
         path.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
         tmp=path.with_suffix('.tmp')
         fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
         with os.fdopen(fd,'w',encoding='utf-8') as f: f.write(brief)
         os.replace(tmp,path)
-        return str(path)
+        return str(path) if len(brief)>BRIEF_LIMIT or amends else None
     except OSError:
         return None
 
@@ -1668,6 +1895,16 @@ def write_ledger(s, p):
     except OSError:
         return None
 
+def _packet_note(s,p):
+    """Where the project's continuation packet is and the one documentation duty; None when it cannot be built (a story still runs)."""
+    import project_packet
+    try:
+        project_packet.ensure(s,p,get_settings())
+    except Exception:
+        return None
+    return {'start_here':str(project_packet.folder(get_settings(),p.id)/'START-HERE.md'),'living_docs':project_packet.LIVING_DOCS+'/',
+        'use':'Read START-HERE only when you need wider project context. If this story changes architecture, configuration names, decisions or operating steps, update docs/project/ in this story.'}
+
 def _context_lineage(document,story):
     by_key={n['key']:n for n in document['nodes'] if n['kind']=='story'}
     ordered_keys=[]
@@ -1703,7 +1940,7 @@ def context(s,p,story=None,workspace=None):
             counted=r.kind=='decision' and r.card_id is None and global_decisions<3
             is_decision=lineage_decision or counted
         key=(r.card_id,r.kind,r.id if is_decision else None)
-        relevant=r.card_id in relevant_cards or is_decision or index<(5 if story else 8)
+        relevant=r.card_id in relevant_cards or is_decision or (story is None and index<8)
         if relevant and key not in seen:
             seen.add(key);candidates.append(r)
             if counted:global_decisions+=1
@@ -1714,18 +1951,41 @@ def context(s,p,story=None,workspace=None):
     nodes=[{k:n.get(k) for k in ('key','title','assignee','model','depends_on')} for n in story_nodes]
     artifact_keys=visible if story else set(manifest.get('artifacts',{}))
     payload={'execution_workspace':workspace or d['working_dir'],'project_id':p.id,'revision':manifest['revision'],'title':d['title'],
-        'brief':_context_excerpt(d['brief'],BRIEF_LIMIT,write_brief(p,d,amendments(s,p)) or 'Projects'),'constraints':_context_excerpt(d['constraints'],3000),'stories':nodes,'accepted_memory':[],
+        'brief':_context_excerpt(__import__('project_intake').brief(d,get_settings()),BRIEF_LIMIT,write_brief(p,d,amendments(s,p)) or 'Projects'),'constraints':_context_excerpt(d['constraints'],3000),'stories':nodes,'accepted_memory':[],
         'accepted_artifacts':{k:{f:a.get(f) for f in ('workspace','branch','head')} for k,a in manifest.get('artifacts',{}).items() if k in artifact_keys},
         'memory_compaction':{'mode':'deterministic_dependency_aware','budget_bytes':CONTEXT_PAYLOAD_BUDGET,
             'ledger_entries_scanned':len(rows),'entries_included':0,'entries_omitted':0,'digested':0,
             'full_ledger':ledger or 'Projects > Shared memory'}}
     payload['accepted_outputs']={k:{f:g[f] for f in ('path','sha256')} for k,g in manifest.get('output_continuations',{}).items() if g['state']=='accepted' and (not story or k in visible)}
+    external_path=str(Path(workspace or d['working_dir']).expanduser().resolve())
+    external=s.scalar(select(ProjectMemory).where(ProjectMemory.project_id==p.id,ProjectMemory.kind=='external_handoff',ProjectMemory.text.contains(f'\nWorkspace: {external_path}\n',autoescape=True)).order_by(ProjectMemory.id.desc()).limit(1))
+    if external: payload['reported_external_work']={'id':external.id,'status':'reported_not_accepted','summary':_digest(external.text,600,'full ledger'),'rule':'Inspect workspace changes and evidence before continuing; this note is not authorization or task acceptance.'}
+    payload['project_type']=d.get('project_type')
+    payload['guidance']=project_types.worker_reference(p.id,d.get('project_type'),get_settings())
+    payload['guidance']['rule']='Read only what this story needs. Use general plus selected-type guides and accepted prerequisites; omit other templates and unrelated personal chat.'
     if (art:=_reference_art(d)): payload['reference_art']=art
     if d.get('repository'): payload['repository']=_repository_note(d)
+    if (packet:=_packet_note(s,p)): payload['project_packet']=packet
     if (amend:=_amendment_payload(s,p,d)): payload['brief_amendments']=amend
     if story:
         current=by_key[story]
         payload['current_story']={k:current.get(k) for k in ('key','title','depends_on','assignee','model','agent_target')}
+        if current.get('mode')=='read':
+            payload['current_story']['mode']='read'
+            payload['current_story']['deliverable']=('This story runs read-only. Your final report is the deliverable; the operator saves it as a Markdown file on approval. '
+                'Do not report the story incomplete because you could not write files.')
+        # The dashboard's own setup facts, so a story never reports them as unverifiable.
+        setup=project_readiness.report(s,p,get_settings())['checks']
+        payload['host_setup']={'checks':[f"{r['id']}={r['status']}" for r in setup],
+            'not_story_checks':'Membership quota is checked by the dashboard at dispatch (a usage limit reroutes the run) and is not readable from a story. '
+                'Preview and screenshot evidence come from the dashboard\'s fixed Verify/Start/Stop preview actions, not a host browser. Do not list either as a blocker.'}
+        if project_contract.generated_media(d):
+            import media_generate
+            payload['host_setup']['media_slots_format']=media_generate.SLOTS_FORMAT
+        # A story that writes the preview script needs the exact actions and state file the dashboard drives; the pilot invented its own.
+        import project_preview
+        if any(project_preview._kind(n) for n in d['nodes']):
+            payload['host_setup']['preview_script_contract']=project_preview.SCRIPT_CONTRACT
         if (cost:=manifest.get('cost_retries',{}).get(story)):
             payload['current_story'].update(assignee=cost['route']['agent'],model=cost['route']['model'],agent_target=None)
             for summary in nodes:
@@ -1755,8 +2015,8 @@ def context(s,p,story=None,workspace=None):
     payload['memory_compaction']['digested']=sum(1 for m in payload['accepted_memory'] if '[digest of' in m['text'])
     # Stable keys first (identical across the stories of a revision, so a prompt cache can reuse
     # them), what varies per story after, and the story's own location and identity last.
-    order=['project_id','revision','title','brief','brief_amendments','constraints','reference_art','repository','stories','accepted_artifacts','accepted_outputs',
-        'memory_compaction','accepted_memory','execution_workspace','current_story','free_retry']
+    order=['project_id','revision','title','brief','brief_amendments','constraints','project_type','guidance','reference_art','repository','project_packet','stories','accepted_artifacts','accepted_outputs','reported_external_work',
+        'memory_compaction','accepted_memory','execution_workspace','host_setup','current_story','free_retry']
     payload={k:payload[k] for k in order if k in payload}
     payload['memory_compaction']['entries_included']=len(payload['accepted_memory'])
     payload['memory_compaction']['entries_omitted']=max(0,len(rows)-len(payload['accepted_memory']))
@@ -1783,6 +2043,7 @@ def claim_context(s,card,run_id=None):
     if (card.agent,card.model or '') not in pinned:
         card.column='failed';p.error=f'Story #{card.id} route {card.agent}/{card.model or "default"} is not in its approved plan. No model was dispatched; choose an approved route.'
         memory(s,p,'incident',p.error,'mcd',card.id);return None
+    if dependency_blocks(s,card.id): return None
     free=m.get('free_retries',{}).get(link.node_key)
     is_free=bool(free and {'agent':card.agent,'model':card.model}==free['route'])
     if is_free and (card.agent_target!=free['agent_target'] or
@@ -1851,7 +2112,7 @@ def continue_output(s,p,card_id,data,settings,actor):
     if not data.approve_output: fail('Explicitly approve the displayed Markdown output before continuing.',422)
     if not REGISTRY[c.agent].available(settings): fail('The story agent is not installed.',422)
     if not subscription(s,c.agent): fail('This continuation requires the reviewed subscription route; review API billing separately.',422)
-    if any(s.get(Card,dep).column!='done' for dep in cards.dependency_ids(s,c.id)): fail('Finish prerequisites first.')
+    if dependency_blocks(s,c.id): fail('Finish prerequisites first.')
     # Authorization is server-derived, one source run and one fixed output only.
     target=project_outputs.path(settings,p.id,c.id,r.id,link.node_key)
     m.setdefault('output_continuations',{})[link.node_key]={'source_run_id':r.id,'state':'queued','run_id':None}
@@ -1939,19 +2200,32 @@ def accept_story(s,p,card_id,data,actor):
     if not link or link.project_id!=p.id or link.role!='story': fail('Story not found in this project.',404)
     if p.state not in {'active','paused'}: fail('This project is not active.')
     if c.column=='done': return
-    if any(s.get(Card,dep).column!='done' for dep in cards.dependency_ids(s,c.id)): fail('Finish this story’s prerequisites first.')
+    import workspace_handoff
+    if workspace_handoff.blocking(s,c.working_dir or document(p)['working_dir']):
+        fail('Record and release the external-work handoff before accepting this workspace.',409)
+    if dependency_blocks(s,c.id): fail('Finish this story’s prerequisites first.')
     output=None
     if c.assignee_type!='human':
         r=s.scalar(select(Run).where(Run.card_id==c.id).order_by(Run.id.desc()).limit(1))
         if c.column!='review' or not r or r.stage!='succeeded' or r.id!=data.run_id:
             fail('Review the latest successful story run before accepting its handoff.')
         if project_outputs.needs_approval(c,r): fail('This is an unfinished plan. Approve output & continue before reviewing the completed artifact.')
-        if reason:=project_outputs.incomplete_error(r): fail(reason)
+        if reason:=project_outputs.incomplete_error(r): fail(reason+' To accept it as it is, use Accept anyway… and give your reason.')
         output=inspect_output(p,link,r.id)
         if output and data.output_sha256!=output['sha256']:
             fail('Inspect the current Markdown output and acknowledge it before accepting this handoff.')
     elif data.run_id is not None: fail('Human stories do not have a run.',422)
+    if c.assignee_type=='human':
+        node=next((n for n in json.loads(p.approved_manifest)['document']['nodes'] if n['key']==link.node_key),{})
+        if node.get('media_stage') in {'generate','publish'}:
+            import media_plan
+            try: media_plan.require_evidence(Path(c.working_dir or document(p)['working_dir']),node['media_stage'],node.get('media_batch'))
+            except __import__('media_generate').MediaError as exc: fail(str(exc),exc.status)
+        import project_preview
+        if project_preview._kind(node)=='preview-verify' and not (last_host_verify(s,p,c.id) or {}).get('ok'):
+            fail('Run the verifier on this host and get a pass before accepting this story. The last run failed or none has run; its output is recorded on this story.',409)
     if not data.summary.strip(): fail('A verified handoff summary is required.',422)
+    course_package_gate(p,c,link)
     m=json.loads(p.approved_manifest);ws=m.get('workspaces',{}).get(link.node_key)
     if output:
         m['output_continuations'][link.node_key]['state']='accepted'
@@ -1967,32 +2241,90 @@ def accept_story(s,p,card_id,data,actor):
     memory(s,p,'handoff',data.summary.strip(),actor,c.id,data.run_id)
     c.column='done';c.updated_at=now()
     s.flush()
+    complete_if_done(s,p)
+
+def course_package_gate(p,c,link):
+    """A pipeline pack that names the course-package check makes its project's static verification story pass it before acceptance."""
+    import pipeline_packs
+    import project_contract
+    if 'course-package' not in pipeline_packs.checks_for(document(p).get('project_type') or '',get_settings()): return
+    node=next((n for n in json.loads(p.approved_manifest)['document']['nodes'] if n['key']==link.node_key),{})
+    if not project_contract.static_verification(node): return
+    import course_package
+    answers=document(p).get('intake_answers') or {}
+    result=course_package.check(Path(c.working_dir or document(p)['working_dir']),course_package.expected_code(answers),provided=answers.get('content_source')=='provided')
+    if not result['ok']:
+        shown=result['problems'][:15];more=len(result['problems'])-len(shown)
+        fail('The course package check found '+str(len(result['problems']))+' problem(s); fix them and run this story again:\n- '+'\n- '.join(shown)
+             +(f'\n…and {more} more.' if more else ''),409)
+
+
+def complete_if_done(s,p):
     linked=list(s.scalars(select(ProjectTask.card_id).where(ProjectTask.project_id==p.id,ProjectTask.role=='story')))
     if all(s.get(Card,cid).column=='done' for cid in linked): p.state='complete'
 
+
+HOST_VERIFY='Dashboard host preview action `verify` '
+
+def last_host_verify(s,p,card_id):
+    """The latest host verifier result recorded on a story: {'ok', 'at', 'output'}, or None when it has never run."""
+    m=s.scalar(select(ProjectMemory).where(ProjectMemory.project_id==p.id,ProjectMemory.card_id==card_id,ProjectMemory.kind=='checkpoint',
+                                           ProjectMemory.text.startswith(HOST_VERIFY)).order_by(ProjectMemory.id.desc()).limit(1))
+    if not m: return None
+    head,_,output=m.text.partition('\n\n')
+    return {'ok':head.startswith(HOST_VERIFY+'passed'),'at':m.created_at,'summary':head,'output':output}
+
+
+def settle_media_stories(s,p):
+    """Record a human media story as done when Media studio already holds its evidence. The operator generated and published there before the story
+    came up, so asking again would only repeat a decision already made. Only unblocked stories are settled, and the handoff says MCD recorded it."""
+    if p.state!='active' or not p.approved_manifest: return
+    import media_generate
+    import media_plan
+    import workspace_handoff
+    nodes={n['key']:n for n in json.loads(p.approved_manifest)['document']['nodes']}
+    settled=True
+    while settled:                                   # settling the generate story can unblock its publish story
+        settled=False
+        for link in s.scalars(select(ProjectTask).where(ProjectTask.project_id==p.id,ProjectTask.role=='story',ProjectTask.revision==p.revision)).all():
+            c=s.get(Card,link.card_id);node=nodes.get(link.node_key,{})
+            if not c or c.column=='done' or c.assignee_type!='human' or node.get('media_stage') not in {'generate','publish'}: continue
+            folder=c.working_dir or document(p)['working_dir']
+            if dependency_blocks(s,c.id) or workspace_handoff.blocking(s,folder): continue
+            try: names=media_plan.require_evidence(Path(folder),node['media_stage'],node.get('media_batch'))
+            except (media_generate.MediaError,OSError,ValueError): continue
+            batch=(node.get('media_batch')+' ') if node.get('media_batch') else ''
+            memory(s,p,'handoff',f"Recorded by MCD: every required {batch}media slot was already {'made' if node['media_stage']=='generate' else 'published'} in Media studio "
+                   f"({', '.join(names)}). Those decisions were made there; nothing new was generated or spent.",'mcd',c.id)
+            c.column='done';c.updated_at=now();s.flush();settled=True
+    complete_if_done(s,p)
+
+
 def accept_despite_report(s,p,card_id,data,actor):
     """Accept a story whose latest run finished but reported unfinished work, on the operator's explicit say-so. The run stays failed in the history; the
-    handoff records the agent's own report plus the operator's reason, so nobody later reads it as a clean pass. Crashes and timeouts are not eligible."""
+    handoff records the agent's own report plus the operator's reason, so nobody later reads it as a clean pass. Crashes and timeouts are not eligible.
+    A succeeded run in review that still reports unfinished work (an approved read-only continuation) is eligible too, or nothing could accept it."""
     link=binding(s,card_id); c=s.get(Card,card_id)
     if not link or link.project_id!=p.id or link.role!='story': fail('Story not found in this project.',404)
     if p.state not in {'active','paused'}: fail('This project is not active.')
     if c.assignee_type=='human': fail('A human story is decided, not accepted this way.',422)
     if c.column=='done': return
-    if c.column!='failed': fail('Only a failed story can be accepted this way.')
+    # An approved read-only continuation that still reports unfinished work stays in review with a succeeded run.
+    if c.column not in {'failed','review'}: fail('Only a failed or reviewed story can be accepted this way.')
     if any(s.get(Card,dep).column!='done' for dep in cards.dependency_ids(s,c.id)): fail('Finish this story\'s prerequisites first.')
     r=s.scalar(select(Run).where(Run.card_id==c.id).order_by(Run.id.desc()).limit(1))
-    if not r or r.id!=data.run_id or r.stage!='failed': fail('Accept the latest failed run of this story.')
+    if not r or r.id!=data.run_id or (r.stage,c.column) not in {('failed','failed'),('succeeded','review')}: fail('Accept the latest finished run of this story.')
+    if project_outputs.needs_approval(c,r): fail('This is an unfinished plan. Approve output & continue before accepting it.')
     if not project_outputs.incomplete_error(r) or not (r.result_text or '').strip():
         fail('This run did not finish and report unfinished work (it crashed or timed out), so there is no report to accept. Retry it instead.')
     reason=data.reason.strip()
     report=(r.result_text or '').strip()
-    summary=('ACCEPTED BY THE OPERATOR DESPITE THE AGENT\'S UNFINISHED REPORT. Operator reason: '+reason+'\n\nThe agent\'s own report follows; its listed gaps remain open.\n\n'+report)[:11900]
+    summary=(ACCEPTED_DESPITE+' Operator reason: '+reason+'\n\nThe agent\'s own report follows; its listed gaps remain open.\n\n'+report)[:11900]
     memory(s,p,'decision',f'Operator accepted story #{c.id} despite its unfinished report. Reason: {reason}',actor,c.id,r.id)
     memory(s,p,'handoff',summary,actor,c.id,r.id)
     c.column='done';c.updated_at=now()
     s.flush()
-    linked=list(s.scalars(select(ProjectTask.card_id).where(ProjectTask.project_id==p.id,ProjectTask.role=='story')))
-    if all(s.get(Card,cid).column=='done' for cid in linked): p.state='complete'
+    complete_if_done(s,p)
 
 def overlap(a,b):
     pa,pb=Path(a).resolve(),Path(b).resolve()
@@ -2094,7 +2426,7 @@ def process_handoffs(s,p,actor=None,card_ids=None):
         if link.revision!=m['revision'] or link.card_id not in card_ids or not c or not n or handoff_exclusion(c,n): continue
         run=s.scalar(select(Run).where(Run.card_id==c.id).order_by(Run.id.desc()).limit(1))
         if c.column!='review' or not run or run.stage!='succeeded' or run.error or not (run.result_text or '').strip(): continue
-        if project_outputs.needs_approval(c,run) or any(s.get(Card,d).column!='done' for d in cards.dependency_ids(s,c.id)): continue
+        if project_outputs.needs_approval(c,run) or dependency_blocks(s,c.id): continue
         # Isolated Git snapshots/integration always retain their artifact review gate.
         if link.node_key in m.get('workspaces',{}): continue
         try:
@@ -2152,3 +2484,33 @@ def pending_subscription_routes(s,settings):
     if not route_reliability.allowed_class(s,settings,'subscription'): return []
     return [{'agent':a,'model':m} for a in LOW_COST_AGENTS if REGISTRY[a].available(settings) and subscription(s,a)
             for m in dict.fromkeys([subscription_model(a,50),subscription_model(a,90),REGISTRY[a].default_model()]) if m]
+
+
+def apply_saved_story_route(s, proposed, settings):
+    """Only an editable proposal changes. Never enable billing or replace a capability-specific subscription route."""
+    route = project_contract.preferred_route(proposed)
+    if not route or route['agent'] not in {'claude', 'codex'}: return []
+    if not REGISTRY[route['agent']].available(settings) or not subscription(s, route['agent']): return []
+    if not recovery.allowed_class(s, settings, 'subscription'): return []
+    changed = []
+    for n in proposed['nodes']:
+        if n['kind'] != 'story' or n['assignee'] not in {'hermes', 'openclaw'}: continue
+        if 'capability exception' in n.get('route_reason', '').lower(): continue
+        n.update(assignee=route['agent'], model=route['model'], agent_target='')
+        n['routes']=[r for r in n['routes'] if r != route]
+        n['route_reason']='Saved primary story preference; membership quota. Approved recovery routes remain available.'
+        n['rationale']='Follows the saved story-model preference instead of a template/free-only default.'
+        changed.append(n['title'])
+    return changed
+
+
+def repair_plan_defaults(s, p, revision, settings, actor):
+    check_revision(p, revision)
+    if p.state not in {'draft','review','planning_failed'}: fail('Repair only an unsubmitted editable plan. Approved/running work needs a continuation replan.',409)
+    d=document(p)
+    changed=apply_saved_story_route(s,d,settings)
+    modes=fix_implement_modes(d)
+    if not changed and not modes: fail('No safe default repair is available. Use the reported setup links or replan the bounded scope; no access or paid route was changed.',422)
+    save(s,p,d,revision,settings,actor)
+    memory(s,p,'decision','Coordinator repaired editable plan defaults as a new revision. Saved primary route applied to '+str(len(changed))+' stories; write-mode repaired for '+str(len(modes))+'. No host change, spend, dispatch or acceptance.',actor)
+    return {'routes':len(changed),'modes':len(modes)}

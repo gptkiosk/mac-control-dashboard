@@ -43,8 +43,8 @@ Keep the database and vault.key together in a private backup to recover encrypte
 
 Turn a brief into reviewed stories, model assignments and shared handoffs.
 
-1. Choose New project. Write the brief and select an allowed working directory. Set Story assignment preference: Economy favors OpenClaw free-first tasks; Capability favors Claude/Codex subscriptions; Balanced splits routine and difficult work. Save changes before requesting a plan.
-2. Plan with Hermes starts a reviewed coordinator → subscription planner → Hermes review workflow. The slider guides suggestions rather than guaranteeing cost or quality. Change it under Project brief & planner and save/replan to revise recommendations; existing assignments stay untouched until you replan or edit them. The returned map is a proposal: select nodes to edit instructions, scope, definition of done, agents, models and prerequisites. Drag nodes or use Arrange.
+1. Choose New project. Write the brief and select an allowed working directory. Set Model matching preference: Economy emphasizes cost and speed; Capability emphasizes stronger reasoning for difficult work. The Coordinator matches each task to capabilities, specialty, evidence and approved cost routes. Save changes before requesting a plan.
+2. Plan (the button names your planner) starts a reviewed workflow: the Coordinator (Hermes) reviews the brief, the planner builds the map, and the Coordinator checks it. Automatic planning and review choose focused/general membership models independently of the story slider; only approved routes may retry. The slider guides suggestions rather than guaranteeing cost or quality. Change it under Project settings and save/replan to revise recommendations; existing assignments stay untouched until you replan or edit them. The returned map is a proposal: select nodes to edit instructions, scope, definition of done, agents, models and prerequisites. Drag nodes or use Arrange.
 3. Choose sequential execution or parallel isolated Git stories. Parallel mode requires a clean repository root; MCD creates story worktrees and local branches from its reviewed commit.
 4. Review & submit freezes the saved revision and its approved model routes. Hermes orders the stories; MCD creates them once. Pause dispatch stops new stories while running ones can finish.
 5. In Stories & runs, verify artifacts and checks, then accept the handoff. Dependent stories wait for acceptance and receive approved context. Review tracked diffs and explicitly select changed files to create a local handoff snapshot (or commit them yourself); prerequisite conflicts stop for review. Source branches are never merged automatically.
@@ -67,12 +67,27 @@ Tasks needing human interaction, decisions or required answers stay manual, incl
 
 [Open project library](http://127.0.0.1:8800/projects) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=project-approvals)
 
+## Choose which providers and models the app uses
+
+One policy for the Coordinator, planner, stories, chat and tasks: every route menu lists only what it allows.
+
+1. Open Settings → AI & models. Start from a preset: Memberships (recommended), Single provider (for example only xAI, with paid API for the Coordinator only if you want Hermes to reach those models), Free only (expect timeouts) or Custom. Save AI & models.
+2. Turn cost classes on or off: membership, free, paid API. Membership routes are tried first, then free; paid API is the last resort and still needs approval per plan or task. Under Coordinator, Allow paid API for the Coordinator lets Hermes use paid models without allowing them elsewhere; save, then choose the Coordinator model.
+3. Untick providers or runtimes you do not want. Routes whose provider varies per request (openrouter/free) are hidden whenever providers are limited; Also offer free models from any provider adds specific free models back.
+4. Read What each feature can use now. When a feature has nothing allowed, it names the nearest route and what stops it.
+5. Under Prices to review, record the price of routes nobody has reviewed. They count as paid API until you do. Free is offered only for a model listed at no cost; memberships are set in Billing & rates.
+6. To narrow one project, open it and choose Change… on the Routes strip, then Narrow for this project. A project can only narrow the app policy, never widen it, and the default is Same as app.
+
+An installation can set a managed policy (MAC_CONTROL_MANAGED_ROUTE_POLICY) that the app cannot widen. Its removed runtimes are also hidden in Agent tools, Setup and Billing & rates. A run outside the policy stops with ROUTE_POLICY before it starts. The old free-only setting is retired; the first policy was written from it.
+
+[Open AI & models](http://127.0.0.1:8800/profile#models-providers) · [Open projects](http://127.0.0.1:8800/projects) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=models-providers)
+
 ## Choose models and recover failed work
 
 Configure ordered alternatives and retry the same task without rebuilding the project.
 
-1. Open Settings → Coordinator setup → Model recovery. Enable automatic route recovery and select up to six configured alternatives in the order you want. A route can use a different runtime/model. Hermes retains the Coordinator guidance; planning helpers only return proposals.
-2. On a free-only host, explicitly enable Allow membership routes alongside free models to use configured subscription accounts. Membership consumes shared account quota and any enabled account overage still applies. This switch does not enable paid API routes; their separate toggle and planning/task approval are required.
+1. Open Settings → AI & models → Advanced → Model recovery. Enable automatic route recovery and select up to six configured alternatives in the order you want. A route can use a different runtime/model. Hermes retains the Coordinator guidance; planning helpers only return proposals.
+2. Model recovery shows the cost classes the route policy allows (Settings → AI & models). Membership routes are preferred, then free models; paid API is always the last resort and still needs planning/task approval. Membership consumes shared account quota and any enabled account overage still applies.
 3. Planning permits one output repair on its approved route, followed by untried approved alternatives. Validation applies to every route. After all alternatives fail, the saved project and task remain available for a manual route choice; no project stories start before plan approval.
 4. Open the failed planning task to choose another configured model. A paid route requires a separate API-charge acknowledgment. Membership access does not cover provider API billing. Global spending settings and host restrictions remain in force.
 5. Enable Include alternatives in future project plans to put eligible free and membership alternatives on the editable story map. Review them before submitting. Provider/rate-limit failures may hand off to an approved untried route; model lock disables automatic story switching, and editing timeouts require review of partial work.
@@ -258,7 +273,7 @@ Read/Edit restrictions depend on the agent. Check the explanatory note in New ch
 
 Compare captured API-equivalent usage against each agent’s full monthly subscription.
 
-1. Claude Code and Codex use the standard Subscription / $20 monthly defaults on a new installation. Open Agents → Billing & rates only when you need to change those defaults.
+1. Claude Code and Codex use the standard Subscription / $20 monthly defaults on a new installation. Open Settings → AI & models → Accounts only when you need to change those defaults.
 2. Select Save billing after changing a billing mode, monthly amount or custom model rate. An unchanged save is not required for task dispatch.
 3. Select This month in Agents and read the agent’s subscription and savings summary.
 4. Savings compare captured API-equivalent usage for this calendar month against the full monthly subscription, counted once across that agent’s sub-agents.
@@ -278,20 +293,20 @@ Dispatch refuses any route that has no reviewed pricing class. The run fails in 
 
 This is the pre-dispatch spending guard, not a fault. A :free model name, a billing estimate or a past successful run does not classify a route. Paid OpenClaw and Hermes routes are always refused.
 
-[Open Billing & rates](http://127.0.0.1:8800/agents?action=billing) · [Open Tasks](http://127.0.0.1:8800/tasks) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=price-unknown)
+[Open Billing & rates](http://127.0.0.1:8800/profile?action=billing#accounts) · [Open Tasks](http://127.0.0.1:8800/tasks) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=price-unknown)
 
 ## Use Grok Build as an agent
 
 Grok Build is xAI’s terminal coding agent. MCD can run it on a SuperGrok subscription, next to or instead of any other agent.
 
 1. Install the CLI on the host and sign in with grok login (or grok login --device-code on a machine without a browser). MCD never sees the sign-in.
-2. Open Agents, then Billing & rates, set Grok Build to Subscription and save. Until you do, MCD refuses to start it, because the CLI has no dollar cap and an API-billed route cannot be bounded.
+2. Open Settings → AI & models → Accounts → Billing & rates, set Grok Build to Subscription and save. Until you do, MCD refuses to start it, because the CLI has no dollar cap and an API-billed route cannot be bounded.
 3. Create a task or choose Grok Build as a project story agent or fallback. Pick a model such as grok-4.6, grok-4.5 or grok-build-0.1, or leave it blank for the CLI default.
 4. Read the data notice first: Grok sends the task and the files it reads to xAI. MCD runs it with telemetry and trace upload off, inside a filesystem sandbox (read-only for a read task, the working directory for an edit task), with git push and merge blocked.
 
 MCD works with any mix of agents installed, including only Grok Build. Usage for Grok comes from the runs MCD dispatches; it does not read the CLI’s own session history. Grok is not used as a project planner, and subscription limit notices cover Claude Code and Codex only.
 
-[Open Billing & rates](http://127.0.0.1:8800/agents?action=billing) · [Open Agents](http://127.0.0.1:8800/agents) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=grok-build)
+[Open Billing & rates](http://127.0.0.1:8800/profile?action=billing#accounts) · [Open Agents](http://127.0.0.1:8800/agents) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=grok-build)
 
 ## A Claude or Codex limit was reached
 
@@ -316,7 +331,7 @@ Add explicit token rates when a model’s usage is captured but its API equivale
 
 Use rates from the model provider. Models ending in :free cost 0. Other missing rates remain unpriced; tools, taxes and other surcharges are outside token estimates.
 
-[Open model rate settings](http://127.0.0.1:8800/agents?action=billing) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=model-rates)
+[Open model rate settings](http://127.0.0.1:8800/profile?action=billing#accounts) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=model-rates)
 
 ## Track actual OpenRouter spending
 
@@ -396,28 +411,70 @@ Talk your idea through, say when it is enough, then send the plan to the coordin
 
 1. Open Projects and choose Refine with project consultant below Create project brief.
 2. Choose an allowed workspace, enter a project name and goal, and choose a project type (the closest fit, or Other if nothing fits exactly). The type is required here so it is always part of the plan. The consultant is told the type’s planning guidance and says if your goal does not fit it.
-3. New AI conversations use Hermes with openrouter/free unless you changed Profile → AI defaults. Install and configure the selected native agent first.
+3. The consultant starts on the Chat default in Settings → AI & models. Install and configure that agent first.
 4. The consultant answers, then asks what it needs to know. Keep talking until you are satisfied; you never have to read its instructions.
 5. Choose That’s enough, write up the plan. The brief opens for you to edit. Confirm the working directory and approve coordination; Hermes coordinates the selected planner and returns the project map and stories.
 6. Review the returned project map before separately approving story execution.
 
 Free routes can throttle or fail. Profile → AI defaults also supplies new chat, task and planning forms; existing work keeps its routes. Native membership accounts and API billing are separate. The built-in help chat uses local guides and makes no model calls.
 
-[Configure AI defaults](http://127.0.0.1:8800/profile#ai-settings) · [Open Projects](http://127.0.0.1:8800/projects) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=project-consultant)
+[Choose the Chat default](http://127.0.0.1:8800/profile#models-providers) · [Open Projects](http://127.0.0.1:8800/projects) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=project-consultant)
+
+## Continue a project elsewhere with a project packet
+
+A packet carries a project’s brief, state, decisions, evidence and reference art to another dashboard, host or coding app.
+
+1. Open a project and choose Workspace. The Project packet section shows whether the packet is Current, Stale (the workspace changed with no recorded handoff), Work in progress or Unknown, with the reason.
+2. Choose Download packet (.zip). It holds START-HERE, the brief, a source map, configuration variable names (never values), state, decisions, evidence, media and a redacted ledger, plus docs/project/ and the reference images. Published media is included only when you tick it. Anything left out is listed with where to copy it from.
+3. Source code is not in the packet. It names the repository, branch and commit to continue from.
+4. To continue in a coding app on this host, use Copy handoff or Copy START-HERE. Agents keep docs/project/ (architecture, decisions, operations) current as they change the source; the app never writes into the workspace.
+5. To continue in another dashboard, choose Projects → Import packet…, select the file and review it: source, accepted and remaining work, and anything missing. Choose this host’s working directory and create the draft. Then review the brief and plan it as usual.
+
+Import creates a draft only. Tasks, approvals, model routes, branch access and spending decisions never carry over, and nothing in a packet runs. Imported statuses are history from the source project, not local acceptance.
+
+[Open Projects](http://127.0.0.1:8800/projects) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=project-packets)
 
 ## Pick a project type so the plan follows a template
 
 A type tells the planner how this kind of project is planned and where it has failed before, then checks the plan.
 
-1. Open Projects, choose New project and pick a type: Web app, Packaged app, Website property, or Other when nothing fits exactly (the plan then says which type it resembles and which gates it keeps). When your brief clearly fits one, MCD suggests it and you can accept or ignore the suggestion. A project with no type is planned as before.
+1. Open Projects, choose New project and pick a type: Packaged app, GCP hosted app, Local website, GCP hosted website, or Other when nothing fits exactly (the plan then says which type it resembles and which gates it keeps). When your brief clearly fits one, MCD suggests it and you can accept or ignore the suggestion. A project with no type is planned as before.
 2. The type adds planner text and known failure points to the plan prompt, hands its guides to the planner and agents (for a website: the design guide and the spacing and timing guide), and lists the keys it usually needs.
-3. After a plan is proposed, read Plan checks for this project type. They only warn: for example no README story or no story that makes the Playwright screenshots (a person or the pipeline runs that script; agents cannot run a browser), no delivery story (the project must end in the remote repository, public for an MIT-licensed package others install and private for proprietary work, with the branch pushed, a pull request open and the pipeline result read), no file verification story, a preview that does not follow verification, a container story an agent cannot do, generated media planned for an agent, or no responsive review. Fix the plan or ignore a warning on purpose.
+3. After a plan is proposed, read Plan checks for this project type. Required gates block submission; warnings identify review points, for example no README story or no story that makes the Playwright screenshots (a person or the pipeline runs that script; agents cannot run a browser), no delivery story (the project must end in the remote repository, public for an MIT-licensed package others install and private for proprietary work, with the branch pushed, a pull request open and the pipeline result read), no file verification story, a preview that does not follow verification, a container story an agent cannot do, generated media planned for an agent, or no responsive review. Fix the plan or ignore a warning on purpose.
 4. Look for the human sign-offs the type expects, such as making the media in MCD, approving the look from a live preview and the final local verification. Agents cannot render pages, so you check rendering in the preview.
 5. To change a type, copy packs/project-types/<id>.json into the project-types folder of your data directory and edit it; your copy replaces the shipped one. When a project fails for a reason that could have been planned around, add it to the type’s failure points.
 
-Types guide planning. They never block a plan and never run model output. A Website property also starts its background clips on the cheapest video tier in the media panel.
+Types guide planning. Required gates block incomplete plans; checks never run model output. A Website property also starts its background clips on the cheapest video tier in the media panel.
 
 [Start a project](http://127.0.0.1:8800/projects?action=new) · [Open Projects](http://127.0.0.1:8800/projects) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=project-types)
+
+## Add, update and make project templates
+
+Project templates come from the signed Template store and update on their own, without a dashboard update. You can also import a template you made, unvetted, to try it.
+
+1. Open Settings, then Template store. Installed templates are on top, available ones below. Choose Add on a card; anything this host still lacks is named on the card with a link to fix it.
+2. When a newer version exists, the tab says how many updates are waiting, each card shows What’s new, and Update all updates every template one after another. Projects already planned keep their plans.
+3. To go back after an update, pick an earlier version under Version on the installed card. Earlier versions stay on this host until you remove the template.
+4. To try a template you made, choose Import a template, read the notice, tick that you accept the risk and choose a .zip or .tar.gz of the template folder (pack.json, project-types/, guides/). It must use its own id, not a store or built-in one. Import a higher pack_version to replace it.
+5. To share a template with everyone, follow CONTRIBUTING.md in the gptkiosk/dashboard-pipeline-packs repository: test it here with Import a template, then open a pull request. It is scanned, rehearsed and reviewed, and appears in the store as Community with your name once a signed release includes it.
+
+Templates are data only and never run code here. An imported template is marked Local, unvetted: the store’s scan, model review and rehearsal did not run on it, and its text goes to your AI models as planning guidance.
+
+[Open Template store](http://127.0.0.1:8800/profile#pipeline-packs) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=template-store)
+
+## Push a class, textbook or lesson plan to upubhub
+
+The upubhub templates can send the finished package to upubhub.com as private drafts and an invite-only class, after your final sign-off.
+
+1. In upubhub, open Connections and create a token with Also allow pushing classes ticked (Teacher plan). Copy it; it is shown once.
+2. In the dashboard, open Settings, General, Private credentials and save it as upubhub.
+3. Start a project from the upubhub class, textbook or lesson plan template. To use your own writing, set the content source to your own files and put inputs/textbook.md (and inputs/lesson-plans/*.md) in the project folder.
+4. Run the project to the push story. Its Push to upubhub panel stays off until your final sign-off is done, the token is saved and the package check passes, and lists anything missing.
+5. Press Push to upubhub, then open the links to review the drafts on upubhub, publish the lessons and open the class when you are ready. Pushing again updates the same items.
+
+Nothing is published by a push: works arrive private and a class invite-only and free. The token is read only when you press Push and goes only to upubhub.
+
+[Open Projects](http://127.0.0.1:8800/projects) · [Private credentials](http://127.0.0.1:8800/profile#credentials-profile) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=upubhub-push)
 
 ## Make site art and video for a project (fal)
 
@@ -432,10 +489,11 @@ Open the Media studio from the project (or from a human media story), see what i
 7. Review each candidate as a thumbnail or video. Accept and publish the one you want (MCD converts and records it), choose None of these to make another, or Skip to keep the site’s drawn fallback.
 8. To keep the bill small, give each slot in media/slots.json only the resolution it needs: "resolution": "1K" for a picture shown small, "480P" for a retro or VHS-look clip (it costs 0.625 of 768p). The estimate on the slot follows it.
 9. A slot with generations still waiting for review is not generated again unless you choose Another take, so a double click never pays twice. A published slot is only regenerated when you choose Regenerate.
+10. To change a published picture, open More on it: Revise prompt… edits its prompt, and Regenerate… makes new takes. They wait under Waiting for your decision, and the published file is replaced only when you accept one. The site’s width-named copies (such as responsive/garden-fantasy-960.webp) are re-made from it; any that cannot be are named so a story can rebuild them.
 
 A clip starts from a published, approved still. A draft still is too small to publish; make stills at standard or premium. Agents never receive the fal key and cannot generate media.
 
-[Open Projects](http://127.0.0.1:8800/projects) · [Media prices (what it costs)](http://127.0.0.1:8800/agents?action=billing) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=project-media)
+[Open Projects](http://127.0.0.1:8800/projects) · [Media prices (what it costs)](http://127.0.0.1:8800/profile?action=billing#accounts) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=project-media)
 
 ## Check media spend and avoid paying twice
 
@@ -449,20 +507,20 @@ Estimates are an upper bound; fal’s usage page is the truth. Repeats and unpri
 
 In the first real website run fal billed $16.88 while MCD showed about $2, because Veo clips had no price and repeat generations were not flagged. Both are fixed.
 
-[Media models and prices](http://127.0.0.1:8800/agents?action=billing) · [Open Projects](http://127.0.0.1:8800/projects) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=media-spend)
+[Media models and prices](http://127.0.0.1:8800/profile?action=billing#accounts) · [Open Projects](http://127.0.0.1:8800/projects) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=media-spend)
 
 ## Create or replace the fal key
 
 fal fixes a key’s allowed models when the key is created, so a model added later needs a new key.
 
 1. At fal.ai/dashboard/keys create a key with the API preset, add its allowed models, and set a credit limit. fal cannot change a key’s model list afterwards.
-2. Add these patterns: minimax/h3-max* (the default video models), fal-ai/nano-banana-2* and fal-ai/nano-banana-pro* (images), and fal-ai/veo3.1* only if you want the premium Veo tier. If a wildcard is refused, add the exact endpoint ids listed in Agents, Billing & rates, Media models.
+2. Add these patterns: minimax/h3-max* (the default video models), fal-ai/nano-banana-2* and fal-ai/nano-banana-pro* (images), and fal-ai/veo3.1* only if you want the premium Veo tier. If a wildcard is refused, add the exact endpoint ids listed in Settings → AI & models → Accounts, Media models.
 3. Copy the secret once and paste it into Profile, Private credentials, fal.ai key. It is encrypted, write-only and never shown again, and agents never receive it.
 4. Run one cheap generation to confirm. If a model is refused, the key’s list does not include it: make a new key, replace the saved one and delete the old key at fal.
 
 The edit screen for an existing fal key shows the model list read-only; that is why adding a model there does nothing.
 
-[Save the key](http://127.0.0.1:8800/profile#credentials-profile) · [Media models and prices](http://127.0.0.1:8800/agents?action=billing) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=fal-key)
+[Save the key](http://127.0.0.1:8800/profile#credentials-profile) · [Media models and prices](http://127.0.0.1:8800/profile?action=billing#accounts) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=fal-key)
 
 ## Accept a story whose agent reported unfinished work
 
@@ -471,7 +529,7 @@ Accept anyway records the agent’s report and your reason, keeps the run failed
 1. When an agent finishes but its report says work is unfinished or a check could not run, the story fails and blocks what depends on it. Read its report first.
 2. If you are content with the result (for example the missing items are made by a later human step, or a check needs a browser the agent does not have), choose Accept anyway… on the story, in Projects under Stories & runs or in the board’s task panel beside Rerun.
 3. Type a reason of at least ten characters. MCD records the agent’s own report and your reason as the handoff, keeps the run as failed in the history and releases the stories that depend on it.
-4. A crash or timeout leaves no report to accept: use Retry same story instead. A human story is decided, not accepted this way.
+4. An approved read-only continuation can finish but still report unfinished work; it then waits in review, and Accept anyway… is offered there too. A crash or timeout leaves no report to accept: use Retry same story instead. A human story is decided, not accepted this way.
 
 Nobody should later read an accepted story as a clean pass: the handoff begins with the operator’s acceptance and keeps the agent’s list of gaps.
 
@@ -503,11 +561,11 @@ The dashboard checks the platforms you pick, creates the missing OpenClaw role a
 
 Role agents use OpenClaw’s configured default model. Applying twice creates nothing new; switching to Stable start later only adds what is missing.
 
-[Open Coordinator setup](http://127.0.0.1:8800/profile#coordinator-bootstrap) · [Agent tools](http://127.0.0.1:8800/profile#agent-tools) · [Billing & rates](http://127.0.0.1:8800/agents?action=billing) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=coordinator-setup)
+[Open Coordinator setup](http://127.0.0.1:8800/profile#coordinator-bootstrap) · [Agent tools](http://127.0.0.1:8800/profile#agent-tools) · [Billing & rates](http://127.0.0.1:8800/profile?action=billing#accounts) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=coordinator-setup)
 
 ## Keep the dashboard tidy: housekeeping, bug reports, roles and GitHub
 
-Settings, Maintenance & access holds the cleanup scan, bug-report intake, agent roles, report folders and the GitHub settings and actions.
+Settings, Maintenance holds the cleanup scan, bug-report intake, agent roles, report folders and the GitHub settings and actions.
 
 1. Housekeeping scans for leftovers by fixed rules, with no model involved. Press Scan now, read the findings and approve only what you want removed. Hermes may propose a cleanup but can never change anything itself. After hours cleanup is off unless the host enables it (the Notes line says how).
 2. Bug reports shows whether intake is on and when GitHub was last checked. A maintainer labels an issue bug-report and accepted to make it a Backlog task. Press Check GitHub now to look immediately.
@@ -517,13 +575,13 @@ Settings, Maintenance & access holds the cleanup scan, bug-report intake, agent 
 
 Nothing here changes anything until you approve it. Agents can draft, never approve.
 
-[Open Maintenance & access](http://127.0.0.1:8800/profile#housekeeping) · [Ops reports](http://127.0.0.1:8800/reports) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=maintenance)
+[Open Maintenance](http://127.0.0.1:8800/profile#housekeeping) · [Ops reports](http://127.0.0.1:8800/reports) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=maintenance)
 
 ## Install or upgrade the agent tools
 
-Settings, Updates & installs: one card per agent CLI with its version, an Install or Upgrade button, a progress bar, the install log and a health check.
+Settings, Installs & updates: one card per agent CLI with its version, an Install or Upgrade button, a progress bar, the install log and a health check.
 
-1. Open Settings, then Updates & installs. Each agent tool is a card showing the version installed and the version this release has verified.
+1. Open Settings, then Installs & updates. Each agent tool is a card showing the version installed and the version this release has verified.
 2. Press Install or Upgrade. A confirmation lists the versions, downloads, commands and what stays unchanged. Tick it to run. Nothing needs sudo and nothing signs in.
 3. Watch the progress bar and open the log if you want the detail. Only one install runs at a time.
 4. When it finishes the health check runs by itself: it asks the tool for its version, checks that a new terminal reaches the managed copy, and lists next steps. Press Check health to run it again.
@@ -533,13 +591,13 @@ Settings, Updates & installs: one card per agent CLI with its version, an Instal
 
 Roll back switches to the version kept on this host. Remove deletes the program but keeps your tool data, for example ~/.hermes.
 
-[Open Updates & installs](http://127.0.0.1:8800/profile#agent-tools) · [Check the machine in the setup wizard](http://127.0.0.1:8800/setup) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=agent-tools)
+[Open Installs & updates](http://127.0.0.1:8800/profile#agent-tools) · [Check the machine in the setup wizard](http://127.0.0.1:8800/setup) · [Bookmark this how-to](http://127.0.0.1:8800/help?topic=agent-tools)
 
 ## Install or upgrade the optional system tools
 
 Install (All) and Upgrade (All) for Docker, ffmpeg, Python and gh, with a log and a health check. Homebrew on a Mac; a command to copy on Linux.
 
-1. Open Settings, then Updates & installs, then Optional system tools. Each tool shows its installed version; Check for updates asks Homebrew which are outdated and shows the newer version beside those. Managed Agent tools use their verified catalog version.
+1. Open Settings, then Installs & updates, then Optional system tools. Each tool shows its installed version; Check for updates asks Homebrew which are outdated and shows the newer version beside those. Managed Agent tools use their verified catalog version.
 2. On a Mac, Homebrew comes first. If it is missing the card shows the one command to run yourself in Terminal (it asks for your password; the dashboard never runs it). Press Check again afterwards.
 3. Install (All) runs one brew install for everything missing. Upgrade (All) runs brew update and then upgrades only these tools. The log shows every command.
 4. Docker needs its engine: Colima provides it on a Mac. If the health check says the engine is stopped, press Start Colima.

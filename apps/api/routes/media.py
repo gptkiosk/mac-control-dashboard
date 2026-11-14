@@ -1,4 +1,5 @@
 """Operator-run media generation: MCD calls fal with the saved key; the project folder is only data."""
+import json
 import re
 import shutil
 from pathlib import Path
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 
 import media_generate as mg
 import media_state
+import media_plan
 import profiles
 import project_types
 import projects
@@ -79,11 +81,11 @@ def published_files(root, slot):
 
 def unused_takes(root, slots_):
     """Generated takes that are no longer needed: the candidate files (and their notes) of slots you have already decided, published or skipped.
-    A slot with takes still waiting for your decision is never listed."""
+    A slot with takes still waiting for your decision is never listed, including a published slot you asked to regenerate."""
     folder = root / "media" / "candidates"
     if not folder.is_dir():
         return []
-    decided = {name for name, slot in slots_.items() if mg.is_published(root, slot) or media_state.entry(root, name)["skipped"]}
+    decided = {name for name, slot in slots_.items() if (mg.is_published(root, slot) or media_state.entry(root, name)["skipped"]) and not media_state.unreviewed(root, name)}
     found = []
     for path in sorted(folder.iterdir()):
         try:
@@ -137,6 +139,7 @@ def slots(working_dir: str, request: Request, s: Session = Depends(get_session))
     except mg.MediaError as exc:
         fail(exc)
     out = []
+    plan_hash = media_plan.digest(root)
     for slot in items.values():
         folder = "video" if slot["kind"] == "video" else "img"
         published = mg.is_published(root, slot)
@@ -145,7 +148,7 @@ def slots(working_dir: str, request: Request, s: Session = Depends(get_session))
         waiting = [n for n in needs if mg.inside(root, f"assets/img/{n}.jpg") is None]
         decision = media_state.entry(root, slot["name"])
         out.append({"name": slot["name"], "kind": slot["kind"], "skipped": decision["skipped"], "history": decision["history"], "world": slot.get("world"), "purpose": slot.get("purpose", ""), "prompt": slot["prompt"],
-                    "published": published, "published_bytes": sum(p.stat().st_size for p in published_files(root, slot)) if published else 0, "candidates": candidates, "inbox": (lambda f: f.name if f else None)(mg.inbox_file(root, slot)), "waiting_for_stills": waiting,
+                    "plan_sha256": plan_hash, "width": slot.get("width",1920), "height": slot.get("height",1080), "resolution": slot.get("resolution"), "seconds": slot.get("seconds"), "published": published, "unreviewed": media_state.unreviewed(root, slot["name"]), "published_bytes": sum(p.stat().st_size for p in published_files(root, slot)) if published else 0, "candidates": candidates, "inbox": (lambda f: f.name if f else None)(mg.inbox_file(root, slot)), "waiting_for_stills": waiting,
                     "plans": {tier: mg.quick_plan(s, slot, tier) for tier in mg.TIERS}})
     summary = media_state.summary(out, lambda x: x["published"])
     owner = project_of(s, root)
@@ -162,6 +165,7 @@ class GenerateIn(BaseModel):
     model: str | None = Field(default=None, max_length=160)
     count: int = Field(default=1, ge=1, le=4)
     aspect: str | None = Field(default=None, pattern=r"^\d{1,2}:\d{1,2}$")      # None: use the slot's own shape
+    expected_sha256: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
     confirm_spend: bool = False
     regenerate: bool = False      # a slot that is already published is only regenerated when this is said outright
     another_take: bool = False    # a slot with candidates still waiting for review is only generated again when this is said outright
@@ -178,6 +182,15 @@ def generate(body: GenerateIn, request: Request, s: Session = Depends(get_sessio
         raise HTTPException(422, "Save your fal key first (Profile, Private credentials).")
     try:
         root = mg.project_root(settings, body.working_dir)
+    except mg.MediaError as exc: fail(exc)
+    with mg.plan_lock(root):
+        return _generate_locked(body, settings, identity, key, root, s)
+
+
+def _generate_locked(body, settings, identity, key, root, s):
+    if body.expected_sha256 and body.expected_sha256 != media_plan.digest(root):
+        raise HTTPException(409,'The media plan changed. Refresh estimates and confirm spending for the current plan.')
+    try:
         items = mg.load_slots(root)
         slot = items.get(body.slot)
         if slot is None:
@@ -306,13 +319,27 @@ def publish(body: PublishIn, request: Request, s: Session = Depends(get_session)
         slot = mg.load_slots(root).get(body.slot)
         if slot is None:
             raise mg.MediaError("Unknown slot.")
+        tracked = [str(p.relative_to(root)) for p in published_files(root, slot)] + [str(p.relative_to(root)) for p, _ in mg.derived_copies(root, slot)]
+        before, old_source = mg.file_facts(root, tracked), _source_sha(root, slot)
         files = mg.publish(root, slot)
     except mg.MediaError as exc:
         fail(exc)
+    refreshed, stale = mg.refresh_derived(root, slot, root / files[0]["path"]) if slot["kind"] == "image" else ([], [])
+    records = mg.update_hash_records(root, before, mg.file_facts(root, tracked), (old_source, _source_sha(root, slot))) if before else []
     names = ", ".join(f["path"] for f in files)
     media_state.record(root, body.slot, "published", names, identity)
-    project_note(s, root, f"Published media slot {body.slot}: {names}.", identity)
-    return {"published": body.slot, "files": files}
+    project_note(s, root, f"Published media slot {body.slot}: {names}." + (f" Re-made the site's copies: {', '.join(refreshed)}." if refreshed else "")
+                 + (f" Updated the hashes in {', '.join(records)}." if records else "")
+                 + (f" These copies still show the previous picture and need a story to rebuild them: {', '.join(stale)}." if stale else ""), identity)
+    return {"published": body.slot, "files": files, "refreshed": refreshed, "stale": stale, "records": records}
+
+
+def _source_sha(root, slot):
+    try:
+        entry = json.loads((root / "media" / "provenance.json").read_text()).get(slot["name"])
+    except (OSError, ValueError, AttributeError):
+        return None
+    return entry.get("source_sha256") if isinstance(entry, dict) else None
 
 
 class DecisionIn(BaseModel):
@@ -353,9 +380,13 @@ def project_media(project_id: int, request: Request, s: Session = Depends(get_se
         raise HTTPException(404, "Unknown project.")
     try:
         root = mg.project_root(get_settings(), projects.document(p)["working_dir"])
-        slots_ = mg.load_slots(root)
     except (mg.MediaError, KeyError):
         return {"available": False}
+    try:
+        slots_ = mg.load_slots(root)
+    except mg.MediaError as exc:
+        # A file that exists but is rejected is not "no slots": say why, so the operator is not left guessing.
+        return {"available": False} if mg.inside(root, "media/slots.json") is None else {"available": False, "error": str(exc)}
     rows = [{"name": n, "skipped": media_state.entry(root, n)["skipped"]} for n in slots_]
     summary = media_state.summary(rows, lambda x: mg.is_published(root, slots_[x["name"]]))
     settings = get_settings()
@@ -498,3 +529,37 @@ def storage(request: Request, s: Session = Depends(get_session)):
     return {"projects": rows[:50], "total_media_bytes": sum(r["media_bytes"] for r in rows),
             "total_candidates_bytes": sum(r["candidates_bytes"] for r in rows), "disk": disk}
 
+
+
+class EditSlotIn(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    working_dir: str = Field(max_length=500)
+    slot: str = Field(max_length=60, pattern=r'^[a-z0-9][a-z0-9-]{0,59}$')
+    expected_sha256: str = Field(pattern=r'^[a-f0-9]{64}$')
+    prompt: str | None = Field(default=None, min_length=1, max_length=4000)
+    purpose: str | None = Field(default=None, max_length=500)
+    world: str | None = Field(default=None, max_length=80)
+    width: int | None = Field(default=None, ge=128, le=4096, strict=True)
+    height: int | None = Field(default=None, ge=128, le=4096, strict=True)
+    resolution: str | None = Field(default=None, max_length=8)
+    seconds: list[int] | None = Field(default=None, min_length=2, max_length=2)
+    revise_published: bool = False     # a published slot's plan is only changed when this is said outright; its file stays until a new take is accepted
+
+
+@router.patch('/slots')
+def edit_slot(body: EditSlotIn, request: Request, s: Session = Depends(get_session)):
+    import media_plan
+    identity = operator(request)
+    settings = get_settings()
+    changes = body.model_dump(exclude_unset=True, exclude={'working_dir', 'slot', 'expected_sha256', 'revise_published'})
+    if any(v is None for k,v in changes.items() if k != 'resolution'): raise HTTPException(422, 'Use a value rather than null for an edited field.')
+    if 'seconds' in changes and any(type(v) is not int or not 2 <= v <= 10 for v in changes['seconds']):
+        raise HTTPException(422, 'Video duration must be between 2 and 10 seconds.')
+    try:
+        root = mg.project_root(settings, body.working_dir)
+        with mg.plan_lock(root):
+            result = media_plan.update(root, body.slot, body.expected_sha256, changes, mg.runtime(settings), body.revise_published)
+    except mg.MediaError as exc: fail(exc)
+    except OSError: raise HTTPException(422,'The media inventory cannot be updated. Check workspace write access and refresh before retrying.') from None
+    project_note(s, root, 'Operator '+('revised published' if body.revise_published else 'edited ungenerated')+' media plan '+body.slot+' ('+', '.join(result['changed'])+'); fresh estimates and separate generation/spend confirmation required.', identity)
+    return result

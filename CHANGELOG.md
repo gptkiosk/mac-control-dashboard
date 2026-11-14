@@ -10,6 +10,381 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.91] - 2026-11-02
+
+### Added
+- Dedicated textbook and lesson-plan icons in the Template store, matching the
+  existing illustrated class icon. All three use the Teaching category.
+
+### Changed
+- Installed template cards show their full descriptions, preferring the installed
+  manifest rather than implying a newer pack is already in use. Descriptions
+  remain searchable when the catalog is offline; available descriptions are no
+  longer cut off after three lines. Packs supply their own updated copy.
+
+## [0.6.90] - 2026-11-01
+
+### Added
+- **Push to upubhub.** The upubhub class, textbook and lesson-plan templates can send their finished package to upubhub.com (1.41 or newer) through its publish API, from the project's push story once your final sign-off is done. The textbook and lesson plans arrive as private works and a class as an invite-only, free class with one assignment per lesson, its discussion topics and assessment settings. Nothing is published; pushing again updates the same items. It needs a upubhub token with **Also allow pushing classes**, saved in Private credentials as upubhub; the token goes only to upubhub and never into the project, its notes or the push record. `MAC_CONTROL_UPUBHUB_URL` points it at a local upubhub for testing.
+- **Import a template** in the Template store: try a template you made, or one someone sent you, from a `.zip` or `.tar.gz`. It is unvetted (the store's scan and review did not run), you accept the risk first, and it must still be data only within the store's limits. It cannot use a store or built-in id, is marked **Local, unvetted** in the store and the project type picker, and never gets store updates.
+- **Update all** in the Template store, **What's new** on each update (a template's new optional `changes` text), and a count of waiting updates on the Template store tab.
+- **Switch versions:** earlier versions of a template stay on this host; pick one under Version on its card to go back after an update.
+- Help topics for the Template store and for pushing to upubhub.
+
+### Changed
+- The course package check knows a textbook-only and a lesson-plan-only package (`kind` in course.json), and accepts `hand_crafted` when the template's content source is your own files, so your writing is not labelled as AI-made.
+
+## [0.6.89] - 2026-10-31
+
+### Changed
+- The template store has its own Settings tab, **Template store**, laid out like an app store: installed templates on top, available ones below as cards with an icon, a category, the summary, Official or Community and the version, and Add, Update or Remove on the card. What a template needs and the settings you choose show on its card; nothing opens a pop-up. A search box filters both lists, and the tools templates use are listed underneath. Old links to the store open the new tab.
+
+### Added
+- Icons for the six built-in templates. Icons are image files named after the template id; a template without one, such as a new community template, shows a two-letter placeholder. See `docs/configuration/template-store-icons.md`.
+
+## [0.6.88] - 2026-10-31
+
+### Added
+- Template settings (template format 1.0): a project type can declare typed `customize` fields (numbers, choices, yes/no and short text) as its only editable part. The intake form shows them as controls, the consultant chat fills only them, and free text reaches the planner as labelled data, never as instructions. A type can also list what it `requires`; the type picker and readiness checks name anything this host lacks.
+- Template store in Settings → Installs & updates (was Pipeline packs): the chosen template shows whether it is Official or Community and by whom, the settings you choose, and anything this host lacks with a link to fix it; a template that needs a newer dashboard cannot be added. A new Tools tab lists the agents, system tools, providers, checks and services a template may require, from the signed store release, and whether this host has each.
+- The five offered built-in project types now use template settings and list their requirements, and are also published in the template store as Official templates (the bundled copy stays for offline use). Their questions keep the same ids, so saved answers stay valid; the website types gain a Media source choice.
+- Template rehearsal (`apps/api/rehearsal.py`): builds the planner's real prompt for a template example without a project, and judges a planner's answer with the dashboard's own plan validation, the template's plan checks and the example's expectations. The template store's rehearsal gate runs it; it never calls a model itself.
+- Class codes for course packs: the `course-package` check accepts a `code` in `course.json` only in the form `SUBJ:LL-Class name` (for example `MATH:07-Forces and Motion`), and only the code the project's subject, level and class name settings give.
+
+### Changed
+- Release packages are built on GitHub's macOS 15 runners; the macOS 14 images retire on November 2, 2026. The package contents are the same: Python dependencies are still installed on your Mac from the locked list.
+
+## [0.6.87] - 2026-10-30
+
+### Added
+- Pipeline packs in Settings → Installs & updates: optional, data-only project types and format guides for one kind of deliverable, added from a dropdown. Packs come from the signed `gptkiosk/dashboard-pipeline-packs` release (index signed with the dashboard release key, each archive checked against it) and never run code. A pack for a service waits for that service's credential, and a upubhub.com token can now be saved in Private credentials.
+- The `course-package` check for pipeline packs: a pack's course project must pass it before its "Verify course package files" story is accepted. It checks the course/ folder against upubhub's own limits (section headings, topic anchors, 12 topics and 60,000 characters per lesson, assessment settings, credits and licences, published images, UPLOAD.md) and lists every problem at once.
+- Project totals on the project page: agent and elapsed time, tokens in, out and cached, and every agent and model used, across all of a project's tasks including planning. Cost is shown as actual (membership and free-model runs at $0, API runs at their reported or derived cost) next to the same work at API rates, and both include the Media studio's fal estimate for the project's images.
+
+### Fixed
+- Republishing a still now also updates the project's own media records: any JSON file in `media/` (other than the dashboard's own) that names the published image or its width-named copies gets their new sha256, size and dimensions, and the old hashes of those files and of the generation source are replaced wherever they appear. The pilot's `media/derivatives.json` kept the old hashes, so its own art check failed after a republish. The publish note names the files updated.
+
+## [0.6.86] - 2026-10-29
+
+### Fixed
+- Start preview on host could run the project's verifier instead, which stops its own server, so Open remote preview never appeared. The dashboard now says when Start leaves no running preview and quotes the script contract, reads a JSON `.preview/preview.state` (with a 40- or 64-character `sha` or `source_sha`, and `status`), and treats a stopped status as not running. Stories in a plan with preview actions are given the exact `verify`/`serve`/`stop` contract, and a passing verify in such a plan also runs Start and Stop once, so a script that cannot serve fails at verify instead of at review. Script output now goes to files, so a server left running in the background cannot hang the action.
+
+## [0.6.85] - 2026-10-29
+
+### Added
+- Playwright browser checks in Agent tools: the pinned Playwright package plus the Chromium build it pins, installed into the dashboard's own folder (about 600 MB). Stories can take screenshots at phone, tablet and desktop sizes for visual polish. Agents and preview actions get `NODE_PATH` and `PLAYWRIGHT_BROWSERS_PATH`, Claude stories may run `playwright screenshot` and `playwright pdf`, and the planner is told how to load it.
+
+### Fixed
+- 0.6.84 began reading reports that start with "Story incomplete:" as unfinished, and applied that to stories already accepted, so every story after one of them was silently refused (the pilot's preview verifier could not run). An accepted handoff now stands; the stricter reading applies only to reports not yet accepted. The host preview panel also asks the server whether the action would be refused, and says why next to a disabled button.
+- The host preview panel says when the last verifier run happened, so a result from before an update is not taken for a new one.
+- On a laptop-width window the task list was wider than its panel, so the Last run column and its buttons (such as Record decision) were cut off at the edge. Narrower panels now drop Due date, then Estimate and Priority, which stay in the task's detail panel. Phones keep their own layout.
+
+## [0.6.84] - 2026-10-29
+
+### Fixed
+- Codex runs showed "not reported" for the model and cost, because the Codex CLI reports only token counts. A run's detail now fills both in, marked **(derived)**: the model MCD asked for, and the token counts priced at the catalog's API rates for that model (hover for the basis). This works for any agent that reports tokens but no price, when the catalog lists the model. Derived values are display-only; spending caps and the billing receipts still see only what the agent reported.
+- Media stories are no longer asked for again when the media is already done. If every required slot is already made or published in Media studio when a human generate or publish story comes up, MCD records it as done, says so in the handoff, and moves on.
+- A published picture can be changed. Under More, Revise prompt… edits its prompt and Regenerate… actually regenerates; before, Regenerate was refused. New takes wait for your decision and replace the published file only when you accept one, and the site's width-named copies are re-made from it.
+- The host preview verifier finds Node.js from Agent tools. It used to run on the service's bare PATH and fail with `No such file or directory: 'node'`. A failed verifier now says so in the panel, and its story can't be accepted until the verifier passes.
+- The Media studio showed "No media slots yet" when a project's `media/slots.json` existed but was rejected, so the slots a story wrote were invisible with no reason given. It now says why the file cannot be used, and it checks again each time you open the tab.
+- No story was told the `media/slots.json` format, so the pilot's media inventory story invented its own keys (`id`, `type`) and listed more than four references, and the studio rejected the whole file. Stories in a project that generates media now get the exact format, and the project packet's media page repeats it. Cost estimates are named as the Media studio's job, not the story's.
+- A report that opened with "Story incomplete:" was taken as finished and its handoff accepted automatically. That wording now counts as unfinished work.
+
+## [0.6.83] - 2026-10-28
+
+### Fixed
+
+- A story accepted with **Accept anyway…** still held back the stories that depend on it. It showed as done, but the prerequisite check still required a clean successful run, so the next story stayed queued and never started. The check now honors an Accept anyway handoff for the run it names. Seen on the pilot, where the design story waited behind the accepted readiness story.
+- An approved output plan kept blocking updates after its continuation run finished. The plan run still counted as "waiting on a human decision" while the story waited in review, and there was no control to clear it. The update check now ignores a wait that a later finished run of the same story replaced, and Housekeeping offers to mark such a run superseded. Seen on the pilot's readiness story.
+- **Accept anyway…** in a task's panel refused a story in review with "The task changed. Refresh before accepting it." because a last-moment check still allowed only failed stories. It now accepts the same stories the server does. A reason shorter than ten characters now says so instead of doing nothing.
+
+## [0.6.82] - 2026-10-28
+
+### Fixed
+
+- A story could get stuck with no way forward. An approved read-only continuation that finished but still reported unfinished work waited in review: **Approve handoff** refused it, and **Accept anyway** was offered only on failed stories, so its button was missing although its explanation showed. **Accept anyway…** is now offered on such a story too, in Stories & runs and on the board, and the Approve handoff refusal names it. Seen in the pilot's readiness story.
+- A read-only story could not see the setup facts the dashboard already knows, so a readiness story reported membership quota and browser capture as "unverified" and asked to stop. Each story now gets the dashboard's setup check results. It is also told that quota is checked when a run starts and that preview evidence comes from the dashboard's own preview actions, so neither is a blocker.
+- A read-only story is now told that its final report is the deliverable, saved as a Markdown file when you approve it. Before, the pilot's readiness story tried to write a notes file and reported itself incomplete.
+- The plan check warns (`read-story-writes`) when a read-only story's acceptance asks for files or records it cannot write. The planner is told to word such acceptance as what the report states.
+
+## [0.6.81] - 2026-10-28
+
+### Changed
+
+- Plans with generated artwork no longer hold back build work until the art is published. The planner is told that only integration and final verification wait for published media. The plan check warns (`media-wait`) when an agent build story depends directly on a publish step but does not use the art, so pages and code proceed while you decide the artwork. Seen in the RCD pilot: the site shell waited for all six scene illustrations.
+- After **Start planning**, the page scrolls the planning progress to right under the project header and focuses it, so the click shows a response at once. While the request is sent, the button reads "Starting planning…" (or "Submitting…" when submitting a revision). Before, the progress appeared below Project settings, off screen on smaller windows.
+
+### Fixed
+
+- The planning progress said the Coordinator checks the plan, but with the planner on Automatic the planner the Coordinator picked does that review. "Check the plan" now says who reviews it, and each step names the route it ran on (for example Hermes · google/gemini-2.5-flash, then Codex · gpt-6.1-sol).
+- The Planner row in Project settings was missing the space after "Planner".
+
+## [0.6.80] - 2026-10-27
+
+### Fixed
+
+- A project whose planner is **Automatic** now plans with the **Planner** default from AI & models → Defaults first, when the policy allows it. Before, Automatic ignored that default and picked from a built-in membership list.
+- **Project settings** says where the planner comes from: "· set for this project" or "· app default". A project's own planner that the policy does not allow gets a **Use app default** button, and the Plan button reads "Plan (app default planner)" on Automatic. Before, a planner saved in an older revision (such as Hermes · openrouter/free) silently overrode the app default.
+
+## [0.6.79] - 2026-10-27
+
+### Changed
+
+- Settings has four tabs: **General** (appearance, workspace, Discord, credentials), **AI & models**, **Installs & updates** and **Maintenance**. AI & models, formerly Models & providers, holds everything about models on one page:
+  - **Start from** and **Cost classes**.
+  - **Coordinator**, with the paid switch, the model, Agent roles and Coordinator setup. Setup is folded away once it is done.
+  - **Defaults**, including the story preference for new projects.
+  - **Accounts**. **Billing & rates** opens here instead of on the Agents page, which now links to it.
+  - A collapsed **Advanced** section with providers, runtimes, prices to review and Model recovery. It opens by itself when something in it is in use.
+
+  Old links (`#agent-roles`, `#route-recovery`, `#coordinator-bootstrap`, `/agents?action=billing` and so on) still land in the right place, and no saved setting moved.
+- Each project has a **Project settings** panel: routes (Coordinator, planner, stories, with Change…), the story preference, Build in parallel, and Model lock while stories run. Narrowing the app policy for one project is under Advanced in Change…, closed unless the project already narrows it. The brief keeps only what describes the work.
+- **Default AI** moved from Settings → Preferences into Models & providers. New chat and the project consultant start on its **Chat** default, and New task on its **Tasks** default. On the first start of this version, a Default AI someone changed from the stock Hermes · openrouter/free becomes both defaults, once. Settings now points to Models & providers instead.
+
+### Fixed
+
+- On a slow host (seen on a Raspberry Pi running RCD), the project route strip kept showing "Coordinator …" and the dashboard's CPU stayed at 100%. The project page polls every three seconds and hands the strip an equal copy of the policy each time, and the strip asked for a new route preview on every copy. Each preview took longer than three seconds on a Pi, so requests piled up. The strip now asks again only when the project or its policy really changes, and it ignores replies for older choices.
+- **Review planning request** now shows the Coordinator model next to the planner. It names what stops either one when the policy does not allow it, and **Start planning** stays off until that is fixed. Before, the Coordinator was not shown, and a refused route only appeared after the request was sent.
+- Route lists are about 30 times cheaper to build. The Hermes and OpenClaw configurations are parsed once per file version instead of once per route. The billing settings are read once per request. The catalog is built once per request for all the features a page asks about. With a 444-model OpenRouter list, the Coordinator, planner and story lists took 0.62 s on a Mac and now take 0.02 s.
+
+## [0.6.78] - 2026-10-27
+
+### Added
+
+- Models & providers has a **Coordinator** section. **Allow paid API for the Coordinator** lets Hermes use paid models without allowing paid API for anything else, and **Coordinator model** picks the one to use. With every provider open, the paid models of the common providers are listed. It warns when only one Coordinator model is allowed. The Single provider preset turns the switch on, and the switch no longer changes which preset the page shows.
+
+### Changed
+
+- Planning asks for paid-planning approval when the Coordinator model's price was never reviewed, since that model counts as paid API when its run starts. Before, only a model reviewed as paid needed it.
+
+### Fixed
+
+- Route menus show the full route (for example "Hermes · anthropic/claude-sonnet-5-5"). Before, every Hermes or OpenClaw row read just "Hermes", so models could not be told apart. Each route's provider, cost and reliability now appear once, in the menu, instead of again on a line below it.
+
+## [0.6.77] - 2026-10-27
+
+### Fixed
+
+- The project route strip showed the saved revision's routes under the heading of unsaved project choices, so a narrowing looked applied (with the Coordinator still on `openrouter/free`) before it was saved. The strip and **Change…** now preview what the current choices allow (`POST /api/routes/preview`, which saves nothing), and the strip says "not saved" until you save.
+- **Change…** now shows the Coordinator. It explains that Hermes reaches models only through free or paid API, and warns before saving when the choices leave it no allowed model. The dialog adds **Also offer free models from any provider** and **Paid API for the Coordinator only**. The second is offered only when the app policy allows paid API for the Coordinator, and the reason shows when it is off.
+- The Plan button names the planner, for example "Plan (Codex planner)", instead of "Plan with Hermes"; "Revise plan with Hermes…" is now "Revise plan…".
+
+## [0.6.76] - 2026-10-27
+
+### Added
+
+- Settings → **Models & providers**: one route policy decides which providers, runtimes, models and cost classes (membership, free, paid API) the Coordinator, planner, stories, chat and tasks may use. It has presets: Memberships (recommended); Single provider…, which can allow paid API for the Coordinator only; Free only, with a reliability warning; and Custom. It also sets default routes and shows a summary of what each feature can use now. Every route menu (new project, story editor, chat, new task, finding tasks) lists only what the policy allows, with provider, cost class and recent reliability, and can show hidden routes with the reason. When nothing is allowed, the message names the nearest route and what stops it. `GET /api/routes?feature=…` serves the same lists. See [Models & providers](docs/configuration/route-policy.md).
+- Each project shows its routes at the top (policy in force, Coordinator, planner, story default). **Change…** picks the planner and can narrow the policy for that project. A project can only narrow the app policy, and starts as "Same as app". The planner fields left the brief panel.
+- An installation can lock the app with a managed policy file (`MAC_CONTROL_MANAGED_ROUTE_POLICY`), for example Grok Build only. Nothing in the app can widen it, and an unreadable file allows nothing. Agent tools, the Setup wizard and Billing & rates leave out the runtimes it removes and say which are hidden.
+- **Prices to review** on Models & providers: routes whose price was never reviewed (they count as paid API when a run starts) can be recorded as paid API, or as free when the model is listed at no cost. A review can be cleared. Installation-configured route classes still take precedence.
+- Help: a "Choose which providers and models the app uses" guide.
+
+### Changed
+
+- The route policy is enforced. Planning uses only the Coordinator model and planner routes it allows. The automatic planner also considers allowed memberships such as Grok Build, and the planner sees only allowed story routes. Submission is blocked by a story route outside the policy; a backup route outside it is only a warning. Route all stories refuses such a route, and chat refuses it up front. Every run is checked against the current policy just before it starts (`ROUTE_POLICY`), and failure mining and route reliability count that refusal as policy, not as a route failure.
+- Membership routes are always preferred, then free models. Paid API, including a route whose price was never reviewed, is the last resort and still needs approval per plan or task. A Coordinator model that bills API usage now needs paid-planning approval. Model recovery shows the cost classes and links to Models & providers instead of having its own switches.
+
+### Removed
+
+- The free-only setting (`MAC_CONTROL_DISPATCH_FREE_ONLY`) and the two "Allow … in free only" switches. On the first start, they are read once to write the first app policy with the same cost classes. MCD, which was not free-only by default, keeps paid API on, with approval per plan or task.
+
+## [0.6.75] - 2026-10-26
+
+### Changed
+
+- Project stories now wait on the same prerequisite gate as RCD. A prerequisite counts as finished only when its latest run succeeded and that run's handoff was accepted (a human story needs its recorded decision), so a card dragged to Done or a stale handoff no longer releases dependents. Blockers are checked through the whole approved plan, including edges missing from the board, and each project task lists them with a reason in `blocked_reasons`. Dispatch, output continuation, story acceptance and automatic handoff all use this gate.
+
+### Fixed
+
+- Reference-first artwork checks now recognise briefs that say a character reference comes *then* the scenes (for example "one approved heroine reference, then paired illustrations"), "once the character reference is approved" or "next". Such plans must use separate reference and scene passes before submission. Previously only "first", "before" or "followed by" triggered the rule.
+- Project packets for folders without Git (scratch projects) now track freshness by file path, size and time instead of reporting Unknown. A folder that is missing or too large to list in time still reports Unknown with the reason.
+
+## [0.6.74] - 2026-10-26
+
+### Added
+
+- Project packets: every project keeps a versioned continuation packet (`bamcio.project-packet/1`) in the app's private data folder, never in the workspace. It holds a start-here document, brief, source map, configuration variable names, state, decisions, evidence, media and a redacted ledger, and shows whether the workspace changed since the last recorded handoff. Projects → Workspace downloads it as a zip with `docs/project/` and reference images (published media optional). **Import packet…** validates a packet and creates a continuation draft only; tasks, approvals, routes, grants and spending decisions never carry over. Copy handoff, story context and the Coordinator/Discord `packet` read point to it. Planner role pack 27 asks stories to keep `docs/project/` current (about 350 bytes per story prompt, 259 bytes in the planner prompt).
+
+### Fixed
+
+- Projects → Workspace, Copy handoff and the paired Discord `workspace` read failed for submitted projects. The shared workspace view called a dependency helper MCD did not have.
+
+## [0.6.73] - 2026-10-26
+
+### Fixed
+
+- Planning JSON rejects duplicate keys, including dependency and route fields, instead of silently keeping the last value. Non-finite numbers are refused as well.
+- Website checks distinguish static verification from script preparation, recognize verification titles in either word order, and avoid treating scoped non-browser checks or future script behavior as agent browser execution. Positive browser execution still requires its approved host or human route; fixed preview actions cannot be assigned to a coding agent.
+- New proposals receive unambiguous media/static role labels without changing their graph, scope or routes. Reference-first artwork uses explicit reference and scene passes, with publication dependencies checked before generation and final integration.
+- Reference-first media approval verifies the declared inventory batch instead of waiting for future scenes. Scene generation requires the published reference and its exact reference paths before provider requests; empty published files do not count as evidence.
+- Bounded classification repairs preserve the original proposal and accept only listed field patches; they cannot replace nodes, dependencies, routes or scope. Other repairs can read their previous response from a private sidecar instead of redrafting blindly. Existing route, retry, spending and submission approvals remain in force.
+
+## [0.6.72] - 2026-10-25
+
+### Changed
+
+- Includes the task-matched Coordinator, independent planning/review, bounded replan context and semantic website-plan checks prepared for 0.6.71, with dated OpenRouter/LiteLLM model evidence and unchanged route/billing approvals.
+
+### Fixed
+
+- Project planning choices use a padded section with consistent type, paragraph spacing and a separate wrapping help-link row. The selected planner is shown once, using readable labels instead of raw configuration text.
+
+## [0.6.71] - 2026-10-25
+
+### Changed
+
+- The model slider is a provider-neutral capability/cost threshold. Coordinator guidance matches task specialty, complexity, risk, tools and vision to dated model facts, local outcomes, latency and membership versus API costs.
+- New projects use automatic planning independently of the story slider, with focused/general membership candidates and bounded retries on approved routes. Automatic plan review uses the selected planner rather than returning the map to a weaker default.
+- Model profiles accept normalized, dated API observations from multiple sources and provide a fixed public LiteLLM reference refresh alongside the OpenRouter snapshot. Conflicting metrics, benchmark scales and environments stay visible; billing and routes never change on refresh.
+- Model profiles show sourced routing classes separately from benchmark rankings and local run results. Replanning sends a bounded prior-map summary instead of repeating the full source document; the complete source remains available for cancellation.
+
+### Fixed
+
+- Current website plans reject unrequested form/container/CI scope, missing agent preview-script preparation and implementation work omitted from final verification. Returned semantic defects use the existing bounded repair and approved-route escalation flow.
+- Generated-media instructions require approved character references before paired scenes. Project brief sidecars are refreshed even for short briefs, preventing stale content when deleted project IDs are reused.
+
+## [0.6.70] - 2026-10-25
+
+### Changed
+
+- Website plans follow saved scope and story-model preferences instead of adding generic forms, backend, container or CI work. Generated artwork uses distinct inventory, dashboard fal.ai generation, publication and integration stages with checked dependencies and file evidence before acceptance.
+- Coordinator plan/setup checks are shared across web and paired Hermes. Safe saved-route and write-mode corrections create an editable revision; missing runtime, provider, repository and preview prerequisites have direct app setup links and block dependent dispatch.
+- Media Studio can edit an ungenerated asset's prompt, purpose, theme, display dimensions, resolution and video duration. Edits use stale-plan protection, preserve asset identities/references, refresh estimates and require renewed spend confirmation.
+
+### Fixed
+
+- Selecting or publishing candidates no longer counts as a missing generation task. An explicitly generated-media workflow cannot complete its media decisions on placeholders or skipped required assets.
+
+
+## [0.6.69] - 2026-10-25
+
+### Changed
+
+- Project planning now has a prominent progress panel with an activity spinner, actual coordinator stages, queued/running/approval states and a direct task-log link. The empty story counter stays hidden until dispatch finishes.
+- Planning progress respects reduced motion, works on narrow screens and stops animating when planning needs attention or the map is ready. It uses existing status polling without additional model calls or prompt context.
+
+
+## [0.6.68] - 2026-10-25
+
+### Added
+
+- New projects ask a few questions matched to the selected template, with optional details and a complete-brief path. Answers remain editable project facts and follow the plan into relevant task context.
+- Project chat and paired Hermes use the same template intake questions, reuse prior answers and prepare a compact summary for review. Media and cloud preferences never authorize charges.
+- Reference images can be attached during intake and upload before planning; a failed upload leaves a saved draft instead of starting an incomplete plan.
+
+### Fixed
+
+- Installable packages now include the project template files. Packaging refuses a release that omits the five built-in templates.
+
+
+## [0.6.67] - 2026-10-25
+
+### Added
+
+- Project Workspace shows host-local Git state, recent handoffs and next work, with a compact handoff for native coding apps.
+- External-work reservations block overlapping task/chat dispatch until a reported handoff releases the checkout. Paired Discord supports the same reservation/handoff services.
+- Existing-repository intake maps tracked source, dependency manifests, documentation and configuration names without running repository scripts or returning secret values.
+
+### Fixed
+
+- Coordinator context now loads general guidance plus one project type; workers read a private hashed guide packet on demand and omit unrelated story tails.
+- Web, native MCP and paired Discord share bounded type/context/model/status reads with ownership checks. Discord intake preserves project type.
+- Model guidance includes fresh sourced notes for configured candidates and reports provider snapshot freshness. External benchmark integration remains separately configured.
+
+- Website Property plans now require linked media inventory, MCD Media Studio generation and publish, asset integration, and preview evidence before visual approval.
+- Superseded untouched stories stay in the project ledger but leave active task boards and cannot be approved, retried, or edited.
+- Website preview guidance now uses dashboard host actions and the authenticated remote proxy, without host terminal, SSH, Tailscale, or port forwarding steps.
+
+
+## [0.6.66] - 2026-10-24
+
+### Fixed
+
+- **Human preview stories find nested approved checkouts.** Dashboard-managed previews now resolve the verifier for operator-owned stories without requiring a terminal or SSH.
+
+
+## [0.6.65] - 2026-10-24
+
+### Fixed
+
+- **Dashboard previews resolve from the story workspace.** A preview story whose project is checked out inside the approved workspace now finds its verifier and shows host controls; configuration failures show an actionable panel instead of disappearing.
+
+
+## [0.6.64] - 2026-10-24
+
+### Fixed
+
+- **Replanned dashboard preview stories open their host controls.** Persistent preview titles produced by existing replans now resolve to the approved dashboard review action, so the task shows host start, remote open, stop, and output controls without requiring a manual host command.
+
+## [0.6.63] - 2026-10-24
+
+### Added
+
+- **Remote project previews run from the dashboard.** Approved preview stories now provide host-side verifier, start, stop and authenticated remote-open controls with live output, rather than asking a remote operator to run a shell command. Every action records its command, output, process state and commit for handoff review.
+
+### Changed
+
+- **Project planners create structured preview actions.** Website and screen-bearing project templates mark verifier and review stories for the dashboard host action flow. Previews remain loopback-only; the dashboard proxies the selected preview after operator authentication.
+
+## [0.6.62] - 2026-10-24
+
+### Fixed
+
+- **The CSS check's usage example is corrected.** 0.6.61 showed `csstree-validator styles src`, but the tool takes one path per call, so that form fails. The planner text, the Agent tools note and the docs now show `git ls-files '*.css' | xargs -n1 csstree-validator`, which also skips `node_modules`. Found by installing the tool on a Pi and running it against a real project.
+- **A missing managed tool always shows how to install it.** Gitleaks and the CSS syntax check now appear in the System tools list under Updates & installs when absent, with an Install from Agent tools link on both Mac and Linux (the link was limited to `gh` and `node`, and hidden on a Mac). Homebrew's Install (All) still leaves them out because Agent tools installs them. Help search finds both.
+- **A read-only Claude story that only wrote a plan is no longer shown as a success.** Claude's plan mode cannot run commands or start a server, so a verification story assigned to it used to exit 0 with a plan and no checks run. The run is now recognised as incomplete, with a reason that says to plan the step as a human or CI story, or, if it only needs the project's tests and syntax checks, switch the story to workspace execution and retry. Edit-mode Claude stories may now run the managed read-only scanners (`gitleaks git`, `gitleaks dir`, `csstree-validator`) that the planner tells stories to call.
+
+## [0.6.61] - 2026-10-23
+
+### Added
+
+- **Verification tools install from Agent tools.** Gitleaks (the secret scan the standards ask for before a commit) and a CSS syntax check (csstree-validator, locked with install scripts off) are pinned in the catalog beside Claude Code, Codex and the rest, and are on every agent's PATH once installed. They need no sign-in, so their cards show none. Optional tools in Host readiness now lists both with a link to install them.
+
+### Changed
+
+- **A task's rendered result sits in a bordered box that scrolls.** The Markdown is still rendered (headings, lists, code), but a long result no longer stretches the task detail; the box is labelled and keyboard-focusable.
+- **A task's definition of done renders as Markdown in the same bordered, scrolling box**, labelled and keyboard-focusable, and both boxes fit a phone screen without the page scrolling sideways.
+- **The run log hides terminal colour codes and progress redraws** so a tool's output reads cleanly. The stored log is unchanged.
+- **Put installed tools on my PATH now includes the managed Node.js**, so node and npm work by name in a new terminal on a host where the Agent tools installed Node. An older PATH block that lists only the tools folder is offered the fix again.
+- **The delegator pack tells the planner what a read-only agent cannot do.** Installs, builds, `npm audit` and preview servers go to a human or CI with exact commands, and the verification tools are named instead of asking a story to install a parser.
+- The starter standards name the secret-scan command (`gitleaks git --staged --redact`), so a story can run it instead of reporting that it had no scanner.
+
+## [0.6.60] - 2026-10-23
+
+### Fixed
+
+- **Task results render structured agent handoffs.** Markdown headings, lists, inline code and fenced command output now render in task details with the same safe link and image policy used for Ops reports.
+
+- **Discord issue intake uses the correct Hermes action.** Coordinator guidance now directs Hermes to call `mcd_project` with `issue_task`, so a linked GitHub issue can create one review-gated, idempotent work card without asking the operator to paste its body or provide a board-card number.
+
+
+## [0.6.59] - 2026-10-23
+
+### Fixed
+
+- **Updates can apply the issue-task schema.** The GitHub issue-task migration now follows the existing `0020` schema migration, so source-checkout updates start cleanly instead of rolling back.
+
+
+## [0.6.58] - 2026-10-23
+
+### Fixed
+
+- **Discord can now create reviewed issue tasks.** The bundled Hermes plugin exposes the opted-in `issue_task` action, restricts it to Codex, Claude Code, or OpenClaw, and has an explicit safe `--upgrade` installer path for an already installed plugin.
+
+
+## [0.6.57] - 2026-10-23
+
+### Added
+
+- **Hermes can turn a linked GitHub issue into a tracked task.** Chat now has a “Give Hermes an issue” action, and paired Discord has an opt-in Issue tasks capability. The configured GitHub connection reads private issues without public page extraction, creates one idempotent Hermes-assigned task, and keeps normal route approval, run history, handoff, retry and review controls.
+
+## [0.6.56] - 2026-10-23
+
+### Fixed
+
+- **Task titles remain readable on phones.** The mobile task row now keeps the title in its text column after the Task ID label is shown.
+
+
 ## [0.6.55] - 2026-10-23
 
 ### Fixed
@@ -1048,7 +1423,13 @@ Before versioned releases the work was grouped into phases. These notes describe
 - Direct task approval actions and explicit handoff review before dependent stories proceed.
 
 [0.3.0]: https://github.com/gptkiosk/mac-control-dashboard/releases/tag/v0.3.0
-[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.50...HEAD
+[0.6.72]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.70...v0.6.72
+[Unreleased]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.90...HEAD
+[0.6.67]: https://github.com/gptkiosk/rbp-control-dashboard/compare/v0.6.66...v0.6.67
+[0.6.66]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.65...v0.6.66
+[0.6.65]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.64...v0.6.65
+[0.6.64]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.63...v0.6.64
+[0.6.63]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.62...v0.6.63
 [0.6.50]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.49...v0.6.50
 [0.6.49]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.48...v0.6.49
 [0.6.48]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.47...v0.6.48
@@ -1136,8 +1517,43 @@ Before versioned releases the work was grouped into phases. These notes describe
 
 [0.6.52]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.51...v0.6.52
 
+[0.6.56]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.55...v0.6.56
+
 [0.6.55]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.54...v0.6.55
 
 [0.6.54]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.53...v0.6.54
 
 [0.6.53]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.52...v0.6.53
+
+[0.6.60]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.59...v0.6.60
+
+[0.6.61]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.60...v0.6.61
+
+[0.6.62]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.61...v0.6.62
+
+[0.6.68]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.67...v0.6.68
+
+[0.6.69]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.68...v0.6.69
+
+[0.6.71]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.70...v0.6.71
+[0.6.70]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.69...v0.6.70
+
+[0.6.91]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.90...v0.6.91
+[0.6.90]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.89...v0.6.90
+[0.6.89]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.88...v0.6.89
+[0.6.88]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.87...v0.6.88
+[0.6.87]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.86...v0.6.87
+[0.6.86]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.85...v0.6.86
+[0.6.85]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.84...v0.6.85
+[0.6.84]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.83...v0.6.84
+[0.6.83]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.82...v0.6.83
+[0.6.82]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.81...v0.6.82
+[0.6.81]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.80...v0.6.81
+[0.6.80]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.79...v0.6.80
+[0.6.79]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.78...v0.6.79
+[0.6.78]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.77...v0.6.78
+[0.6.77]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.76...v0.6.77
+[0.6.76]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.75...v0.6.76
+[0.6.75]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.74...v0.6.75
+[0.6.74]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.73...v0.6.74
+[0.6.73]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.72...v0.6.73

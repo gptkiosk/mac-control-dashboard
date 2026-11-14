@@ -6,7 +6,7 @@ vi.mock('@/components/ChatConversation.vue',()=>({default:{props:['threadId'],te
 afterEach(()=>vi.unstubAllGlobals())
 const options={props:{workdirs:[{path:'/workspace',branch:null}],available:true},global:{stubs:{RouterLink:{template:'<a><slot /></a>'}}}}
 it('opens without a model call and starts a free read-only consultant only on request',async()=>{
- const f=stubFetch(url=> url==='/api/chat/threads'?{body:{id:7}}: {body:{id:1}})
+ const f=stubFetch(url=> url==='/api/chat/threads'?{body:{id:7}}:url.startsWith('/api/routes?feature=chat')?{body:{feature:'chat',label:'Chat',default:{runtime:'hermes',model:'openrouter/free'},default_note:null,allowed:[],hidden:[],empty_reason:null,scope:{managed:false,managed_error:null,app_saved:true,project:null}}}: {body:{id:1}})
  const w=mount(ProjectConsultant,options)
  await w.get('button').trigger('click');expect(f.mock.calls.filter(([url])=>String(url).startsWith('/api/chat'))).toHaveLength(0)   // opening starts no conversation (it only reads the project types)
  await w.get('input').setValue('Build a dashboard');await w.get('textarea').setValue('Compare goals and dependencies')
@@ -17,8 +17,8 @@ it('opens without a model call and starts a free read-only consultant only on re
  expect(f.mock.calls.map(([url])=>url)).not.toContain('/api/projects')   // no project is created
  w.unmount()
 })
-it('uses explicit membership profile defaults and hands a completed answer to editable review',async()=>{
- const f=stubFetch(url=> url==='/api/chat/threads'?{body:{id:9}}:url==='/api/chat/threads/9'?{body:{title:'Project consultant: Goal',working_dir:'/workspace',busy:false,messages:[{role:'assistant',status:'done',text:'Goal\nPhases\nStories\nScope\nDefinitions of done\nDependencies'}]}}:{body:{id:1}})
+it('starts on the Chat default from AI & models and hands a completed answer to editable review',async()=>{
+ const f=stubFetch(url=> url==='/api/chat/threads'?{body:{id:9}}:url.startsWith('/api/routes?feature=chat')?{body:{feature:'chat',label:'Chat',default:{runtime:'codex',model:'gpt-6-luna'},default_note:null,allowed:[],hidden:[],empty_reason:null,scope:{managed:false,managed_error:null,app_saved:true,project:null}}}:url==='/api/chat/threads/9'?{body:{title:'Project consultant: Goal',working_dir:'/workspace',busy:false,messages:[{role:'assistant',status:'done',text:'Goal\nPhases\nStories\nScope\nDefinitions of done\nDependencies'}]}}:{body:{id:1}})
  const w=mount(ProjectConsultant,{...options,props:{...options.props,preferences:{ai_agent:'codex',ai_model:'gpt-6-luna',theme:'system',planning_bias:50,working_dir:'/workspace',dashboard_origin:'',discord_channel_id:'',notify_plans:true,allow_discord_planning:false,allow_discord_control:false,allow_discord_diagnostics:false}}})
  await w.get('button').trigger('click');await w.get('input').setValue('Goal');await w.get('textarea').setValue('Idea');await w.get('form').trigger('submit');await flushPromises()
  expect(JSON.parse(String(f.mock.calls.find(([url])=>url==='/api/chat/threads')![1]?.body))).toMatchObject({agent:'codex',model:'gpt-6-luna'})
@@ -79,7 +79,7 @@ it('lets the owner say when it is enough, then writes up the brief and opens it 
  const w=mount(ProjectConsultant,options)
  await w.get('button').trigger('click');await w.get('input').setValue('Site');await w.get('textarea').setValue('A simple site');await w.get('form').trigger('submit');await flushPromises()
  expect(w.emitted('review')).toBeUndefined()                                          // talking does not submit anything
- await w.findAll('button').find(b=>b.text().includes('Write up the plan'))!.trigger('click');await flushPromises()
+ await w.findAll('button').find(b=>b.text().includes('Review project summary'))!.trigger('click');await flushPromises()
  await vi.advanceTimersByTimeAsync(2100);await flushPromises()
  const ask=f.mock.calls.filter(([url])=>url==='/api/chat/threads/11/messages').map(([,init])=>JSON.parse(String(init?.body)))
  expect(ask).toHaveLength(2);expect(ask[1].text).toContain('That is enough')
@@ -105,5 +105,17 @@ it('asks for the project type before starting, with Other for what does not fit,
  expect(String(JSON.parse(String(sent[1]?.body)).context)).toContain('Project type: other')
  await w.findAll('button').find(b=>b.text().includes('Review existing brief'))!.trigger('click');await flushPromises()
  expect(w.emitted('review')![0]![0]).toMatchObject({project_type:'other'})
+ w.unmount()
+})
+
+it('takes the template settings block out of the brief and hands only the settings on for the form to check',async()=>{
+ const text='Goal\nPhases\n\n```template-settings\n{"lessons": 4, "pictures": false, "extras": ["quiz"], "Bad Key": "x", "nested": {"a": 1}}\n```\n'
+ stubFetch(url=> url==='/api/chat/threads'?{body:{id:9}}:url.startsWith('/api/routes?feature=chat')?{body:{feature:'chat',label:'Chat',default:{runtime:'codex',model:'gpt-6-luna'},default_note:null,allowed:[],hidden:[],empty_reason:null,scope:{managed:false,managed_error:null,app_saved:true,project:null}}}:url==='/api/chat/threads/9'?{body:{title:'Project consultant: Goal',working_dir:'/workspace',busy:false,messages:[{role:'assistant',status:'done',text}]}}:{body:{id:1}})
+ const w=mount(ProjectConsultant,options)
+ await w.get('button').trigger('click');await w.get('input').setValue('Goal');await w.get('textarea').setValue('Idea');await w.get('form').trigger('submit');await flushPromises()
+ await w.findAll('button').find(b=>b.text().includes('Review existing brief'))!.trigger('click');await flushPromises()
+ const draft=w.emitted('review')![0]![0] as {brief:string;intake_answers:Record<string,string>}
+ expect(draft.brief).toBe('Goal\nPhases')
+ expect(draft.intake_answers).toEqual({lessons:'4',pictures:'no',extras:'quiz'})
  w.unmount()
 })

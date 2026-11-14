@@ -6,17 +6,32 @@ import NoteFold from '@/components/NoteFold.vue'
 import ProjectTypePicker from '@/components/ProjectTypePicker.vue'
 import { getJson, postJson, type ChatThread, type ChatThreadDetail } from '@/lib/api'
 import type { Preferences } from '@/lib/profile'
-const props = defineProps<{ preferences?: Preferences; workdirs: {path:string;branch:string|null}[]; scratchRoot?: string | null; available: boolean; resumeId?: number }>()
-const emit = defineEmits<{ review: [draft:{title:string;brief:string;working_dir:string;project_type?:string|null}]; started:[id:number] }>()
+import { useRoutes } from '@/lib/routes'
+const props = defineProps<{ preferences?: Preferences; workdirs: {path:string;branch:string|null}[]; scratchRoot?: string | null; available?: boolean; resumeId?: number }>()
+const emit = defineEmits<{ review: [draft:{title:string;brief:string;working_dir:string;project_type?:string|null;intake_answers?:Record<string,string>}]; started:[id:number] }>()
+/** The consultant fills only the template's settings, in a fenced block the intake form then checks against the allowed values. */
+function templateSettings(text:string):{settings:Record<string,string>;brief:string} {
+  const m=/```template-settings\s*\n([\s\S]*?)\n```/.exec(text)
+  if(!m) return {settings:{},brief:text}
+  let given:unknown={}
+  try{given=JSON.parse(m[1]!)}catch{given={}}
+  const settings=Object.fromEntries(Object.entries(given&&typeof given==='object'&&!Array.isArray(given)?given:{})
+    .filter(([k,v])=>/^[a-z][a-z0-9_]{0,39}$/.test(k)&&(['string','number','boolean'].includes(typeof v)||Array.isArray(v)))
+    .map(([k,v])=>[k,Array.isArray(v)?v.map(String).join(', '):typeof v==='boolean'?(v?'yes':'no'):String(v)]))
+  return {settings,brief:(text.slice(0,m.index)+text.slice(m.index+m[0].length)).trim()}
+}
 const typeKey=(id:number)=>`mcd-consultant-type-${id}`
 // The type is remembered per conversation so a resumed consultant still hands it to the plan. Browser storage is only a convenience here.
 const savedType=(id:number)=>{try{return localStorage.getItem(typeKey(id))||null}catch{return null}}
 const open=ref(false), threadId=ref(props.resumeId || 0), projectType=ref<string|null>(props.resumeId?savedType(props.resumeId):null), typeCount=ref(0), title=ref(''), goal=ref(''), workingDir=ref(''), busy=ref(false), error=ref('')
-const agent=computed(()=>props.preferences?.ai_agent || 'hermes')
-const model=computed(()=>props.preferences?.ai_model || 'openrouter/free')
-const guidance='You are a project consultant in a read-only planning conversation with the person who owns the project. Answer what they ask first, in plain language, then ask the few clarifying questions that would most change the plan (two or three at a time, never a long form). Draw on what this installation knows (below) when it matters: the delivery model, which agent runtimes are installed and the spending policy, the standards and their minimum risks, the methods and security practices that apply, and which kinds of model suit which work; say plainly where something is unproven, and do not recite this background back unless asked. Keep talking until the person says they have enough; do not write the full brief before then. Once they say they are done, stop asking questions: confirm in a sentence and wait. When they ask for it, write a Markdown project brief with Goal, Working directory, Approach and methods, Phases, Stories, Scope, Definitions of done, Risks and the standards areas they fall under, Security considerations, Model and route considerations (free or paid, and why), Dependencies, Constraints, and open questions, so the coordinator can plan and create stories from it directly. Keep the brief below 20000 characters and distinguish assumptions from confirmed requirements. The owner has chosen a project type (stated with the project below, with its planning guidance in what this installation knows): plan to that type, name the human gates it needs, and say plainly if their goal does not fit it so they can pick another type or Other. If the project must end in a remote repository, say so and tell the owner to choose that repository\u2019s clone as the working directory, not the scratch folder, and make delivery (push the project branch, open the pull request, read the pipeline result) part of the stories. Say whether the repository is public (an MIT-licensed package others install) or private (proprietary or not MIT licensed). Your output is a proposal for the owner to review before the coordinator sees it. Stay within discussion and planning; leave all operational actions to the dashboard workflow.'
-const draftAsk=()=>`That is enough. Please write the complete project brief now from everything we discussed, following the brief outline you were given. Say in the brief that the project type is ${projectType.value||savedType(threadId.value)||'not chosen'}, and include the stories and human gates that type needs.`
-const draftBackground='The person is ready for the brief. Reply with the full Markdown project brief only: no preamble and no closing question. Do not leave questions hanging. Anything still undecided becomes either a stated assumption or a human decision story (an owner decision with its own scope and definition of done) in the Stories section, or is dropped if it does not change the plan.'
+// The consultant is a read-only chat: it starts on the Chat default in AI & models.
+const chatRoutes=useRoutes('chat')
+const agent=computed(()=>chatRoutes.data.value?.default?.runtime || 'hermes')
+const model=computed(()=>chatRoutes.data.value?.default?.model || '')
+const available=computed(()=>props.available !== false && (!chatRoutes.data.value || !!chatRoutes.data.value.default))
+const guidance='Help the owner shape a project through a read-only conversation. Use the shared intake questions for the selected template from installation context; do not mix other templates into it. Answer their question first, then ask only the missing facts that would change the outcome, two or three at a time. Reuse facts already given and accept Help me decide. Suggest sensible defaults, clearly marked as assumptions. Do not require a prewritten brief, technical commands, credentials or a story list from the person. Ask about visual direction and real media for a website; distinguish reference art from final assets. Media/cloud spending preferences do not grant approval. Keep routine tools/access readiness in the eventual plan. When asked to write up, return a compact summary of the goal, confirmed template answers, exclusions, proposed assumptions and genuine unresolved decisions. The dashboard planner will create the stories, prerequisites and verification gates later. No operational actions or provider calls are authorized by this conversation.'
+const draftAsk=()=>`That is enough. Please write the project intake summary now from what we discussed. Project type: ${projectType.value||savedType(threadId.value)||'not chosen'}. Include confirmed template answers and clearly labelled assumptions. Do not repeat answered questions or generate the story plan. If the template has settings, end with the template-settings block. Keep it under 8000 characters.`
+const draftBackground='Reply with the Markdown intake summary only. Preserve user requirements, required final media, theme states and delivery target. State undecided matters as assumptions or decisions; never invent access, completed work or spending approval. This summary opens for operator review before planning.'
 const drafting=ref(false);let timer:ReturnType<typeof setTimeout>|undefined
 onBeforeUnmount(()=>{if(timer)clearTimeout(timer)})
 async function start() {
@@ -60,19 +75,21 @@ async function review() {
     const t=await getJson<ChatThreadDetail>(`/api/chat/threads/${threadId.value}`)
     if(t.busy || t.messages.some(m=>m.status==='running'||m.status==='pending_approval')) throw Error('Wait for the conversation to finish and resolve any pending approval first.')
     const response=[...t.messages].reverse().find(m=>m.role==='assistant'&&m.status==='done'&&m.text.trim())
-    if(!response) throw Error('Ask the consultant to produce a complete project brief first.')
-    emit('review',{title:title.value.trim() || t.title.replace(/^Project consultant: /,''),brief:response.text,working_dir:t.working_dir,project_type:projectType.value||savedType(threadId.value)})
+    if(!response) throw Error('Ask the consultant to write the project summary first.')
+    const {settings,brief}=templateSettings(response.text)
+    emit('review',{title:title.value.trim() || t.title.replace(/^Project consultant: /,''),brief,working_dir:t.working_dir,project_type:projectType.value||savedType(threadId.value),...(Object.keys(settings).length?{intake_answers:settings}:{})})
   } catch(e) {error.value=e instanceof Error?e.message:String(e)} finally {busy.value=false}
 }
 </script>
 <template>
-  <div class="consultant-entry"><button class="btn" :aria-expanded="open" @click="open=!open">{{open?'Hide project consultant':'Refine with project consultant'}}</button>
+  <div class="consultant-entry"><button class="btn" :aria-expanded="open" @click="open=!open">{{open?'Hide project consultant':'Plan with chat'}}</button>
     <section v-if="open" class="consultant-glass" aria-labelledby="consultant-title">
       <h3 id="consultant-title">Project consultant</h3>
       <p>Shape the brief together, then review it before anything reaches planning. <RouterLink to="/help?topic=project-consultant">How-to</RouterLink></p>
-      <p class="muted small">New chats: {{agent}} · {{model}} · <RouterLink to="/profile#ai-settings">AI defaults</RouterLink></p>
+      <p class="muted small">New chats: {{agent}} · {{model || 'its default model'}} · <RouterLink to="/profile#models-providers">Chat default</RouterLink></p>
       <NoteFold label="Route and billing"><p class="small">Free routes can throttle or time out. Membership routes use your native CLI account; API routes can incur charges. <RouterLink to="/help?topic=project-models">Model routes and billing</RouterLink>.</p></NoteFold>
-      <p v-if="!available && !threadId" role="status">The configured consultant runtime is unavailable. <RouterLink to="/profile#agent-tools">Install an agent runtime</RouterLink> or change AI defaults.</p>
+      <p v-if="!available && !threadId" role="status">No chat route is available for the consultant. {{ chatRoutes.data.value?.empty_reason }} <RouterLink to="/profile#models-providers">AI &amp; models</RouterLink> · <RouterLink to="/profile#agent-tools">Agent tools</RouterLink></p>
+      <p v-else-if="!threadId" class="muted small">Uses {{ agent }} · {{ model || 'its default model' }} (the Chat default in <RouterLink to="/profile#models-providers">AI &amp; models</RouterLink>).</p>
       <p v-if="error" role="alert">{{error}}</p>
       <p v-if="busy && threadId" role="status" class="muted">Sending your goal to the consultant…</p>
       <form v-if="!threadId" @submit.prevent="start">
@@ -82,7 +99,7 @@ async function review() {
         <ProjectTypePicker v-model="projectType" :text="title + ' ' + goal" required @loaded="typeCount=$event" />
         <button class="btn primary" :disabled="busy || !available">Start consultant conversation</button>
       </form>
-      <template v-else><p class="small muted">Conversation #{{threadId}} · route stays with this chat.</p><div class="conversation"><ChatConversation :thread-id="threadId" embedded @deleted="threadId=0; emit('started',0)" @back="open=false" /></div><p v-if="drafting" role="status" class="muted">Writing up the plan…</p><div class="actions"><button class="btn primary" :disabled="busy || drafting" @click="draft">Write up the plan</button><button class="btn" :disabled="busy || drafting" @click="review">Review existing brief</button></div><NoteFold label="Before submitting"><p class="small">The brief opens for you to edit. Nothing reaches the coordinator until you confirm there, and stories need a separate project approval before they run. Use Review existing brief when the last reply is already complete.</p><p class="small"><RouterLink to="/help?topic=project-consultant">Consultant how-to</RouterLink> · <RouterLink to="/help?topic=project-approvals">Project approvals</RouterLink></p></NoteFold></template>
+      <template v-else><p class="small muted">Conversation #{{threadId}} · route stays with this chat.</p><div class="conversation"><ChatConversation :thread-id="threadId" embedded @deleted="threadId=0; emit('started',0)" @back="open=false" /></div><p v-if="drafting" role="status" class="muted">Preparing your project summary…</p><div class="actions"><button class="btn primary" :disabled="busy || drafting" @click="draft">Review project summary</button><button class="btn" :disabled="busy || drafting" @click="review">Review existing brief</button></div><NoteFold label="Before submitting"><p class="small">The brief opens for you to edit. Nothing reaches the coordinator until you confirm there, and stories need a separate project approval before they run. Use Review existing brief when the last reply is already complete.</p><p class="small"><RouterLink to="/help?topic=project-consultant">Consultant how-to</RouterLink> · <RouterLink to="/help?topic=project-approvals">Project approvals</RouterLink></p></NoteFold></template>
     </section>
   </div>
 </template>

@@ -457,6 +457,22 @@ def test_a_published_slot_cannot_be_skipped_and_accept_and_publish_are_remembere
     assert "accepted" in history
 
 
+def test_the_slots_format_given_to_stories_describes_what_the_loader_accepts(tmp_path):
+    (tmp_path / "media").mkdir()
+    (tmp_path / "media" / "ref.png").write_bytes(b"x")
+    good = {"slots": [{"name": "heroine-reference", "kind": "image", "prompt": "a heroine", "batch": "reference", "refs": ["media/ref.png"] * 4,
+                       "resolution": "2K", "purpose": "kept but ignored"},
+                      {"name": "hero-clip", "kind": "video", "prompt": "a clip", "batch": "scenes", "from_still": "heroine-reference", "resolution": "480P"}]}
+    (tmp_path / "media" / "slots.json").write_text(json.dumps(good))
+    assert list(mg.load_slots(tmp_path)) == ["heroine-reference", "hero-clip"]
+    for key in ('"name"', '"kind"', '"prompt"', '"refs"', 'at most 4', '"id" or "type" are not read', '1K, 2K or 4K', '480P, 768P or 1080P'):
+        assert key in mg.SLOTS_FORMAT
+    for bad in ({"id": "x", "type": "image", "prompt": "p"}, {"name": "x", "kind": "image", "prompt": "p", "refs": ["media/ref.png"] * 5}):
+        (tmp_path / "media" / "slots.json").write_text(json.dumps({"slots": [bad]}))
+        with pytest.raises(mg.MediaError):
+            mg.load_slots(tmp_path)
+
+
 def test_the_project_route_reports_where_media_stands_and_is_quiet_without_media(env, tmp_path):
     client, folder = env
     pid = make_project(client, folder)
@@ -471,6 +487,10 @@ def test_the_project_route_reports_where_media_stands_and_is_quiet_without_media
     other.mkdir()
     pid2 = make_project(client, other)
     assert client.get(f"/api/media/project/{pid2}").json() == {"available": False}
+    (other / "media").mkdir()                       # pilot story 17 wrote id/type: the studio must say why, not "no slots"
+    (other / "media" / "slots.json").write_text(json.dumps({"slots": [{"id": "hero", "type": "image", "prompt": "p"}]}))
+    rejected = client.get(f"/api/media/project/{pid2}").json()
+    assert rejected["available"] is False and "unique lowercase name" in rejected["error"]
     assert client.get("/api/media/project/9999").status_code == 404
     import profiles
     profiles.bridge_token(get_settings(), True)
@@ -630,8 +650,12 @@ def test_a_published_slot_can_be_viewed_and_nothing_else_can(env):
 
 def test_storage_is_reported_and_clearing_only_removes_takes_of_slots_you_have_decided(env):
     client, folder = env
-    run_and_wait(client, {"working_dir": str(folder), "slot": "hero-still"})        # a take for a slot that is already published
+    run_and_wait(client, {"working_dir": str(folder), "slot": "hero-still"})        # a regenerated take for a slot that is already published
     run_and_wait(client, {"working_dir": str(folder), "slot": "plate"})             # a take still waiting for your decision
+    data = client.get("/api/media/slots", params={"working_dir": str(folder)}).json()
+    assert data["storage"]["unused_count"] == 0                                     # a regenerated published slot's take waits for review too
+    assert next(s for s in data["slots"] if s["name"] == "hero-still")["unreviewed"] == 1
+    client.post("/api/media/decision", json={"working_dir": str(folder), "slot": "hero-still", "event": "reject"})     # keep the published one
     data = client.get("/api/media/slots", params={"working_dir": str(folder)}).json()
     assert data["storage"]["published_bytes"] > 0 and data["storage"]["unused_count"] == 1 and data["storage"]["unused_bytes"] > 0
     assert next(s for s in data["slots"] if s["name"] == "hero-still")["published_bytes"] > 0
@@ -648,3 +672,95 @@ def test_storage_is_reported_and_clearing_only_removes_takes_of_slots_you_have_d
     for name in ("hero-clip", "plate"):                                                                  # skipping decides a slot, so its take is then unused
         client.post("/api/media/decision", json={"working_dir": str(folder), "slot": name, "event": "skip"})
     assert client.get("/api/media/slots", params={"working_dir": str(folder)}).json()["storage"]["unused_count"] == 1
+
+
+def test_a_published_slot_can_be_revised_and_regenerated_only_when_asked_and_keeps_its_file_until_a_take_is_accepted(env):
+    """Pilot 2026-10-29: a published fantasy scene needed a stronger prompt, and the studio offered no way to change it or publish a new take."""
+    client, folder = env
+    def row():
+        data = client.get("/api/media/slots", params={"working_dir": str(folder)}).json()
+        return next(s for s in data["slots"] if s["name"] == "hero-still")
+    edit = {"working_dir": str(folder), "slot": "hero-still", "prompt": "A barber shop interior, half turned to fantasy. No text."}
+    assert client.patch("/api/media/slots", json={**edit, "expected_sha256": row()["plan_sha256"]}).status_code == 409          # published: not without saying so
+    r = client.patch("/api/media/slots", json={**edit, "expected_sha256": row()["plan_sha256"], "revise_published": True})
+    assert r.status_code == 200, r.text
+    assert row()["prompt"].startswith("A barber shop interior, half turned") and row()["published"] is True
+    before = (folder / "assets" / "img" / "hero-still.jpg").read_bytes()
+    run_and_wait(client, {"working_dir": str(folder), "slot": "hero-still", "expected_sha256": row()["plan_sha256"]})
+    assert row()["unreviewed"] == 1 and (folder / "assets" / "img" / "hero-still.jpg").read_bytes() == before
+    again = client.patch("/api/media/slots", json={**edit, "prompt": "x", "expected_sha256": row()["plan_sha256"], "revise_published": True})
+    assert again.status_code == 409                                                    # a paid take is waiting: review it before changing the plan
+    assert any(e[0] == "POST" and "half turned" in json.dumps(e[3]) for e in FakeFal.log)                     # the new take used the revised prompt
+
+
+@needs_ffmpeg
+def test_republishing_a_still_remakes_the_sites_width_named_copies(env):
+    client, folder = env
+    small_slots(folder)
+    copies = folder / "assets" / "img" / "responsive"
+    copies.mkdir()
+    old = media_bytes("image")
+    from PIL import Image
+    for name in ("hero-still-480.webp", "hero-still-960.jpg"):
+        Image.new("RGB", (640, 360)).save(copies / name)
+    (copies / "hero-still-extra.webp").write_bytes(b"not a width copy")
+    stamps = {p.name: p.read_bytes() for p in copies.iterdir()}
+    run_and_wait(client, {"working_dir": str(folder), "slot": "hero-still"})
+    client.post("/api/media/pick", json={"working_dir": str(folder), "slot": "hero-still", "candidate": "hero-still-1.png"})
+    r = client.post("/api/media/publish", json={"working_dir": str(folder), "slot": "hero-still"})
+    assert r.status_code == 200, r.text
+    assert sorted(r.json()["refreshed"]) == ["assets/img/responsive/hero-still-480.webp", "assets/img/responsive/hero-still-960.jpg"] and r.json()["stale"] == []
+    assert (copies / "hero-still-480.webp").read_bytes() != stamps["hero-still-480.webp"] and (copies / "hero-still-960.jpg").read_bytes() != stamps["hero-still-960.jpg"]
+    assert (copies / "hero-still-extra.webp").read_bytes() == stamps["hero-still-extra.webp"]          # only <name>-<width> copies are touched
+    assert not list(copies.glob("*.refresh.*")) and old
+    with Image.open(copies / "hero-still-480.webp") as made:
+        assert made.width == 480
+
+
+@needs_ffmpeg
+def test_republishing_a_still_updates_the_projects_own_hash_records(env):
+    """Pilot 2026-10-29: a republish re-made the copies but the project's media/derivatives.json kept the old hashes, so its own check failed."""
+    import hashlib
+    from PIL import Image
+    client, folder = env
+    small_slots(folder)
+    sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+    img, copies = folder / "assets" / "img", folder / "assets" / "img" / "responsive"
+    copies.mkdir(parents=True)
+    Image.new("RGB", (1200, 675), "red").save(img / "hero-still.jpg")
+    Image.new("RGB", (480, 270), "red").save(copies / "hero-still-480.webp")
+    (folder / "media" / "provenance.json").write_text(json.dumps({"hero-still": {"files": "assets/img/hero-still.jpg", "source_sha256": "a" * 64}}))
+    record = {"hero-still": {"source": "assets/img/hero-still.jpg", "published_sha256": sha(img / "hero-still.jpg"), "generation_source_sha256": "a" * 64,
+                             "derivatives": [{"file": "assets/img/responsive/hero-still-480.webp", "width": 480, "height": 270, "bytes": 1, "sha256": sha(copies / "hero-still-480.webp")}]},
+              "other": {"source": "assets/img/other.jpg", "published_sha256": "b" * 64}}
+    (folder / "media" / "derivatives.json").write_text(json.dumps(record, indent=2) + "\n")
+    run_and_wait(client, {"working_dir": str(folder), "slot": "hero-still"})
+    client.post("/api/media/pick", json={"working_dir": str(folder), "slot": "hero-still", "candidate": "hero-still-1.png"})
+    r = client.post("/api/media/publish", json={"working_dir": str(folder), "slot": "hero-still"})
+    assert r.status_code == 200, r.text
+    assert r.json()["records"] == ["media/derivatives.json"]
+    text = (folder / "media" / "derivatives.json").read_text()
+    after = json.loads(text)["hero-still"]
+    provenance = json.loads((folder / "media" / "provenance.json").read_text())["hero-still"]
+    assert after["published_sha256"] == sha(img / "hero-still.jpg")
+    assert after["generation_source_sha256"] == provenance["source_sha256"] != "a" * 64
+    copy = after["derivatives"][0]
+    assert copy["sha256"] == sha(copies / "hero-still-480.webp") and copy["bytes"] == (copies / "hero-still-480.webp").stat().st_size
+    with Image.open(copies / "hero-still-480.webp") as made:
+        assert (copy["width"], copy["height"]) == made.size
+    assert json.loads(text)["other"] == record["other"] and text.endswith("}\n") and '\n  "hero-still"' in text
+    assert not list((folder / "media").glob("*.refresh"))
+
+
+def test_hash_records_skip_the_dashboards_own_files_and_change_only_exact_old_values(tmp_path):
+    import media_generate as mg
+    (tmp_path / "media").mkdir()
+    (tmp_path / "media" / "slots.json").write_text(json.dumps({"note": "a" * 64}))
+    (tmp_path / "media" / "notes.json").write_text(json.dumps({"x": "a" * 64, "y": "a" * 63, "list": [{"path": "p.jpg", "size": 1, "sha256": "a" * 64}]}))
+    before = {"p.jpg": {"sha256": "a" * 64, "bytes": 1}}
+    after = {"p.jpg": {"sha256": "c" * 64, "bytes": 9}}
+    assert mg.update_hash_records(tmp_path, before, after) == ["media/notes.json"]
+    notes = json.loads((tmp_path / "media" / "notes.json").read_text())
+    assert notes == {"x": "c" * 64, "y": "a" * 63, "list": [{"path": "p.jpg", "size": 9, "sha256": "c" * 64}]}
+    assert json.loads((tmp_path / "media" / "slots.json").read_text())["note"] == "a" * 64
+    assert mg.update_hash_records(tmp_path, before, before) == []

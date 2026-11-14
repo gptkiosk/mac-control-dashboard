@@ -5,6 +5,8 @@ import { computed, reactive, ref } from 'vue'
 import TaskFields, { type TaskFieldValues } from '@/components/TaskFields.vue'
 import TagPill from '@/components/TagPill.vue'
 import TaskApprovalAction from '@/components/TaskApprovalAction.vue'
+import ProjectPreviewAction from '@/components/ProjectPreviewAction.vue'
+import ProjectUpubhubPush from '@/components/ProjectUpubhubPush.vue'
 import QueuedTaskRouteAction from '@/components/QueuedTaskRouteAction.vue'
 import TaskRetryAction from '@/components/TaskRetryAction.vue'
 import ProjectPlanningRetryAction from '@/components/ProjectPlanningRetryAction.vue'
@@ -16,6 +18,7 @@ import ModalShell from '@/components/ModalShell.vue'
 import ReportedValue from '@/components/ReportedValue.vue'
 import RunLog from '@/components/RunLog.vue'
 import { useNow } from '@/composables/useNow'
+import { renderReport } from '@/lib/reportMarkdown'
 import { usePolledJson } from '@/composables/usePolledJson'
 import {
   deleteJson,
@@ -83,7 +86,7 @@ const moveValue = ref('')
 const human = computed(() => !!card.value && isHuman(card.value))
 const { media: projectMedia, link: mediaLink } = useProjectMedia(card)      // a human story about media shows what the studio will cost before it is opened
 const running = computed(() => card.value?.column === 'running')
-const locked = computed(() => (running.value && !human.value) || !!card.value?.project)
+const locked = computed(() => (running.value && !human.value) || !!card.value?.project || !!card.value?.superseded)
 const taskFields = ref<TaskFieldValues>({
   priority: 'normal',
   due_date: '',
@@ -140,6 +143,8 @@ const activeRun = computed<Run | null>(() => {
   const latest = runs.value[0] ?? card.value?.last_run ?? null
   return latest && latest.stage === 'running' ? latest : null
 })
+const resultHtml = computed(() => selectedRun.value?.result_text ? renderReport(selectedRun.value.result_text) : '')
+const acceptanceHtml = computed(() => card.value?.acceptance ? renderReport(card.value.acceptance) : '')
 
 const runDuration = computed(() => {
   const r = selectedRun.value
@@ -382,6 +387,7 @@ async function save(): Promise<void> {
           <ChipTag tone="muted">{{ columnLabel(card.column) }}</ChipTag>
           <ChipTag tone="accent">{{ human ? 'You' : agentLabel(card.agent) }}</ChipTag>
           <ChipTag v-if="card.created_by === 'hermes'" tone="muted">Created by Hermes</ChipTag>
+          <ChipTag v-if="card.superseded" tone="muted">Superseded by replan</ChipTag>
           <ChipTag v-if="isCoordinatorAgent(card.agent)" tone="muted">Coordinator</ChipTag>
           <ChipTag v-if="!human" :tone="card.mode === 'edit' ? 'warn' : 'muted'">{{
             card.mode === 'edit' ? 'Edit' : 'Read'
@@ -390,11 +396,14 @@ async function save(): Promise<void> {
           <ChipTag v-else-if="card.approved_at" tone="ok">Approved</ChipTag>
         </div>
 
-        <MediaCallout v-if="card.project" :media="projectMedia" :link="mediaLink" />
-        <TaskApprovalAction v-if="card.project" :card="card" hide-media-link @changed="afterChange" />
-        <QueuedTaskRouteAction v-if="card.project" :card="card" @changed="afterChange" />
-        <TaskRetryAction v-if="card.project" :card="card" @changed="afterChange" />
-        <ProjectPlanningRetryAction v-if="card.project" :card="card" @changed="afterChange" />
+        <p v-if="card.superseded" class="hint" data-testid="superseded-card">This untouched task belongs to an earlier project revision. Its scope and history are preserved in the project record; current work is in the replacement revision.</p>
+        <MediaCallout v-if="card.project && !card.superseded" :media="projectMedia" :link="mediaLink" />
+        <ProjectPreviewAction v-if="card.project && !card.superseded" :card="card" @changed="afterChange" />
+        <ProjectUpubhubPush v-if="card.project && !card.superseded" :card="card" @changed="afterChange" />
+        <TaskApprovalAction v-if="card.project && !card.superseded" :card="card" hide-media-link @changed="afterChange" />
+        <QueuedTaskRouteAction v-if="card.project && !card.superseded" :card="card" @changed="afterChange" />
+        <TaskRetryAction v-if="card.project && !card.superseded" :card="card" @changed="afterChange" />
+        <ProjectPlanningRetryAction v-if="card.project && !card.superseded" :card="card" @changed="afterChange" />
         <div
           v-if="message"
           class="message"
@@ -466,7 +475,7 @@ async function save(): Promise<void> {
             <TagPill v-for="tag in card.tags" :key="tag" :tag="tag" />
           </div>
           <h3 class="sub-title">Definition of done</h3>
-          <pre v-if="card.acceptance" class="log-window">{{ card.acceptance }}</pre>
+          <div v-if="card.acceptance" class="task-markdown" role="region" aria-label="Definition of done" tabindex="0" data-testid="card-acceptance" v-html="acceptanceHtml" />
           <p v-else class="muted small">No definition of done yet.</p>
         </section>
 
@@ -689,7 +698,8 @@ async function save(): Promise<void> {
               </div>
               <div>
                 <dt class="has-icon"><AppIcon name="model" size="sm" />Model reported</dt>
-                <dd class="wrap-any"><ReportedValue :value="selectedRun.model_reported" /></dd>
+                <dd v-if="!selectedRun.model_reported && selectedRun.model_derived" class="wrap-any" data-testid="model-derived" title="The agent did not report its model; this is the model MCD asked for.">{{ selectedRun.model_derived }} <span class="muted">(derived)</span></dd>
+                <dd v-else class="wrap-any"><ReportedValue :value="selectedRun.model_reported" /></dd>
               </div>
               <div>
                 <dt>Provider</dt>
@@ -709,7 +719,10 @@ async function save(): Promise<void> {
               </div>
               <div>
                 <dt class="has-icon"><AppIcon name="cost" size="sm" />Cost (USD)</dt>
-                <dd>
+                <dd v-if="selectedRun.cost_usd == null && selectedRun.cost_derived_usd != null" data-testid="cost-derived" :title="`Not reported by the agent. Worked out by MCD from the token counts at the published API rates (${selectedRun.cost_basis}); a membership plan may cost nothing extra.`">
+                  {{ formatUsd(selectedRun.cost_derived_usd) }} <span class="muted">(derived)</span>
+                </dd>
+                <dd v-else>
                   <ReportedValue :value="selectedRun.cost_usd" :format="formatUsd" />
                 </dd>
               </div>
@@ -760,9 +773,7 @@ async function save(): Promise<void> {
 
           <section class="block" aria-labelledby="result-h">
             <h3 id="result-h" class="sub-title">Result</h3>
-            <pre v-if="selectedRun.result_text" class="log-window tall" data-testid="run-result">{{
-              selectedRun.result_text
-            }}</pre>
+            <div v-if="selectedRun.result_text" class="task-markdown" role="region" aria-label="Run result" tabindex="0" data-testid="run-result" v-html="resultHtml" />
             <p v-else class="muted small">
               {{ selectedRun.stage === 'running' ? 'The run has not finished yet.' : 'No result text.' }}
             </p>
@@ -980,4 +991,48 @@ dd {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+.task-markdown {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  /* A long result scrolls inside its own bordered box; the box is focusable so the keyboard can scroll it. */
+  max-height: min(36rem, 70vh);
+  max-height: min(36rem, 70dvh);   /* phones: the visible height, not the height behind the browser toolbar */
+  min-width: 0;
+  max-width: 100%;
+  overflow: auto;
+  padding: var(--gap);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.task-markdown:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.task-markdown :deep(> :first-child) { margin-top: 0; }
+.task-markdown :deep(> :last-child) { margin-bottom: 0; }
+.task-markdown :deep(p) { margin: .75em 0; }
+.task-markdown :deep(ul),
+.task-markdown :deep(ol) { margin: .75em 0; padding-left: 1.5em; }
+.task-markdown :deep(ul) { list-style: disc; }
+.task-markdown :deep(ol) { list-style: decimal; }
+.task-markdown :deep(li) { margin: .25em 0; }
+.task-markdown :deep(h1),
+.task-markdown :deep(h2),
+.task-markdown :deep(h3) { line-height: 1.3; margin: 1.35em 0 .55em; }
+.task-markdown :deep(h1) { font-size: 1.45rem; }
+.task-markdown :deep(h2) { font-size: 1.25rem; }
+.task-markdown :deep(h3) { font-size: 1.1rem; }
+.task-markdown :deep(a) { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.task-markdown :deep(code) { color: var(--accent); font-size: .9em; }
+.task-markdown :deep(pre) {
+  overflow-x: auto;
+  padding: var(--gap);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+.task-markdown :deep(pre code) { color: inherit; white-space: pre; }
+.task-markdown :deep(blockquote) { margin-left: 0; padding-left: var(--gap); border-left: 3px solid var(--accent); color: var(--text-muted); }
+.task-markdown :deep(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.task-markdown :deep(th),
+.task-markdown :deep(td) { padding: var(--gap-sm); border: 1px solid var(--panel-border); }
+
 </style>

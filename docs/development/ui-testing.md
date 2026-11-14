@@ -1,5 +1,24 @@
 # Standard UI preview and sign-off
 
+## 0.6.91 template-store preview (2026-11-02)
+
+Branch `codex/textbook-template-icons`, based on fetched main. From `apps/web`
+with Node 22, run `npm run dev -- --config vite.fixtures.config.ts`.
+The fixture server has no API proxy and refuses API/health routes with 403.
+Open `http://127.0.0.1:5193/tests/fixtures/template-store.html`; stop only its
+foreground process with Ctrl-C. This development-only entry renders the actual
+store component and packaged icons, not a separate mockup. It supplies eight
+synthetic catalog entries and five synthetic installed manifests. Fetch is
+restricted to the fixture inventory; installation and every mutation return
+403. No API process, auth/native identities, credentials, production database,
+collectors, dispatchers or provider calls. Nothing is installed on the host.
+
+Checked: all eight full descriptions, installed-manifest precedence, searching,
+distinct textbook/lesson-plan icons and 390px no-sideways-scroll layout. Paired
+web suites/type checks/builds and pack validation cover source parity; this is
+Mac browser fixture evidence, not physical Pi or signed-package acceptance.
+Final merged source and package receipts remain release gates.
+
 For every story that changes a user interface, provide the reviewer a reachable isolated preview as part of the handoff. Do not merely report that a build passed.
 
 Record:
@@ -27,3 +46,17 @@ python3 scripts/preview-release-features.py --port PORT --data-dir /tmp/PRODUCT-
 Use port 8813 for MCD and 8814 for RCD (replace PRODUCT with mcd or rcd). Check the port is free first. Open http://127.0.0.1:8813/profile#agent-roles or http://127.0.0.1:8814/profile#agent-tools. Stop the foreground process with Ctrl-C; for a background process record and terminate only its own PID.
 
 This preview serves the current built UI and synthetic accounts, tools, update notices and role assignments. Installer and role previews are read-only; every apply/install/update/rollback action is refused. No collectors, dispatchers, provider calls, native account reads, delivery or real service changes are enabled. Use a fresh build after source changes. Screenshots of these fixtures are evidence of controls and layout, not account or hardware readiness.
+
+## 0.6.69 planning activity preview
+
+The paired web builds render the same `ProjectPlanningProgress` component from existing project pipeline/task state. Review the prominent heading, three stages, task link, queued retry precedence, approval/recovery/ready states and 390px stacked layout. Reduced motion disables the spinner animation. The display adds no prompt fields, model calls or polling.
+
+Implementation preview: `http://127.0.0.1:8900/projects?project=67`, synthetic project 67 only, source `codex/planning-progress` based on v0.6.68 (the signed package names the final merged commit). Start: `/tmp/codex-pipeline-067-venv/bin/python /tmp/069-planning-preview.py --port 8900 --data-dir /tmp/coordinator-069-planning/synthetic-release-preview`. The recorded fixture process is PID 11356; stop only that process after checking its script identity. All mutation routes, dispatchers, native runtimes and provider delivery are disabled. No live project state or secrets were imported. This temporary fixture uses the RCD build on a Mac; paired source/type builds and CI establish MCD coverage, not physical Pi or live planning/provider acceptance.
+
+## 0.6.70 saved-intent and media-plan preview
+
+Use synthetic project/slot data only. Review Plan & setup checks, explicit media workflow stage selection, safe route repair feedback, Media Studio → Not made yet → Edit asset plan, fresh estimate/spend acknowledgement after save and stale-plan conflict handling. Ports8902 (RCD) and8903 (MCD) are isolated implementation fixtures. Start script `/tmp/070-contract-preview.py --product rcd|mcd --port PORT --data-dir /tmp/PRODUCT-070-contract/synthetic-release-preview` with the private preview Python. Only the fixture inventory edit is writable; provider generation, dispatcher, native config, credential access and production state are disabled. Synthetic readiness/price data demonstrates controls, not real account/host readiness. Stop only the recorded fixture PID after checking its script identity. Exact source, PIDs, screenshots and limits belong in the release handoff/receipt; final packages name the merged commit.
+
+## 0.6.74 project packet preview
+
+Review Projects → Workspace → Project packet (freshness badge and reason, counts, Download packet, Copy START-HERE, Rescan source, the published-media option, Start here and Documents folds) and Projects → Import packet… (upload, review, destination, reference-image copy, draft-only acknowledgement). Implementation preview: the RCD web build on `http://127.0.0.1:8916` with a disposable data directory, a synthetic Git workspace with one reference image and `docs/project/architecture.md`, collector, dispatcher and auth disabled, and `HOME` pointed at an empty folder so no native configuration or credentials are read. Checked: Current → Stale after an unreported commit, zip export, import into a draft project with the continuation brief and decision entry, desktop and 375px layouts (no sideways scroll). The preview exposed a concurrent-rebuild race (fixed with a per-project lock and unique temp names, with a test) and a truncated "no Git commit" phrase (fixed). The process was stopped after review. Paired source, type checks and web tests cover MCD; no physical Pi or live provider was used.

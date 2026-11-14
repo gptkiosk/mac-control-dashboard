@@ -46,6 +46,17 @@ def tool_search_dirs() -> tuple[str, ...]:
                                            *os.environ.get("PATH", "").split(os.pathsep), *extra) if d))
 
 
+def managed_playwright_env() -> dict[str, str]:
+    """Where Playwright from Agent tools lives, for a project script that loads it by name: NODE_PATH lets
+    `require('playwright')` (or createRequire in an ES module) find it, and PLAYWRIGHT_BROWSERS_PATH points
+    at the Chromium it installed. Empty until it is installed, so nothing changes for hosts without it."""
+    managed = os.environ.get("MAC_CONTROL_AGENT_TOOLS_ROOT") or str(default_agent_tools_root(os.environ.get("MAC_CONTROL_PRODUCT_SHORT_NAME", "RCD")))
+    base = Path(managed) / "tools" / "playwright" / "current"
+    if not (base / "node_modules" / "playwright").is_dir():
+        return {}
+    return {"NODE_PATH": str(base / "node_modules"), "PLAYWRIGHT_BROWSERS_PATH": str(base / "browsers")}
+
+
 def find_tool(name: str) -> str:
     """First executable `name` on the search path, else the bare name.
 
@@ -72,6 +83,8 @@ class Settings(BaseSettings):
     organization_name: str = Field(default="Bamcio LLC")
     product_name: str = Field(default="Mac Control Dashboard")
     product_short_name: str = Field(default="MCD")
+    upubhub_url: str = Field(default="https://upubhub.com", pattern=r"^(https://[a-z0-9.-]+|http://(127\.0\.0\.1|localhost)(:\d+)?)$",
+                             description="Where the upubhub-push connector sends course packages; http only for a local upubhub.")
     host: str = Field(
         default="127.0.0.1",
         description="Bind address. Stays 127.0.0.1 until Phase 4 auth is enforced.",
@@ -104,8 +117,8 @@ class Settings(BaseSettings):
     default_timeout_s: int = Field(default=1800, ge=30, le=6 * 3600)
     run_quiet_after_s: int = Field(default=600, ge=30, le=6 * 3600,
                                    description="A live runner silent this long is shown as quiet, not as working.")
-    default_budget_usd: float = Field(default=0.0, ge=0.0, le=50.0, description="Dollar cap passed to an API-billed Claude run that has no cap of its own. 0 (the default) means none; set limits in Agents, Billing & rates, Spending & limits.")
-    dispatch_free_only: bool = Field(default=False)
+    default_budget_usd: float = Field(default=0.0, ge=0.0, le=50.0, description="Dollar cap passed to an API-billed Claude run that has no cap of its own. 0 (the default) means none; set limits in Settings → AI & models → Accounts → Spending & limits.")
+    dispatch_free_only: bool = Field(default=False, description="Retired. Read once, when no route policy is saved yet, to seed the first app route policy; AI & models controls cost classes after that.")
     housekeeping_auto: str = Field(default="", description="Comma-separated housekeeping finding kinds cleaned up automatically after hours (stale_update_helper, stale_approval_wait, old_update_backup). Empty: nothing is automatic.")
     housekeeping_window_start_hour: int = Field(default=1, ge=0, le=23)
     housekeeping_window_end_hour: int = Field(default=5, ge=0, le=23)
@@ -145,6 +158,7 @@ class Settings(BaseSettings):
     grok_path: str = Field(default_factory=lambda: find_tool("grok"))
     hermes_path: str = Field(default_factory=lambda: find_tool("hermes"))
     openclaw_path: str = Field(default_factory=lambda: find_tool("openclaw"))
+    managed_route_policy: Path | None = Field(default=None, description="Optional managed route policy (JSON) for a locked-down install. The app and project policies can only narrow it, and the UI cannot widen it. A file that is set but missing or invalid allows no route.")
     hermes_config_path: Path | None = None
     openclaw_config_path: Path | None = None
     agent_executables: tuple[str, ...] = Field(

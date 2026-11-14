@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -88,6 +89,16 @@ def candidate_file(root, name):
     return path
 
 
+# What load_slots accepts, said once: stories that write media/slots.json are given this text, and the packet repeats it.
+SLOTS_FORMAT = ('media/slots.json is {"slots": [...]} with at most 50 slots. Each slot needs "name" (unique, lowercase letters, digits and '
+                'hyphens, at most 41 characters; the published file is assets/img/<name>.jpg or assets/video/<name>.mp4), "kind" ("image" or '
+                '"video") and "prompt" (1 to 4000 characters). Optional: "batch" ("reference" or "scenes"), "refs" (at most 4 image paths inside '
+                'the folder), "resolution" (1K, 2K or 4K for an image; 480P, 768P or 1080P for a video) and "from_still", "first_still" or '
+                '"last_still" naming another slot. Other keys are kept but ignored. Use exactly these key names: "id" or "type" are not read, '
+                'and the dashboard rejects the whole file if any slot is wrong. Cost estimates and model choice come from the dashboard '
+                'Media studio when the operator approves spending; do not try to read a model catalog or record prices here.')
+
+
 def load_slots(root):
     path = inside(root, "media/slots.json")
     if path is None:
@@ -106,6 +117,8 @@ def load_slots(root):
             raise MediaError("Every slot needs a unique lowercase name.")
         if item.get("kind") not in {"image", "video"} or not isinstance(item.get("prompt"), str) or not 1 <= len(item["prompt"]) <= 4000:
             raise MediaError(f"Slot {item['name']} needs a kind of image or video and a prompt.")
+        if "batch" in item and (not isinstance(item["batch"], str) or item["batch"] not in {"reference", "scenes"}):
+            raise MediaError(f"Slot {item['name']} has an invalid batch.")
         for key in ("refs",):
             if not isinstance(item.get(key, []), list) or len(item.get(key, [])) > 4 or not all(isinstance(r, str) and len(r) < 200 for r in item.get(key, [])):
                 raise MediaError(f"Slot {item['name']} has invalid references.")
@@ -190,6 +203,14 @@ def minimax_seconds(slot):
 
 def build_request(root, slot, tier, model=None, aspect=None):
     """(endpoint, input body) for a slot. Reads the reference and still images from the folder."""
+    if slot.get('batch') == 'scenes':
+        slots = load_slots(root)
+        references = [s for s in slots.values() if s.get('required',True) and s.get('batch')=='reference']
+        if not references or any(s['kind'] != 'image' or not is_published(root,s) for s in references):
+            raise MediaError('Publish the required character/style reference before generating scene artwork.',409)
+        paths = {f"assets/img/{s['name']}.jpg" for s in references}
+        if not paths <= set(slot.get('refs', [])):
+            raise MediaError('Each scene must use the published reference paths in refs before generation.',409)
     endpoint = endpoint_for(slot, tier, model)
     if slot["kind"] == "image":
         aspect = aspect or aspect_for(slot)
@@ -502,7 +523,8 @@ IMAGE_SUFFIXES_IN = {".png", ".jpg", ".jpeg", ".webp", ".avif", ".heic"}
 
 def is_published(root, slot):
     folder = "video" if slot["kind"] == "video" else "img"
-    return inside(root, f"assets/{folder}/{slot['name']}." + ("mp4" if slot["kind"] == "video" else "jpg")) is not None
+    path = inside(root, f"assets/{folder}/{slot['name']}." + ("mp4" if slot["kind"] == "video" else "jpg"))
+    return path is not None and path.stat().st_size > 0
 
 
 def inbox_file(root, slot):
@@ -550,6 +572,130 @@ def _fit_image(src, slot, out_dir):
     _run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-vf", f"scale='min({width},iw)':-2:flags=lanczos", "-frames:v", "1"]
          + ([] if slot.get("transparent") else ["-q:v", "3"]) + [str(target)])
     return [target]
+
+
+DERIVED_SUFFIXES = {".webp": ("WEBP", {"quality": 80}), ".jpg": ("JPEG", {"quality": 85}), ".jpeg": ("JPEG", {"quality": 85}), ".png": ("PNG", {})}
+
+
+def derived_copies(root, slot):
+    """Width-named copies a site made from a published still, such as assets/img/responsive/garden-fantasy-960.webp: `<name>-<width>.<ext>` one folder
+    below assets/img. `garden-fantasy-960.webp` is never a copy of `garden`, because only digits may follow the name."""
+    base = root / "assets" / "img"
+    if slot["kind"] != "image" or not base.is_dir():
+        return []
+    pattern = re.compile(re.escape(slot["name"]) + r"-(\d{2,4})(\.[a-z]+)")
+    found = []
+    for path in sorted(base.glob("*/" + slot["name"] + "-*")):
+        m = pattern.fullmatch(path.name)
+        if m and m.group(2) in DERIVED_SUFFIXES and 16 <= int(m.group(1)) <= 4096 and path.is_file() and not path.is_symlink() and inside(root, str(path.relative_to(root))):
+            found.append((path, int(m.group(1))))
+    return found
+
+
+def refresh_derived(root, slot, source):
+    """Re-make a republished still's width-named copies from the new file, so the site does not keep showing the old picture. Returns (refreshed, stale):
+    a copy that could not be re-made is left as it was and named, never deleted. Pillow, not ffmpeg: not every ffmpeg build can write WebP."""
+    refreshed, stale = [], []
+    copies = derived_copies(root, slot)
+    if not copies:
+        return refreshed, stale
+    try:
+        from PIL import Image
+        with Image.open(source) as opened:
+            picture = opened.convert("RGB")
+    except (ImportError, OSError, ValueError):
+        return refreshed, [str(path.relative_to(root)) for path, _ in copies]
+    for path, width in copies:
+        rel = str(path.relative_to(root))
+        tmp = path.with_name(path.stem + ".refresh" + path.suffix)
+        try:
+            w = min(width, picture.width)
+            fmt, options = DERIVED_SUFFIXES[path.suffix]
+            picture.resize((w, max(1, round(picture.height * w / picture.width))), Image.LANCZOS).save(tmp, fmt, **options)
+            os.replace(tmp, path)
+            refreshed.append(rel)
+        except (OSError, ValueError):
+            stale.append(rel)
+        finally:
+            tmp.unlink(missing_ok=True)
+    return refreshed, stale
+
+
+# Records a project keeps about its own media (the pilot's media/derivatives.json, written by its optimise script) hold the hashes of the
+# published still and its copies; a republish left them stale and the project's own check failed. These files are the dashboard's own.
+OWN_RECORDS = {"provenance.json", "slots.json", "decisions.json", "state.json"}
+PATH_KEYS = ("file", "path", "src", "source")
+
+
+def file_facts(root, rels):
+    """sha256, size and, for a picture, width and height of project files, by relative path; a missing file is left out."""
+    import hashlib
+    facts = {}
+    for rel in rels:
+        path = inside(root, rel)
+        if path is None or not path.is_file():
+            continue
+        fact = {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "bytes": path.stat().st_size}
+        try:
+            from PIL import Image
+            with Image.open(path) as opened:
+                fact["width"], fact["height"] = opened.size
+        except (ImportError, OSError, ValueError):
+            pass
+        facts[rel] = fact
+    return facts
+
+
+def update_hash_records(root, before, after, source_change=None):
+    """Bring the project's own JSON media records in media/ up to date after a republish: an entry naming a changed file gets its new sha256, size and
+    dimensions, and any old hash of those files (or of the generation source, `source_change` = (old, new)) is replaced wherever it appears.
+    Only values that were exactly the old ones change. Returns the record files rewritten."""
+    swaps = {before[rel]["sha256"]: after[rel]["sha256"] for rel in before if rel in after and before[rel]["sha256"] != after[rel]["sha256"]}
+    if source_change and all(source_change) and source_change[0] != source_change[1]:
+        swaps[source_change[0]] = source_change[1]
+    changed = {rel: fact for rel, fact in after.items() if rel in before and before[rel] != fact}
+    if not swaps and not changed:
+        return []
+
+    def walk(node):
+        hit = False
+        if isinstance(node, dict):
+            named = next((node[k] for k in PATH_KEYS if isinstance(node.get(k), str) and node[k] in changed), None)
+            for key, value in list(node.items()):
+                if isinstance(value, str) and value in swaps:
+                    node[key] = swaps[value]
+                    hit = True
+                elif isinstance(value, (dict, list)):
+                    hit = walk(value) or hit
+            if named is not None:
+                fact = changed[named]
+                for key, alias in (("sha256", "sha256"), ("bytes", "bytes"), ("size", "bytes"), ("width", "width"), ("height", "height")):
+                    if key in node and alias in fact and isinstance(node[key], (int, str)) and not isinstance(node[key], bool) and node[key] != fact[alias]:
+                        node[key] = fact[alias]
+                        hit = True
+        elif isinstance(node, list):
+            for item in node:
+                hit = walk(item) or hit
+        return hit
+
+    rewritten = []
+    folder = root / "media"
+    for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
+        if path.name in OWN_RECORDS or path.is_symlink() or not path.is_file():
+            continue
+        try:
+            text = path.read_text()
+            data = json.loads(text)
+        except (OSError, ValueError):
+            continue
+        if not walk(data):
+            continue
+        indent = 2 if "\n  " in text else None
+        tmp = path.with_name(path.name + ".refresh")
+        tmp.write_text(json.dumps(data, indent=indent, ensure_ascii=False) + ("\n" if text.endswith("\n") else ""))
+        os.replace(tmp, path)
+        rewritten.append(str(path.relative_to(root)))
+    return rewritten
 
 
 def _fit_video(src, slot, info, out_dir, fade=0.6):
@@ -659,3 +805,12 @@ def recover(settings, sessions):
                 runtime_.ledger.add({**ledger, "status": "failed", "error": message})
                 journal_add(settings, {"id": entry["id"], "state": "failed", "ts": int(time.time()), "error": message})
         runtime_.pool.submit(resume)
+
+
+_PLAN_LOCKS = {}
+_PLAN_LOCKS_GUARD = threading.Lock()
+
+def plan_lock(root):
+    """Serialize operator slot edits and generation admission on this dashboard process."""
+    with _PLAN_LOCKS_GUARD:
+        return _PLAN_LOCKS.setdefault(str(root), threading.RLock())

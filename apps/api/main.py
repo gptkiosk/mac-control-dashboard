@@ -27,6 +27,7 @@ from github_config import GithubConfigStore
 from github_actions import GithubActionGuard
 from routes import github_actions as github_action_routes
 from routes import bug_reports as bug_report_routes
+from routes import issue_tasks as issue_task_routes
 from bug_intake import BugIntakeService
 from routes import limits as limit_routes
 from routes import failures as failure_routes
@@ -34,6 +35,7 @@ from routes import maintenance as maintenance_routes
 from routes import standards as standards_routes
 from routes import host_readiness as host_readiness_routes
 from routes import models as models_routes
+from routes import route_policy as route_policy_routes
 from routes import coordinator as coordinator_routes
 from routes import telemetry as telemetry_routes
 from alerts import AlertMonitor, HermesSender
@@ -52,6 +54,7 @@ from db import make_engine, make_session_factory
 from migrate import upgrade_to_head
 from routes import billing as billing_routes, chat, health, mcp as mcp_routes, metrics, release, services, system, tasks
 from routes import updates
+from routes import pipeline_packs as pipeline_packs_routes
 from settings import get_settings
 from spa import mount_spa
 from version import __version__
@@ -73,6 +76,12 @@ def create_app() -> FastAPI:
     engine = make_engine(settings.db_path)
     upgrade_to_head(engine)
     sessions = make_session_factory(engine)
+    with sessions() as s:
+        import route_policy   # write the first app route policy once, replacing the retired free-only setting (route_policy.default_app)
+        saved = route_policy.ensure_saved(s, settings)
+        # Settings → Default AI moved into AI & models: carry a changed choice over once (route_policy.adopt_default_ai).
+        if route_policy.adopt_default_ai(s, settings) or saved:
+            s.commit()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -244,6 +253,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(release.router)
     app.include_router(updates.router)
+    app.include_router(pipeline_packs_routes.router)
     app.include_router(metrics.router)
     app.include_router(services.router)
     app.include_router(system.router)
@@ -257,6 +267,7 @@ def create_app() -> FastAPI:
     app.include_router(operations.router)
     app.include_router(github_action_routes.router)
     app.include_router(bug_report_routes.router)
+    app.include_router(issue_task_routes.router)
     app.include_router(project_routes.router)
     app.include_router(limit_routes.router)
     app.include_router(failure_routes.router)
@@ -264,6 +275,7 @@ def create_app() -> FastAPI:
     app.include_router(standards_routes.router)
     app.include_router(host_readiness_routes.router)
     app.include_router(models_routes.router)
+    app.include_router(route_policy_routes.router)
     app.include_router(coordinator_routes.router)
     app.include_router(telemetry_routes.router)
     app.include_router(profile_routes.router)
