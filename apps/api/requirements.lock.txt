@@ -21,7 +21,7 @@ pillow==13.0.0
 pluggy==1.6.0
 psutil==7.2.2
 pycparser==3.11
-pydantic==2.14.0
+pydantic==2.14.3
 pydantic-settings==2.15.0
 pydantic_core==2.50.0
 Pygments==2.21.0
