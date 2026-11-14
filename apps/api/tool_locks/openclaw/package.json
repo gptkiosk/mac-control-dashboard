@@ -2,8 +2,15 @@
   "name": "rcd-tool-openclaw",
   "version": "0.0.0",
   "private": true,
-  "description": "Pinned install of openclaw for the dashboard's Agent tools panel. Bumped only by scripts/tools/check.py.",
+  "description": "Pinned install of OpenClaw for the dashboard's Agent tools panel; release bumps are reviewed through scripts/tools/check.py.",
   "dependencies": {
     "openclaw": "2026.10.6"
+  },
+  "overrides": {
+    "openclaw": {
+      "npm": {
+        ".": "12.2.1"
+      }
+    }
   }
 }
