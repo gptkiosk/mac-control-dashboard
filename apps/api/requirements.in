@@ -19,7 +19,7 @@ PyYAML>=6.0
 
 # Storage (SQLite ORM and migration tool)
 sqlalchemy>=2.0.51
-alembic>=1.14
+alembic>=1.20.1
 
 # Mac metrics (CPU, disk, network, processes); macmon covers power and temperature
 psutil>=7.0
