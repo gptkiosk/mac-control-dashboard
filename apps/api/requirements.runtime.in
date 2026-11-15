@@ -12,6 +12,6 @@ cryptography>=46.0
 Pillow>=13.0.0
 PyYAML>=6.0
 sqlalchemy>=2.0.51
-alembic>=1.14
+alembic>=1.20.1
 psutil>=7.0
 httpx>=0.28
