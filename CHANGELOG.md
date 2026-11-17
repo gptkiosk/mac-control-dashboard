@@ -10,12 +10,16 @@ Internal operator notes, private hostnames and personal identifiers are omitted 
 
 ## [Unreleased]
 
+## [0.6.92] - 2026-11-17
+
 ### Changed
 - The sign-in page has a centered layout with the standard "Continue with Google"
   button, so it is clear a Google account is used before leaving the dashboard.
 - Template-store version pickers use compact card-level spacing and corners
   instead of full-size form styling. Native keyboard behavior and the larger
   coarse-pointer touch target stay unchanged.
+- Updated API and web build dependencies, and pinned patched OpenClaw runtime
+  dependencies for the managed OpenClaw tool.
 
 ### Fixed
 - The sign-in page footer shows the current year instead of unrendered template text.
@@ -1548,6 +1552,7 @@ Before versioned releases the work was grouped into phases. These notes describe
 [0.6.71]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.70...v0.6.71
 [0.6.70]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.69...v0.6.70
 
+[0.6.92]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.91...v0.6.92
 [0.6.91]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.90...v0.6.91
 [0.6.90]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.89...v0.6.90
 [0.6.89]: https://github.com/gptkiosk/mac-control-dashboard/compare/v0.6.88...v0.6.89
