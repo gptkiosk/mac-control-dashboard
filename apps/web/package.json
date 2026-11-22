@@ -23,7 +23,7 @@
     "@types/markdown-it": "14.2.0",
     "@types/node": "^26.6.6",
     "@vitejs/plugin-vue": "^6.0.10",
-    "@vue/test-utils": "^2.4.11",
+    "@vue/test-utils": "^2.6.0",
     "@vue/tsconfig": "^0.9.1",
     "jsdom": "^31.0.0",
     "tailwindcss": "^4.3.5",
